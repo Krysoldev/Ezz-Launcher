@@ -1,2 +1,24 @@
-# Ezz-Launcher
-A modern Minecraft Launcher for Windows with Microsoft &amp; Offline account support, Fabric integration, instance management, skin management, and a premium user experience.
+# EZZ Launcher
+
+EZZ Launcher is a modern Minecraft Launcher for Windows built with Python.
+
+## Features
+
+- Microsoft Account Login
+- Offline Account Support
+- Fabric Support
+- Multiple Instances
+- Skin & Player Head Cache
+- Account Manager
+- Modern UI
+- Diagnostics
+- Resource & Shader Management
+- World Manager
+
+## Purpose
+
+EZZ Launcher is designed to provide a clean, modern and user-friendly Minecraft launcher experience for Java Edition players.
+
+## Contact
+
+GitHub Issues
