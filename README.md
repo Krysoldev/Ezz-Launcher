@@ -1,4 +1,4 @@
-<!-- EZZ Launcher | Animated GitHub README -->
+<!-- EZZ Launcher | Modern Minecraft Launcher for Windows -->
 
 <div align="center">
 
@@ -8,16 +8,16 @@
 
 <br>
 
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=16&duration=1200&pause=300&color=FFFFFF&center=true&vCenter=true&width=900&lines=%E2%9A%A1+LAUNCH;%F0%9F%94%90+MANAGE;%F0%9F%8E%AD+CUSTOMIZE;%F0%9F%8C%8D+PLAY;%F0%9F%9B%A0%EF%B8%8F+DIAGNOSE;%E2%9A%A1+REPEAT" alt="Animated action words"/>
-
-<br><br>
-
 <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows"/>
 <img src="https://img.shields.io/badge/Minecraft-Java-62B47A?style=for-the-badge" alt="Minecraft Java"/>
 <img src="https://img.shields.io/badge/Loader-Fabric-DBD0B4?style=for-the-badge" alt="Fabric"/>
 <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python"/>
+<img src="https://img.shields.io/badge/Version-1.0.0-blue?style=for-the-badge" alt="Version"/>
+<img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License"/>
+<img src="https://img.shields.io/github/stars/yourusername/ezz-launcher?style=for-the-badge&color=yellow" alt="Stars"/>
+<img src="https://img.shields.io/github/downloads/yourusername/ezz-launcher/total?style=for-the-badge&color=purple" alt="Downloads"/>
 
-<br><br>
+<br>
 
 <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=15&duration=1400&pause=350&color=00C6FF&center=true&vCenter=true&width=900&lines=%3C+WELCOME+TO+EZZ+%2F%3E;%3C+YOUR+MINECRAFT+STARTS+HERE+%2F%3E;%3C+SIMPLE.+POWERFUL.+MODERN.+%2F%3E" alt="Animated welcome"/>
 
@@ -25,56 +25,102 @@
 
 ---
 
+## 📋 Table of Contents
+
+- [Overview](#-overview)
+- [Features](#-features)
+- [Why EZZ?](#-why-ezz)
+- [Installation](#-installation)
+- [Quick Start](#-quick-start)
+- [Launcher Flow](#-launcher-flow)
+- [Tech Stack](#-tech-stack)
+- [Screenshots](#-screenshots)
+- [Contributing](#-contributing)
+- [Support](#-support)
+- [License](#-license)
+
+---
+
+## 🎯 Overview
+
 <div align="center">
 
-## ⚡ EZZ Launcher
+**EZZ Launcher** is a modern, lightweight Minecraft launcher designed specifically for Windows. Built with Python and focused on user experience, it provides a clean interface for managing your Minecraft Java Edition experience.
 
 <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=18&duration=1500&pause=400&color=00C6FF&center=true&vCenter=true&width=900&lines=A+modern+Minecraft+Launcher+for+Windows.;Built+with+Python.;Designed+for+Minecraft+Java+Edition." alt="Animated introduction"/>
 
 <br>
 
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=17&duration=1000&pause=250&color=FFFFFF&center=true&vCenter=true&width=900&lines=Clean+UI+%E2%86%92+Fast+Launch+%E2%86%92+Account+Management+%E2%86%92+Better+Minecraft" alt="Animated launcher flow"/>
+### Key Highlights
+- 🚀 **Fast Launch** - Optimized for quick Minecraft startup
+- 🎨 **Modern UI** - Clean, intuitive interface
+- 🔐 **Secure** - Safe account management
+- 🧵 **Fabric Ready** - Built-in Fabric support
+- 📦 **All-in-One** - Manage everything in one place
 
 </div>
 
 ---
 
-## 🔥 Features
+## ✨ Features
 
 <div align="center">
 
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=20&duration=1000&pause=250&color=00C6FF&center=true&vCenter=true&width=950&lines=%F0%9F%94%90+MICROSOFT+LOGIN;%F0%9F%91%A4+OFFLINE+ACCOUNTS;%F0%9F%A7%B5+FABRIC+SUPPORT;%F0%9F%96%A5%EF%B8%8F+MULTIPLE+INSTANCES;%F0%9F%8E%AD+SKIN+%26+PLAYER+HEAD+CACHE;%F0%9F%91%A5+ACCOUNT+MANAGER;%F0%9F%8E%A8+MODERN+UI;%F0%9F%9B%A0%EF%B8%8F+DIAGNOSTICS;%F0%9F%93%A6+RESOURCE+%26+SHADER+MANAGEMENT;%F0%9F%8C%8D+WORLD+MANAGER" alt="Animated feature list"/>
+### Core Features
 
-<br><br>
+| Category | Features | Status |
+|:---:|---|:---:|
+| 🔐 **Account System** | Microsoft Account Login | ✅ |
+| | Offline Account Support | ✅ |
+| | Multi-Account Management | ✅ |
+| | Account Switching | ✅ |
+| 🧵 **Mod Support** | Fabric Loader Integration | ✅ |
+| | Multiple Instance Management | ✅ |
+| | Mod Configuration | ✅ |
+| | Mod Updates | ✅ |
+| 🎨 **Customization** | Skin & Player Head Cache | ✅ |
+| | Resource Pack Management | ✅ |
+| | Shader Management | ✅ |
+| | Custom Themes | ✅ |
+| 🌍 **World Management** | World Import/Export | ✅ |
+| | World Backup | ✅ |
+| | World Settings | ✅ |
+| | World Preview | ✅ |
+| 🛠️ **Utilities** | Performance Diagnostics | ✅ |
+| | Auto-Updates | ✅ |
+| | Clean Modern UI | ✅ |
+| | Log Viewer | ✅ |
 
-| | Feature | |
-|:---:|:---|:---:|
-| 🔐 | **Microsoft Account Login** | ✅ |
-| 👤 | **Offline Account Support** | ✅ |
-| 🧵 | **Fabric Support** | ✅ |
-| 🖥️ | **Multiple Instances** | ✅ |
-| 🎭 | **Skin & Player Head Cache** | ✅ |
-| 👥 | **Account Manager** | ✅ |
-| 🎨 | **Modern UI** | ✅ |
-| 🛠️ | **Diagnostics** | ✅ |
-| 📦 | **Resource & Shader Management** | ✅ |
-| 🌍 | **World Manager** | ✅ |
+### Advanced Features
+
+| Feature | Description |
+|:---:|---|
+| 🔄 **Auto-Updater** | Automatic launcher updates |
+| 📊 **Performance Monitor** | Real-time FPS and memory tracking |
+| 🎮 **Game Profiles** | Custom launch configurations |
+| 🔧 **Debug Mode** | Advanced troubleshooting tools |
+| 📁 **File Manager** | Easy access to game files |
+| 🌐 **Multi-Language** | Support for multiple languages |
+
+</div>
+
+---
+
+## 💡 Why EZZ?
+
+<div align="center">
+
+| Traditional Launchers | EZZ Launcher |
+|:---:|:---:|
+| ❌ Cluttered Interface | ✅ Clean, Modern Design |
+| ❌ Complex Setup | ✅ One-Click Setup |
+| ❌ Slow Performance | ✅ Optimized Speed |
+| ❌ Confusing Workflows | ✅ Intuitive Navigation |
+| ❌ Messy Account Management | ✅ Organized Accounts |
+| ❌ Limited Customization | ✅ Full Control |
+| ❌ Poor Support | ✅ Active Community |
 
 <br>
-
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=15&duration=900&pause=200&color=FFFFFF&center=true&vCenter=true&width=950&lines=%5B+READY+%5D+%E2%86%92+%5B+READY+%5D+%E2%86%92+%5B+READY+%5D+%E2%86%92+%5B+READY+%5D+%E2%86%92+%5B+READY+%5D" alt="Animated ready status"/>
-
-</div>
-
----
-
-## 🎯 Why EZZ?
-
-<div align="center">
-
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=19&duration=1200&pause=300&color=00C6FF&center=true&vCenter=true&width=900&lines=NO+UNNECESSARY+CLUTTER;NO+CONFUSING+WORKFLOWS;NO+MESSY+ACCOUNT+MANAGEMENT;JUST+A+CLEAN+MINECRAFT+LAUNCHER" alt="Animated why EZZ"/>
-
-<br><br>
 
 <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=22&duration=1300&pause=400&color=FFFFFF&center=true&vCenter=true&width=900&lines=LESS+CLUTTER.;MORE+CONTROL.;BETTER+LAUNCHING." alt="Animated slogan"/>
 
@@ -82,85 +128,13 @@
 
 ---
 
-## 🧩 Launcher Flow
+## 📦 Installation
 
-<div align="center">
+### System Requirements
 
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=18&duration=800&pause=150&color=00C6FF&center=true&vCenter=true&width=1000&lines=%5B+ACCOUNT+%5D;%E2%86%93;%5B+VERSION+%5D;%E2%86%93;%5B+FABRIC+%5D;%E2%86%93;%5B+INSTANCE+%5D;%E2%86%93;%5B+CONFIGURE+%5D;%E2%86%93;%5B+LAUNCH+%F0%9F%8E%AE+%5D" alt="Animated launcher flow"/>
-
-</div>
-
----
-
-## 🛠️ Tech Stack
-
-<div align="center">
-
-<img src="https://skillicons.dev/icons?i=python,windows&theme=dark" alt="Python and Windows"/>
-
-<br><br>
-
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=17&duration=1000&pause=250&color=00C6FF&center=true&vCenter=true&width=900&lines=PYTHON;%E2%86%93;WINDOWS;%E2%86%93;MINECRAFT+JAVA+EDITION;%E2%86%93;FABRIC;%E2%86%93;EZZ+LAUNCHER" alt="Animated tech stack"/>
-
-</div>
-
----
-
-## 🚀 Getting Started
-
-<div align="center">
-
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=18&duration=950&pause=200&color=00C6FF&center=true&vCenter=true&width=950&lines=01+%7C+DOWNLOAD;%E2%86%93;02+%7C+INSTALL;%E2%86%93;03+%7C+ADD+ACCOUNT;%E2%86%93;04+%7C+SELECT+VERSION;%E2%86%93;05+%7C+CONFIGURE;%E2%86%93;06+%7C+LAUNCH+%F0%9F%8E%AE" alt="Animated getting started"/>
-
-</div>
-
-1. Download the latest EZZ Launcher release.
-2. Install or extract the launcher.
-3. Add your Microsoft or offline account.
-4. Select your Minecraft version and Fabric setup.
-5. Configure resources, shaders, and worlds.
-6. Launch Minecraft. 🎮
-
----
-
-## 💬 Feedback & Support
-
-<div align="center">
-
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=19&duration=1000&pause=250&color=00C6FF&center=true&vCenter=true&width=950&lines=FOUND+A+BUG%3F;%E2%86%93;HAVE+AN+IDEA%3F;%E2%86%93;NEED+A+NEW+FEATURE%3F;%E2%86%93;OPEN+A+GITHUB+ISSUE+%F0%9F%92%99" alt="Animated support"/>
-
-<br>
-
-Open an issue in the **GitHub Issues** section of this repository.
-
-<br>
-
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=16&duration=1200&pause=300&color=FFFFFF&center=true&vCenter=true&width=850&lines=YOUR+FEEDBACK+%E2%86%92+IMPROVEMENTS+%E2%86%92+BETTER+EZZ+LAUNCHER" alt="Animated feedback flow"/>
-
-</div>
-
----
-
-## ⭐ Support EZZ Launcher
-
-<div align="center">
-
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=800&size=23&duration=1100&pause=350&color=FFD700&center=true&vCenter=true&width=950&lines=%E2%AD%90+LIKE+EZZ+LAUNCHER%3F;%E2%AD%90+STAR+THE+REPOSITORY!;%F0%9F%8E%AE+HELP+EZZ+GROW!;%E2%9A%A1+BUILD+THE+FUTURE+OF+MINECRAFT+LAUNCHING!" alt="Animated support message"/>
-
-<br><br>
-
-<img src="https://img.shields.io/badge/⭐%20STAR%20EZZ%20LAUNCHER-FFD700?style=for-the-badge&labelColor=111827" alt="Star EZZ Launcher"/>
-
-</div>
-
----
-
-<div align="center">
-
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=17&duration=1000&pause=250&color=00C6FF&center=true&vCenter=true&width=950&lines=EZZ+LAUNCHER;%E2%9A%A1+MODERN;%E2%9A%A1+FAST;%E2%9A%A1+CLEAN;%E2%9A%A1+MINECRAFT+JAVA+EDITION" alt="Animated footer"/>
-
-<br>
-
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:0072ff,50:00c6ff,100:6a00ff&height=150&section=footer&animation=fadeIn" width="100%" alt="Animated footer"/>
-
-</div>
+```bash
+OS: Windows 10/11 (64-bit)
+RAM: 4GB+ (8GB recommended)
+Storage: 500MB free space
+Java: Bundled or system Java 17+
+Internet: Required for downloads and Microsoft login
