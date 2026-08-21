@@ -2,25 +2,24 @@
 
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:00c6ff,100:0072ff&height=180&section=header&text=EZZ%20LAUNCHER&fontSize=55&fontColor=ffffff&animation=fadeIn&fontAlignY=35" width="100%" alt="EZZ Launcher"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:00c6ff,50:0072ff,100:6a00ff&height=190&section=header&text=EZZ%20LAUNCHER&fontSize=58&fontColor=ffffff&animation=fadeIn&fontAlignY=35" width="100%" alt="EZZ Launcher"/>
 
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=25&duration=2200&pause=700&color=00C6FF&center=true&vCenter=true&width=850&lines=Modern+Minecraft+Launcher+for+Windows;Microsoft+Account+Login;Offline+Account+Support;Fabric+Support;Multiple+Minecraft+Instances;Skin+%26+Player+Head+Cache;Modern+UI+%7C+Diagnostics+%7C+World+Manager" alt="Animated EZZ Launcher features"/>
+<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=800&size=26&duration=1800&pause=450&color=00C6FF&center=true&vCenter=true&width=950&lines=EZZ+LAUNCHER;MINECRAFT+JAVA+EDITION;MODERN+%7C+FAST+%7C+CLEAN;MICROSOFT+%2B+OFFLINE+ACCOUNTS;FABRIC+%2B+MULTIPLE+INSTANCES;BUILT+FOR+WINDOWS" alt="Animated EZZ Launcher title"/>
 
-<br><br>
+<br>
 
-<a href="#features">
-<img src="https://img.shields.io/badge/✨%20FEATURES-00C6FF?style=for-the-badge&labelColor=111827" alt="Features"/>
-</a>
-<a href="#getting-started">
-<img src="https://img.shields.io/badge/🚀%20GET%20STARTED-0072FF?style=for-the-badge&labelColor=111827" alt="Get Started"/>
-</a>
-<a href="#roadmap">
-<img src="https://img.shields.io/badge/🗺️%20ROADMAP-00C6FF?style=for-the-badge&labelColor=111827" alt="Roadmap"/>
-</a>
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=16&duration=1200&pause=300&color=FFFFFF&center=true&vCenter=true&width=900&lines=%E2%9A%A1+LAUNCH;%F0%9F%94%90+MANAGE;%F0%9F%8E%AD+CUSTOMIZE;%F0%9F%8C%8D+PLAY;%F0%9F%9B%A0%EF%B8%8F+DIAGNOSE;%E2%9A%A1+REPEAT" alt="Animated action words"/>
 
 <br><br>
 
-<img src="https://komarev.com/ghpvc/?username=ezz-launcher&label=README%20VIEWS&color=00c6ff&style=for-the-badge" alt="README views"/>
+<img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows"/>
+<img src="https://img.shields.io/badge/Minecraft-Java-62B47A?style=for-the-badge" alt="Minecraft Java"/>
+<img src="https://img.shields.io/badge/Loader-Fabric-DBD0B4?style=for-the-badge" alt="Fabric"/>
+<img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python"/>
+
+<br><br>
+
+<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=15&duration=1400&pause=350&color=00C6FF&center=true&vCenter=true&width=900&lines=%3C+WELCOME+TO+EZZ+%2F%3E;%3C+YOUR+MINECRAFT+STARTS+HERE+%2F%3E;%3C+SIMPLE.+POWERFUL.+MODERN.+%2F%3E" alt="Animated welcome"/>
 
 </div>
 
@@ -28,17 +27,13 @@
 
 <div align="center">
 
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=20&duration=1800&pause=800&color=FFFFFF&center=true&vCenter=true&width=900&lines=Welcome+to+EZZ+Launcher+%F0%9F%8E%AE;Clean.+Fast.+Modern.;Built+for+Minecraft+Java+Edition." alt="Animated welcome"/>
+## ⚡ EZZ Launcher
 
-</div>
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=18&duration=1500&pause=400&color=00C6FF&center=true&vCenter=true&width=900&lines=A+modern+Minecraft+Launcher+for+Windows.;Built+with+Python.;Designed+for+Minecraft+Java+Edition." alt="Animated introduction"/>
 
-## ✨ About
+<br>
 
-<div align="center">
-
-**EZZ Launcher** is a modern Minecraft Launcher for Windows built with **Python**.
-
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=17&duration=1800&pause=500&color=00C6FF&center=true&vCenter=true&width=850&lines=Simple+launching.;Clean+management.;Multiple+instances.;Better+Minecraft+experience." alt="Animated description"/>
+<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=17&duration=1000&pause=250&color=FFFFFF&center=true&vCenter=true&width=900&lines=Clean+UI+%E2%86%92+Fast+Launch+%E2%86%92+Account+Management+%E2%86%92+Better+Minecraft" alt="Animated launcher flow"/>
 
 </div>
 
@@ -48,96 +43,52 @@
 
 <div align="center">
 
-| Feature | Status |
-|:---|:---:|
-| 🔐 Microsoft Account Login | 🟢 **READY** |
-| 👤 Offline Account Support | 🟢 **READY** |
-| 🧵 Fabric Support | 🟢 **READY** |
-| 🖥️ Multiple Instances | 🟢 **READY** |
-| 🎭 Skin & Player Head Cache | 🟢 **READY** |
-| 👥 Account Manager | 🟢 **READY** |
-| 🎨 Modern UI | 🟢 **READY** |
-| 🛠️ Diagnostics | 🟢 **READY** |
-| 📦 Resource & Shader Management | 🟢 **READY** |
-| 🌍 World Manager | 🟢 **READY** |
-
-</div>
-
-<div align="center">
-
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=18&duration=1500&pause=450&color=00C6FF&center=true&vCenter=true&width=850&lines=%F0%9F%94%90+LOGIN;%F0%9F%91%A4+ACCOUNTS;%F0%9F%A7%B5+FABRIC;%F0%9F%96%A5%EF%B8%8F+INSTANCES;%F0%9F%8E%AD+SKINS;%F0%9F%8E%A8+UI;%F0%9F%9B%A0%EF%B8%8F+DIAGNOSTICS;%F0%9F%8C%8D+WORLDS" alt="Animated feature words"/>
-
-</div>
-
----
-
-## 🎯 Purpose
-
-<div align="center">
-
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=19&duration=1700&pause=700&color=FFFFFF&center=true&vCenter=true&width=900&lines=Clean.;Modern.;User-friendly.;Made+for+Minecraft+Java+Edition." alt="Animated purpose"/>
-
-### **Less clutter. More control. Better Minecraft launching.**
-
-</div>
-
----
-
-## 🖼️ Launcher Preview
-
-<div align="center">
-
-<img src="https://placehold.co/1000x560/111827/00C6FF?text=EZZ+Launcher+Preview" width="90%" alt="EZZ Launcher Preview"/>
+<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=20&duration=1000&pause=250&color=00C6FF&center=true&vCenter=true&width=950&lines=%F0%9F%94%90+MICROSOFT+LOGIN;%F0%9F%91%A4+OFFLINE+ACCOUNTS;%F0%9F%A7%B5+FABRIC+SUPPORT;%F0%9F%96%A5%EF%B8%8F+MULTIPLE+INSTANCES;%F0%9F%8E%AD+SKIN+%26+PLAYER+HEAD+CACHE;%F0%9F%91%A5+ACCOUNT+MANAGER;%F0%9F%8E%A8+MODERN+UI;%F0%9F%9B%A0%EF%B8%8F+DIAGNOSTICS;%F0%9F%93%A6+RESOURCE+%26+SHADER+MANAGEMENT;%F0%9F%8C%8D+WORLD+MANAGER" alt="Animated feature list"/>
 
 <br><br>
 
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=16&duration=1800&pause=600&color=00C6FF&center=true&vCenter=true&width=800&lines=Your+launcher.;Your+accounts.;Your+instances.;Your+Minecraft." alt="Animated preview text"/>
+| | Feature | |
+|:---:|:---|:---:|
+| 🔐 | **Microsoft Account Login** | ✅ |
+| 👤 | **Offline Account Support** | ✅ |
+| 🧵 | **Fabric Support** | ✅ |
+| 🖥️ | **Multiple Instances** | ✅ |
+| 🎭 | **Skin & Player Head Cache** | ✅ |
+| 👥 | **Account Manager** | ✅ |
+| 🎨 | **Modern UI** | ✅ |
+| 🛠️ | **Diagnostics** | ✅ |
+| 📦 | **Resource & Shader Management** | ✅ |
+| 🌍 | **World Manager** | ✅ |
+
+<br>
+
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=15&duration=900&pause=200&color=FFFFFF&center=true&vCenter=true&width=950&lines=%5B+READY+%5D+%E2%86%92+%5B+READY+%5D+%E2%86%92+%5B+READY+%5D+%E2%86%92+%5B+READY+%5D+%E2%86%92+%5B+READY+%5D" alt="Animated ready status"/>
 
 </div>
 
 ---
 
-## ⚙️ Core Capabilities
+## 🎯 Why EZZ?
 
 <div align="center">
 
-```text
-╔════════════════════════════════════════════════════╗
-║                  ⚡ EZZ LAUNCHER ⚡                 ║
-╠════════════════════════════════════════════════════╣
-║                                                    ║
-║  🔐  Account Management                            ║
-║  🧵  Fabric Installation & Launching              ║
-║  🖥️  Multiple Minecraft Instances                 ║
-║  🎭  Skin / Player Head Caching                   ║
-║  📦  Resource & Shader Management                 ║
-║  🌍  World Management                             ║
-║  🛠️  Diagnostics & Troubleshooting                ║
-║  🎨  Modern Launcher Interface                   ║
-║                                                    ║
-╚════════════════════════════════════════════════════╝
-```
+<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=19&duration=1200&pause=300&color=00C6FF&center=true&vCenter=true&width=900&lines=NO+UNNECESSARY+CLUTTER;NO+CONFUSING+WORKFLOWS;NO+MESSY+ACCOUNT+MANAGEMENT;JUST+A+CLEAN+MINECRAFT+LAUNCHER" alt="Animated why EZZ"/>
 
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=16&duration=1400&pause=350&color=00C6FF&center=true&vCenter=true&width=900&lines=ACCOUNT+MANAGEMENT+%E2%86%92+FABRIC+%E2%86%92+INSTANCES+%E2%86%92+SKINS+%E2%86%92+RESOURCES+%E2%86%92+WORLDS" alt="Animated capabilities"/>
+<br><br>
+
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=22&duration=1300&pause=400&color=FFFFFF&center=true&vCenter=true&width=900&lines=LESS+CLUTTER.;MORE+CONTROL.;BETTER+LAUNCHING." alt="Animated slogan"/>
 
 </div>
 
 ---
 
-## 🚀 Getting Started
+## 🧩 Launcher Flow
 
 <div align="center">
 
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=18&duration=1600&pause=500&color=00C6FF&center=true&vCenter=true&width=850&lines=STEP+01+%E2%86%92+Download;STEP+02+%E2%86%92+Install;STEP+03+%E2%86%92+Add+Account;STEP+04+%E2%86%92+Select+Minecraft+%2B+Fabric;STEP+05+%E2%86%92+Configure;STEP+06+%E2%86%92+LAUNCH+%F0%9F%8E%AE" alt="Animated getting started"/>
+<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=18&duration=800&pause=150&color=00C6FF&center=true&vCenter=true&width=1000&lines=%5B+ACCOUNT+%5D;%E2%86%93;%5B+VERSION+%5D;%E2%86%93;%5B+FABRIC+%5D;%E2%86%93;%5B+INSTANCE+%5D;%E2%86%93;%5B+CONFIGURE+%5D;%E2%86%93;%5B+LAUNCH+%F0%9F%8E%AE+%5D" alt="Animated launcher flow"/>
 
 </div>
-
-1. Download the latest **EZZ Launcher** release.
-2. Install or extract the launcher.
-3. Add your **Microsoft** or **offline** account.
-4. Select your Minecraft version and Fabric setup.
-5. Configure resources, shaders, and worlds.
-6. Launch Minecraft. 🎮
 
 ---
 
@@ -149,35 +100,26 @@
 
 <br><br>
 
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=17&duration=1700&pause=500&color=00C6FF&center=true&vCenter=true&width=800&lines=Python+%7C+Windows+%7C+Minecraft+Java+Edition+%7C+Fabric" alt="Animated tech stack"/>
+<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=17&duration=1000&pause=250&color=00C6FF&center=true&vCenter=true&width=900&lines=PYTHON;%E2%86%93;WINDOWS;%E2%86%93;MINECRAFT+JAVA+EDITION;%E2%86%93;FABRIC;%E2%86%93;EZZ+LAUNCHER" alt="Animated tech stack"/>
 
 </div>
 
 ---
 
-## 🗺️ Roadmap
+## 🚀 Getting Started
 
 <div align="center">
 
-| Progress | Feature |
-|:---:|:---|
-| ✅ | Microsoft Account Login |
-| ✅ | Offline Account Support |
-| ✅ | Fabric Support |
-| ✅ | Multiple Instances |
-| ✅ | Account Manager |
-| ✅ | Diagnostics |
-| ✅ | Resource & Shader Management |
-| ✅ | World Manager |
-| 🔄 | More Customization |
-| 🔄 | More Launcher Utilities |
-| 🔄 | Additional Quality-of-Life Improvements |
-
-<br>
-
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=17&duration=1800&pause=600&color=00C6FF&center=true&vCenter=true&width=850&lines=BUILDING+%E2%86%92+IMPROVING+%E2%86%92+POLISHING+%E2%86%92+MORE+COMING..." alt="Animated roadmap"/>
+<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=18&duration=950&pause=200&color=00C6FF&center=true&vCenter=true&width=950&lines=01+%7C+DOWNLOAD;%E2%86%93;02+%7C+INSTALL;%E2%86%93;03+%7C+ADD+ACCOUNT;%E2%86%93;04+%7C+SELECT+VERSION;%E2%86%93;05+%7C+CONFIGURE;%E2%86%93;06+%7C+LAUNCH+%F0%9F%8E%AE" alt="Animated getting started"/>
 
 </div>
+
+1. Download the latest EZZ Launcher release.
+2. Install or extract the launcher.
+3. Add your Microsoft or offline account.
+4. Select your Minecraft version and Fabric setup.
+5. Configure resources, shaders, and worlds.
+6. Launch Minecraft. 🎮
 
 ---
 
@@ -185,13 +127,15 @@
 
 <div align="center">
 
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=18&duration=1600&pause=600&color=00C6FF&center=true&vCenter=true&width=850&lines=Found+a+bug%3F;Have+an+idea%3F;Want+a+new+feature%3F;Open+a+GitHub+Issue+%F0%9F%92%99" alt="Animated support"/>
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=19&duration=1000&pause=250&color=00C6FF&center=true&vCenter=true&width=950&lines=FOUND+A+BUG%3F;%E2%86%93;HAVE+AN+IDEA%3F;%E2%86%93;NEED+A+NEW+FEATURE%3F;%E2%86%93;OPEN+A+GITHUB+ISSUE+%F0%9F%92%99" alt="Animated support"/>
 
 <br>
 
 Open an issue in the **GitHub Issues** section of this repository.
 
-Every report helps improve **EZZ Launcher**. ❤️
+<br>
+
+<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=16&duration=1200&pause=300&color=FFFFFF&center=true&vCenter=true&width=850&lines=YOUR+FEEDBACK+%E2%86%92+IMPROVEMENTS+%E2%86%92+BETTER+EZZ+LAUNCHER" alt="Animated feedback flow"/>
 
 </div>
 
@@ -201,13 +145,11 @@ Every report helps improve **EZZ Launcher**. ❤️
 
 <div align="center">
 
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=22&duration=1300&pause=700&color=FFD700&center=true&vCenter=true&width=850&lines=%E2%AD%90+LIKE+EZZ+LAUNCHER%3F;%E2%AD%90+STAR+THE+REPOSITORY!;%F0%9F%8E%AE+HELP+THE+PROJECT+GROW!" alt="Animated star message"/>
+<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=800&size=23&duration=1100&pause=350&color=FFD700&center=true&vCenter=true&width=950&lines=%E2%AD%90+LIKE+EZZ+LAUNCHER%3F;%E2%AD%90+STAR+THE+REPOSITORY!;%F0%9F%8E%AE+HELP+EZZ+GROW!;%E2%9A%A1+BUILD+THE+FUTURE+OF+MINECRAFT+LAUNCHING!" alt="Animated support message"/>
 
 <br><br>
 
-<a href="https://github.com/">
-<img src="https://img.shields.io/badge/⭐%20STAR%20THE%20REPOSITORY-FFD700?style=for-the-badge&labelColor=111827" alt="Star repository"/>
-</a>
+<img src="https://img.shields.io/badge/⭐%20STAR%20EZZ%20LAUNCHER-FFD700?style=for-the-badge&labelColor=111827" alt="Star EZZ Launcher"/>
 
 </div>
 
@@ -215,10 +157,10 @@ Every report helps improve **EZZ Launcher**. ❤️
 
 <div align="center">
 
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=16&duration=1800&pause=600&color=00C6FF&center=true&vCenter=true&width=850&lines=EZZ+Launcher+%E2%80%A2+Built+for+Minecraft+Java+Edition;%E2%9A%A1+Clean+%E2%80%A2+Fast+%E2%80%A2+Modern" alt="Animated footer text"/>
+<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&size=17&duration=1000&pause=250&color=00C6FF&center=true&vCenter=true&width=950&lines=EZZ+LAUNCHER;%E2%9A%A1+MODERN;%E2%9A%A1+FAST;%E2%9A%A1+CLEAN;%E2%9A%A1+MINECRAFT+JAVA+EDITION" alt="Animated footer"/>
 
 <br>
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:0072ff,100:00c6ff&height=120&section=footer&animation=fadeIn" width="100%" alt="Animated footer"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:0072ff,50:00c6ff,100:6a00ff&height=150&section=footer&animation=fadeIn" width="100%" alt="Animated footer"/>
 
 </div>
