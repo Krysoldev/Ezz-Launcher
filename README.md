@@ -41,7 +41,7 @@
 
 ---
 
-## 🎯 Overview
+## 🎯 Overview.
 
 <div align="center">
 
@@ -51,7 +51,7 @@
 
 <br>
 
-### Key Highlights
+### Key Highlights.
 - 🚀 **Fast Launch** - Optimized for quick Minecraft startup
 - 🎨 **Modern UI** - Clean, intuitive interface
 - 🔐 **Secure** - Safe account management
@@ -66,7 +66,7 @@
 
 <div align="center">
 
-### Core Features
+### Core Features.
 
 | Category | Features | Status |
 |:---:|---|:---:|
