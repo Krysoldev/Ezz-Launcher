@@ -3,7 +3,6 @@ package io.ezz.launcher.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -32,8 +31,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import io.ezz.launcher.ui.accounts.AccountsScreen
-import io.ezz.launcher.ui.components.MobileBottomNavBar
-import io.ezz.launcher.ui.components.MobileTopBar
 import io.ezz.launcher.ui.components.Sidebar
 import io.ezz.launcher.ui.console.ConsoleScreen
 import io.ezz.launcher.ui.dialogs.AddOfflineAccountDialog
@@ -62,55 +59,27 @@ fun MainScreen(
     val showMicrosoftLogin by viewModel.showMicrosoftLoginDialog.collectAsState()
 
     EzzTheme {
-        BoxWithConstraints(
+        Box(
             modifier = modifier
                 .fillMaxSize()
                 .background(EzzColors.Background)
         ) {
-            val isCompact = maxWidth < 720.dp
+            // Desktop Layout: Sidebar + Content
+            Row(modifier = Modifier.fillMaxSize()) {
+                Sidebar(
+                    currentScreen = currentScreen,
+                    onNavigate = { viewModel.navigateTo(it) },
+                    accountName = selectedAccount?.username,
+                    accountType = selectedAccount?.type?.name?.lowercase()?.replaceFirstChar { it.uppercase() }
+                )
 
-            if (isCompact) {
-                // Mobile Layout: Top Bar + Content + Bottom Nav Bar
-                Column(modifier = Modifier.fillMaxSize()) {
-                    MobileTopBar(
-                        accountName = selectedAccount?.username,
-                        accountType = selectedAccount?.type?.name?.lowercase()?.replaceFirstChar { it.uppercase() },
-                        onAccountClick = { viewModel.navigateTo(NavigationScreen.ACCOUNTS) }
-                    )
-
-                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        when (currentScreen) {
-                            NavigationScreen.HOME -> HomeScreen(viewModel = viewModel)
-                            NavigationScreen.INSTANCES -> InstancesScreen(viewModel = viewModel)
-                            NavigationScreen.ACCOUNTS -> AccountsScreen(viewModel = viewModel)
-                            NavigationScreen.SETTINGS -> SettingsScreen(viewModel = viewModel)
-                            NavigationScreen.CONSOLE -> ConsoleScreen(viewModel = viewModel)
-                        }
-                    }
-
-                    MobileBottomNavBar(
-                        currentScreen = currentScreen,
-                        onNavigate = { viewModel.navigateTo(it) }
-                    )
-                }
-            } else {
-                // Desktop Layout: Sidebar + Content
-                Row(modifier = Modifier.fillMaxSize()) {
-                    Sidebar(
-                        currentScreen = currentScreen,
-                        onNavigate = { viewModel.navigateTo(it) },
-                        accountName = selectedAccount?.username,
-                        accountType = selectedAccount?.type?.name?.lowercase()?.replaceFirstChar { it.uppercase() }
-                    )
-
-                    Box(modifier = Modifier.weight(1f).fillMaxSize()) {
-                        when (currentScreen) {
-                            NavigationScreen.HOME -> HomeScreen(viewModel = viewModel)
-                            NavigationScreen.INSTANCES -> InstancesScreen(viewModel = viewModel)
-                            NavigationScreen.ACCOUNTS -> AccountsScreen(viewModel = viewModel)
-                            NavigationScreen.SETTINGS -> SettingsScreen(viewModel = viewModel)
-                            NavigationScreen.CONSOLE -> ConsoleScreen(viewModel = viewModel)
-                        }
+                Box(modifier = Modifier.weight(1f).fillMaxSize()) {
+                    when (currentScreen) {
+                        NavigationScreen.HOME -> HomeScreen(viewModel = viewModel)
+                        NavigationScreen.INSTANCES -> InstancesScreen(viewModel = viewModel)
+                        NavigationScreen.ACCOUNTS -> AccountsScreen(viewModel = viewModel)
+                        NavigationScreen.SETTINGS -> SettingsScreen(viewModel = viewModel)
+                        NavigationScreen.CONSOLE -> ConsoleScreen(viewModel = viewModel)
                     }
                 }
             }

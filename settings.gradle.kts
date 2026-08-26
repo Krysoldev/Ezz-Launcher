@@ -27,5 +27,4 @@ include(":core:minecraft")
 include(":core:runtime")
 include(":ui:common")
 include(":app:desktop")
-// include(":app:android") // Android development temporarily postponed for Windows stabilization
 
