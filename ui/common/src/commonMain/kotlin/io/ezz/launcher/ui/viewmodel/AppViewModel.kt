@@ -46,7 +46,9 @@ import io.ezz.launcher.ui.platform.PlatformBridge
 enum class NavigationScreen {
     HOME,
     INSTANCES,
+    MODS,
     ACCOUNTS,
+    PROFILES,
     SETTINGS,
     CONSOLE
 }
@@ -76,6 +78,7 @@ class AppViewModel(
     val announcementRepository: AnnouncementRepository? = null,
     val launcherConfigRepository: LauncherConfigRepository? = null,
     val featureFlagRepository: FeatureFlagRepository? = null,
+    val localModScanner: io.ezz.launcher.core.minecraft.mods.LocalModScanner? = null,
     val platformBridge: PlatformBridge = DefaultPlatformBridge(),
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main)
 ) {
@@ -86,6 +89,9 @@ class AppViewModel(
 
     private val _selectedInstance = MutableStateFlow<Instance?>(null)
     val selectedInstance: StateFlow<Instance?> = _selectedInstance.asStateFlow()
+
+    private val _installedMods = MutableStateFlow<List<io.ezz.launcher.core.model.instance.ModMetadata>>(emptyList())
+    val installedMods: StateFlow<List<io.ezz.launcher.core.model.instance.ModMetadata>> = _installedMods.asStateFlow()
 
     private val _processState = MutableStateFlow<ProcessState>(ProcessState.Idle)
     val processState: StateFlow<ProcessState> = _processState.asStateFlow()
@@ -161,11 +167,66 @@ class AppViewModel(
                     if (_selectedInstance.value == null || list.none { it.id == _selectedInstance.value?.id }) {
                         _selectedInstance.value = list.firstOrNull()
                     }
+                    _selectedInstance.value?.let { refreshMods(it.id) }
                 }
             } catch (e: Throwable) {
                 println("Error collecting instances: ${e.message}")
             }
         }
+    }
+
+    fun selectInstance(instance: Instance) {
+        _selectedInstance.value = instance
+        refreshMods(instance.id)
+    }
+
+    fun refreshMods(instanceId: String? = _selectedInstance.value?.id) {
+        if (instanceId == null) {
+            _installedMods.value = emptyList()
+            return
+        }
+        scope.launch {
+            try {
+                val scanned = localModScanner?.scanMods(instanceId) ?: emptyList()
+                _installedMods.value = scanned
+            } catch (e: Throwable) {
+                println("Note: could not scan local mods: ${e.message}")
+            }
+        }
+    }
+
+    fun toggleMod(instanceId: String, fileName: String, enable: Boolean) {
+        scope.launch {
+            try {
+                localModScanner?.toggleMod(instanceId, fileName, enable)
+                refreshMods(instanceId)
+            } catch (e: Throwable) {
+                _errorMessage.value = "Failed to toggle mod: ${e.message}"
+            }
+        }
+    }
+
+    fun deleteMod(instanceId: String, fileName: String) {
+        scope.launch {
+            try {
+                localModScanner?.deleteMod(instanceId, fileName)
+                refreshMods(instanceId)
+            } catch (e: Throwable) {
+                _errorMessage.value = "Failed to delete mod: ${e.message}"
+            }
+        }
+    }
+
+    fun openInstanceFolder(instanceId: String? = _selectedInstance.value?.id) {
+        val targetId = instanceId ?: return
+        val path = pathProvider.getInstanceDirectory(targetId)
+        platformBridge.openFolder(path)
+    }
+
+    fun openModsFolder(instanceId: String? = _selectedInstance.value?.id) {
+        val targetId = instanceId ?: return
+        val path = pathProvider.getInstanceDirectory(targetId).resolve(".minecraft").resolve("mods")
+        platformBridge.openFolder(path)
     }
 
     fun clearError() {
@@ -176,8 +237,34 @@ class AppViewModel(
         _currentScreen.value = screen
     }
 
-    fun selectInstance(instance: Instance) {
-        _selectedInstance.value = instance
+    fun updateCloseOnLaunch(close: Boolean) {
+        scope.launch {
+            try {
+                settingsRepository.updateSettings { it.copy(closeLauncherOnLaunch = close) }
+            } catch (e: Exception) {
+                println("Failed to update setting: ${e.message}")
+            }
+        }
+    }
+
+    fun updateMemorySettings(minMb: Int, maxMb: Int) {
+        scope.launch {
+            try {
+                settingsRepository.updateSettings { it.copy(defaultMinMemoryMb = minMb, defaultMaxMemoryMb = maxMb) }
+            } catch (e: Exception) {
+                println("Failed to update memory: ${e.message}")
+            }
+        }
+    }
+
+    fun updateGlobalJvmArgs(args: List<String>) {
+        scope.launch {
+            try {
+                settingsRepository.updateSettings { it.copy(globalJvmArgs = args) }
+            } catch (e: Exception) {
+                println("Failed to update JVM args: ${e.message}")
+            }
+        }
     }
 
     fun selectAccount(account: Account) {
@@ -188,6 +275,24 @@ class AppViewModel(
                 _errorMessage.value = "Failed to select account: ${e.message}"
             }
         }
+    }
+
+    fun deleteAccount(accountId: String) {
+        scope.launch {
+            try {
+                accountRepository.removeAccount(accountId)
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to delete account: ${e.message}"
+            }
+        }
+    }
+
+    fun cancelMicrosoftLogin() {
+        showMicrosoftLoginDialog.value = false
+    }
+
+    fun stopInstance() {
+        _processState.value = ProcessState.Idle
     }
 
     fun refreshAvailableVersions() {
@@ -361,17 +466,6 @@ class AppViewModel(
                 _selectedInstance.value = duplicated
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to duplicate instance: ${e.message}"
-            }
-        }
-    }
-
-    fun openInstanceFolder(instanceId: String) {
-        scope.launch(Dispatchers.IO) {
-            try {
-                val gameDir = pathProvider.getInstanceGameDirectory(instanceId)
-                platformBridge.openFolder(gameDir)
-            } catch (e: Exception) {
-                println("Failed to open instance folder: ${e.message}")
             }
         }
     }

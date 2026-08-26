@@ -15,13 +15,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,13 +27,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import io.ezz.launcher.core.model.instance.Instance
-import io.ezz.launcher.ui.theme.EzzColors
+import io.ezz.launcher.ui.components.EzzBadge
+import io.ezz.launcher.ui.components.EzzBadgeVariant
+import io.ezz.launcher.ui.components.EzzButton
+import io.ezz.launcher.ui.components.EzzButtonSize
+import io.ezz.launcher.ui.components.EzzButtonVariant
+import io.ezz.launcher.ui.components.EzzIconButton
+import io.ezz.launcher.ui.components.EzzLoaderBadge
+import io.ezz.launcher.ui.components.EzzSlider
+import io.ezz.launcher.ui.components.EzzTextField
+import io.ezz.launcher.ui.theme.EzzTheme
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 
 @Composable
@@ -45,12 +50,11 @@ fun EditInstanceDialog(
     viewModel: AppViewModel,
     onDismiss: () -> Unit
 ) {
+    val colors = EzzTheme.colors
     var name by remember { mutableStateOf(instance.name) }
     var maxRamMb by remember { mutableStateOf(instance.maxMemoryMb.toFloat()) }
     var javaPath by remember { mutableStateOf(instance.javaPath ?: "") }
     var customJvmArgs by remember { mutableStateOf(instance.customJvmArgs.joinToString(" ")) }
-    var windowWidth by remember { mutableStateOf(instance.windowWidth.toString()) }
-    var windowHeight by remember { mutableStateOf(instance.windowHeight.toString()) }
 
     Dialog(onDismissRequest = onDismiss) {
         Box(
@@ -58,149 +62,83 @@ fun EditInstanceDialog(
                 .widthIn(max = 520.dp)
                 .fillMaxWidth(0.95f)
                 .clip(RoundedCornerShape(20.dp))
-                .background(EzzColors.Surface)
-                .border(1.dp, EzzColors.Border, RoundedCornerShape(20.dp))
-                .padding(20.dp)
+                .background(colors.surface)
+                .border(1.dp, colors.border, RoundedCornerShape(20.dp))
+                .padding(24.dp)
         ) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                Text(
-                    text = "Edit Instance",
-                    color = EzzColors.TextPrimary,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Configure memory, Java runtime, and JVM arguments",
-                    color = EzzColors.TextSecondary,
-                    fontSize = 13.sp
-                )
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Edit Instance Settings",
+                            color = colors.textPrimary,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                            EzzLoaderBadge(loaderType = instance.loaderType)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            EzzBadge(text = "MC ${instance.minecraftVersion}", variant = EzzBadgeVariant.NEUTRAL)
+                        }
+                    }
+
+                    EzzIconButton(
+                        icon = Icons.Default.Close,
+                        onClick = onDismiss,
+                        contentDescription = "Close",
+                        tint = colors.textMuted
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Name
-                Text("Instance Name", color = EzzColors.TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
+                // Instance Name
+                EzzTextField(
                     value = name,
                     onValueChange = { name = it },
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = EzzColors.SurfaceVariant,
-                        unfocusedContainerColor = EzzColors.SurfaceVariant,
-                        focusedTextColor = EzzColors.TextPrimary,
-                        unfocusedTextColor = EzzColors.TextPrimary,
-                        focusedIndicatorColor = EzzColors.Primary,
-                        unfocusedIndicatorColor = EzzColors.Border
-                    ),
-                    shape = RoundedCornerShape(10.dp),
+                    label = "Instance Display Name",
+                    placeholder = "Instance name...",
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // RAM Slider
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Allocated RAM", color = EzzColors.TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Text("${maxRamMb.toInt()} MB", color = EzzColors.Primary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                }
-                Slider(
+                EzzSlider(
                     value = maxRamMb,
                     onValueChange = { maxRamMb = it },
                     valueRange = 1024f..16384f,
                     steps = 15,
-                    colors = SliderDefaults.colors(
-                        thumbColor = EzzColors.Primary,
-                        activeTrackColor = EzzColors.Primary,
-                        inactiveTrackColor = EzzColors.SurfaceLight
-                    )
+                    label = "Maximum Memory (RAM)",
+                    valueDisplay = "${(maxRamMb / 1024).toInt()} GB"
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Java Executable Path Override
-                Text("Java Executable Path (Leave blank to Auto-Detect)", color = EzzColors.TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
+                // Custom Java Path
+                EzzTextField(
                     value = javaPath,
                     onValueChange = { javaPath = it },
-                    placeholder = { Text("e.g. C:\\Program Files\\Eclipse Adoptium\\jdk-21.0.11\\bin\\java.exe", color = EzzColors.TextMuted, fontSize = 12.sp) },
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = EzzColors.SurfaceVariant,
-                        unfocusedContainerColor = EzzColors.SurfaceVariant,
-                        focusedTextColor = EzzColors.TextPrimary,
-                        unfocusedTextColor = EzzColors.TextPrimary,
-                        focusedIndicatorColor = EzzColors.Primary,
-                        unfocusedIndicatorColor = EzzColors.Border
-                    ),
-                    shape = RoundedCornerShape(10.dp),
+                    label = "Custom Java Binary Path (Optional)",
+                    placeholder = "Default auto-detected Java",
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Custom JVM Args
-                Text("Custom JVM Arguments", color = EzzColors.TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
+                // Custom JVM Arguments
+                EzzTextField(
                     value = customJvmArgs,
                     onValueChange = { customJvmArgs = it },
-                    placeholder = { Text("e.g. -XX:+UseG1GC", color = EzzColors.TextMuted) },
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = EzzColors.SurfaceVariant,
-                        unfocusedContainerColor = EzzColors.SurfaceVariant,
-                        focusedTextColor = EzzColors.TextPrimary,
-                        unfocusedTextColor = EzzColors.TextPrimary,
-                        focusedIndicatorColor = EzzColors.Primary,
-                        unfocusedIndicatorColor = EzzColors.Border
-                    ),
-                    shape = RoundedCornerShape(10.dp),
+                    label = "Custom JVM Arguments (Optional)",
+                    placeholder = "-XX:+UseG1GC -XX:MaxGCPauseMillis=50",
                     modifier = Modifier.fillMaxWidth()
                 )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Resolution
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Window Width", color = EzzColors.TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(modifier = Modifier.height(6.dp))
-                        OutlinedTextField(
-                            value = windowWidth,
-                            onValueChange = { windowWidth = it },
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = EzzColors.SurfaceVariant,
-                                unfocusedContainerColor = EzzColors.SurfaceVariant,
-                                focusedTextColor = EzzColors.TextPrimary,
-                                unfocusedTextColor = EzzColors.TextPrimary,
-                                focusedIndicatorColor = EzzColors.Primary,
-                                unfocusedIndicatorColor = EzzColors.Border
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Window Height", color = EzzColors.TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(modifier = Modifier.height(6.dp))
-                        OutlinedTextField(
-                            value = windowHeight,
-                            onValueChange = { windowHeight = it },
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = EzzColors.SurfaceVariant,
-                                unfocusedContainerColor = EzzColors.SurfaceVariant,
-                                focusedTextColor = EzzColors.TextPrimary,
-                                unfocusedTextColor = EzzColors.TextPrimary,
-                                focusedIndicatorColor = EzzColors.Primary,
-                                unfocusedIndicatorColor = EzzColors.Border
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
 
                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -209,34 +147,30 @@ fun EditInstanceDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    Button(
+                    EzzButton(
+                        text = "Cancel",
                         onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = EzzColors.SurfaceVariant),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text("Cancel", color = EzzColors.TextPrimary)
-                    }
+                        variant = EzzButtonVariant.GHOST,
+                        size = EzzButtonSize.MEDIUM
+                    )
 
                     Spacer(modifier = Modifier.width(12.dp))
 
-                    Button(
+                    EzzButton(
+                        text = "Save Changes",
                         onClick = {
-                            val args = customJvmArgs.split("\\s+".toRegex()).filter { it.isNotBlank() }
                             val updated = instance.copy(
                                 name = name.ifBlank { instance.name },
                                 maxMemoryMb = maxRamMb.toInt(),
-                                javaPath = javaPath.trim().ifBlank { null },
-                                customJvmArgs = args,
-                                windowWidth = windowWidth.toIntOrNull() ?: instance.windowWidth,
-                                windowHeight = windowHeight.toIntOrNull() ?: instance.windowHeight
+                                javaPath = javaPath.ifBlank { null },
+                                customJvmArgs = if (customJvmArgs.isBlank()) emptyList() else customJvmArgs.split(" ")
                             )
                             viewModel.updateInstance(updated)
+                            onDismiss()
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = EzzColors.Primary),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text("Save Changes", color = Color(0xFF0B0F19), fontWeight = FontWeight.Bold)
-                    }
+                        variant = EzzButtonVariant.PRIMARY,
+                        size = EzzButtonSize.MEDIUM
+                    )
                 }
             }
         }

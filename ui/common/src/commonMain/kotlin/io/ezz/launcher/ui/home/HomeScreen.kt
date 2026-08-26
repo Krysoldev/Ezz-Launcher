@@ -14,17 +14,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,12 +38,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LoaderType
-import io.ezz.launcher.core.model.runtime.ProcessState
-import io.ezz.launcher.ui.theme.EzzColors
+import io.ezz.launcher.ui.components.EzzBadge
+import io.ezz.launcher.ui.components.EzzBadgeVariant
+import io.ezz.launcher.ui.components.EzzButton
+import io.ezz.launcher.ui.components.EzzButtonSize
+import io.ezz.launcher.ui.components.EzzButtonVariant
+import io.ezz.launcher.ui.components.EzzCard
+import io.ezz.launcher.ui.components.EzzEmptyState
+import io.ezz.launcher.ui.components.EzzIconButton
+import io.ezz.launcher.ui.components.EzzLoaderBadge
+import io.ezz.launcher.ui.theme.EzzTheme
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 import io.ezz.launcher.ui.viewmodel.NavigationScreen
 
@@ -49,17 +62,17 @@ fun HomeScreen(
     viewModel: AppViewModel,
     modifier: Modifier = Modifier
 ) {
+    val colors = EzzTheme.colors
     val selectedInstance by viewModel.selectedInstance.collectAsState()
-    val selectedAccount by viewModel.accountRepository.selectedAccount.collectAsState()
-    val processState by viewModel.processState.collectAsState()
     val instances by viewModel.instanceRepository.instances.collectAsState()
+    val installedMods by viewModel.installedMods.collectAsState()
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(EzzColors.Background)
-            .padding(32.dp),
-        verticalArrangement = Arrangement.SpaceBetween
+            .background(colors.background)
+            .verticalScroll(rememberScrollState())
+            .padding(32.dp)
     ) {
         // Top Header
         Row(
@@ -69,31 +82,30 @@ fun HomeScreen(
         ) {
             Column {
                 Text(
-                    text = "Welcome Back!",
-                    color = EzzColors.TextPrimary,
+                    text = "Welcome to Ezz Launcher",
+                    color = colors.textPrimary,
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = if (selectedInstance != null) "Ready to play Minecraft" else "Create or select an instance to get started",
-                    color = EzzColors.TextSecondary,
+                    text = if (selectedInstance != null) "Ready to play Minecraft Java Edition" else "Create an instance or select one below",
+                    color = colors.textSecondary,
                     fontSize = 14.sp
                 )
             }
 
-            // Quick Instance Switcher dropdown / Create button
-            Button(
+            EzzButton(
+                text = "New Instance",
                 onClick = { viewModel.showCreateInstanceDialog.value = true },
-                colors = ButtonDefaults.buttonColors(containerColor = EzzColors.SurfaceVariant),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = EzzColors.Primary)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "New Instance", color = EzzColors.TextPrimary, fontWeight = FontWeight.SemiBold)
-            }
+                variant = EzzButtonVariant.SECONDARY,
+                size = EzzButtonSize.MEDIUM,
+                icon = Icons.Default.Add
+            )
         }
 
-        // 1. Maintenance Mode Banner
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // 1. Maintenance Mode Alert
         val isMaintenanceMode by viewModel.isMaintenanceMode.collectAsState()
         val maintenanceMessage by viewModel.maintenanceMessage.collectAsState()
         if (isMaintenanceMode) {
@@ -101,23 +113,21 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFFEF4444).copy(alpha = 0.15f))
-                    .border(1.dp, Color(0xFFEF4444), RoundedCornerShape(12.dp))
+                    .background(colors.danger.copy(alpha = 0.15f))
+                    .border(1.dp, colors.danger, RoundedCornerShape(12.dp))
                     .padding(16.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "⚠️ MAINTENANCE MODE: $maintenanceMessage",
-                        color = Color(0xFFEF4444),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                Text(
+                    text = "⚠️ MAINTENANCE MODE: $maintenanceMessage",
+                    color = colors.danger,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // 2. Launcher Update Available Banner
+        // 2. Launcher Update Alert
         val updateCheckResult by viewModel.updateCheckResult.collectAsState()
         if (updateCheckResult?.hasUpdate == true && updateCheckResult?.latestRelease != null) {
             val latest = updateCheckResult!!.latestRelease!!
@@ -125,8 +135,8 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF3B82F6).copy(alpha = 0.15f))
-                    .border(1.dp, Color(0xFF3B82F6), RoundedCornerShape(12.dp))
+                    .background(colors.primary.copy(alpha = 0.12f))
+                    .border(1.dp, colors.primary.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
                     .padding(16.dp)
             ) {
                 Row(
@@ -136,52 +146,52 @@ fun HomeScreen(
                 ) {
                     Column {
                         Text(
-                            text = if (updateCheckResult!!.isRequired) "🚨 Mandatory Update Required (v${latest.version})" else "🚀 New Update Available: v${latest.version}",
-                            color = Color(0xFF60A5FA),
+                            text = if (updateCheckResult!!.isRequired) "🚨 Mandatory Update Required (v${latest.version})" else "🚀 New Launcher Update: v${latest.version}",
+                            color = colors.primary,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        val releaseNotes = latest.releaseNotes
-                        if (!releaseNotes.isNullOrBlank()) {
+                        val notes = latest.releaseNotes
+                        if (!notes.isNullOrBlank()) {
                             Text(
-                                text = releaseNotes,
-                                color = EzzColors.TextSecondary,
+                                text = notes,
+                                color = colors.textSecondary,
                                 fontSize = 12.sp,
                                 maxLines = 1
                             )
                         }
                     }
-                    val downloadUrl = latest.downloadUrl
-                    if (!downloadUrl.isNullOrBlank()) {
-                        Button(
-                            onClick = { viewModel.platformBridge.openUrl(downloadUrl) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("Download Update", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
+
+                    val dlUrl = latest.downloadUrl
+                    if (!dlUrl.isNullOrBlank()) {
+                        EzzButton(
+                            text = "Download",
+                            onClick = { viewModel.platformBridge.openUrl(dlUrl) },
+                            variant = EzzButtonVariant.PRIMARY,
+                            size = EzzButtonSize.SMALL
+                        )
                     }
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // 3. Announcements Feed
+        // 3. Announcements Broadcast Feed
         val announcements by viewModel.announcements.collectAsState()
         if (announcements.isNotEmpty()) {
-            val topAnnouncement = announcements.first()
+            val top = announcements.first()
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(EzzColors.SurfaceLight)
-                    .border(1.dp, EzzColors.Border, RoundedCornerShape(12.dp))
+                    .background(colors.surfaceVariant)
+                    .border(1.dp, colors.border, RoundedCornerShape(12.dp))
                     .padding(14.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "📢 ${topAnnouncement.title}: ${topAnnouncement.message}",
-                        color = EzzColors.TextPrimary,
+                        text = "📢 ${top.title}: ${top.message}",
+                        color = colors.textPrimary,
                         fontSize = 13.sp
                     )
                 }
@@ -189,93 +199,59 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // Hero Instance Card
+        // 4. Hero Instance Showcase Card
         if (selectedInstance != null) {
             val inst = selectedInstance!!
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(
-                        Brush.linearGradient(
-                            listOf(EzzColors.Surface, EzzColors.SurfaceVariant)
-                        )
-                    )
-                    .border(1.dp, EzzColors.Border, RoundedCornerShape(20.dp))
-                    .padding(32.dp)
+            EzzCard(
+                modifier = Modifier.fillMaxWidth(),
+                backgroundColor = colors.surfaceVariant,
+                borderColor = colors.primary.copy(alpha = 0.4f)
             ) {
-                Column {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(28.dp)
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.Top
                     ) {
                         Column {
-                            // Loader & Version Badges
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(
-                                            when (inst.loaderType) {
-                                                LoaderType.FABRIC -> Color(0xFF3B82F6)
-                                                LoaderType.OPTIFINE -> Color(0xFFEC4899)
-                                                LoaderType.VANILLA -> EzzColors.Accent
-                                            }
-                                        )
-                                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = when (inst.loaderType) {
-                                            LoaderType.FABRIC -> "Fabric ${inst.loaderVersion ?: ""}"
-                                            LoaderType.OPTIFINE -> "OptiFine ${inst.loaderVersion ?: ""}"
-                                            LoaderType.VANILLA -> "Vanilla"
-                                        },
-                                        color = Color.White,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
+                                EzzLoaderBadge(loaderType = inst.loaderType)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(EzzColors.SurfaceLight)
-                                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = "v${inst.minecraftVersion}",
-                                        color = EzzColors.TextPrimary,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold
+                                EzzBadge(
+                                    text = "v${inst.minecraftVersion}",
+                                    variant = EzzBadgeVariant.NEUTRAL
+                                )
+                                if (inst.loaderType == LoaderType.FABRIC) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    EzzBadge(
+                                        text = "${installedMods.size} Mods Installed",
+                                        variant = EzzBadgeVariant.INFO
                                     )
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(14.dp))
 
                             Text(
                                 text = inst.name,
-                                color = EzzColors.TextPrimary,
-                                fontSize = 32.sp,
+                                color = colors.textPrimary,
+                                fontSize = 30.sp,
                                 fontWeight = FontWeight.ExtraBold
                             )
                         }
 
-                        // Open Folder Button
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(EzzColors.SurfaceLight)
-                                .clickable { viewModel.openInstanceFolder(inst.id) }
-                                .padding(12.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.FolderOpen,
-                                contentDescription = "Open Directory",
-                                tint = EzzColors.TextSecondary
-                            )
-                        }
+                        // Open Folder Shortcut
+                        EzzIconButton(
+                            icon = Icons.Default.FolderOpen,
+                            onClick = { viewModel.openInstanceFolder(inst.id) },
+                            contentDescription = "Open Directory",
+                            tint = colors.textSecondary,
+                            backgroundColor = colors.surface
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
@@ -283,219 +259,72 @@ fun HomeScreen(
                     // Instance Specs Row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(24.dp)
+                        horizontalArrangement = Arrangement.spacedBy(28.dp)
                     ) {
-                        SpecItem(
+                        StatItem(
                             icon = Icons.Default.Memory,
                             label = "RAM Allocated",
-                            value = "${inst.maxMemoryMb} MB"
+                            value = "${inst.maxMemoryMb / 1024} GB"
                         )
-                        SpecItem(
+                        StatItem(
                             icon = Icons.Default.Speed,
-                            label = "Total Playtime",
+                            label = "Playtime",
                             value = formatPlaytime(inst.totalPlayTimeSeconds)
                         )
+                        if (inst.loaderType == LoaderType.FABRIC) {
+                            StatItem(
+                                icon = Icons.Default.Extension,
+                                label = "Active Mods",
+                                value = "${installedMods.count { it.enabled }} enabled"
+                            )
+                        }
                     }
                 }
             }
         } else {
-            // Empty State
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(260.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(EzzColors.Surface)
-                    .border(1.dp, EzzColors.Border, RoundedCornerShape(20.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "No Minecraft Instances Found",
-                        color = EzzColors.TextPrimary,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Create your first instance to start playing",
-                        color = EzzColors.TextSecondary,
-                        fontSize = 14.sp
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(
-                        onClick = { viewModel.showCreateInstanceDialog.value = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = EzzColors.Primary)
-                    ) {
-                        Text("Create Instance", color = Color(0xFF0B0F19), fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
+            EzzEmptyState(
+                title = "No Instance Selected",
+                description = "Create or choose a Minecraft instance from your library to start playing.",
+                actionButtonText = "Create Instance",
+                onActionClick = { viewModel.showCreateInstanceDialog.value = true }
+            )
         }
 
-        // Bottom Launch Control Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(EzzColors.Surface)
-                .border(1.dp, EzzColors.Border, RoundedCornerShape(16.dp))
-                .padding(20.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Account info
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(EzzColors.SurfaceVariant),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = selectedAccount?.username?.take(1)?.uppercase() ?: "?",
-                        color = EzzColors.Primary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp
-                    )
-                }
-                Spacer(modifier = Modifier.width(14.dp))
-                Column {
-                    Text(
-                        text = selectedAccount?.username ?: "No Account Selected",
-                        color = EzzColors.TextPrimary,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = if (selectedAccount != null) "Ready to Launch" else "Please add an account in Accounts tab",
-                        color = if (selectedAccount != null) EzzColors.Accent else EzzColors.Warning,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
+        Spacer(modifier = Modifier.height(28.dp))
+
+        // 5. Quick Switcher: All Instances
+        if (instances.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Your Instances (${instances.size})",
+                    color = colors.textPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Text(
+                    text = "View All",
+                    color = colors.primary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clickable { viewModel.navigateTo(NavigationScreen.INSTANCES) }
+                )
             }
 
-            // Big Play Button / Status
-            when (processState) {
-                is ProcessState.Idle -> {
-                    Button(
-                        onClick = { viewModel.launchInstance() },
-                        enabled = selectedInstance != null && selectedAccount != null,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = EzzColors.Accent,
-                            disabledContainerColor = EzzColors.SurfaceVariant
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.height(52.dp).width(200.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = Color(0xFF0B0F19))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "PLAY",
-                            color = Color(0xFF0B0F19),
-                            fontWeight = FontWeight.Black,
-                            fontSize = 18.sp,
-                            letterSpacing = 1.sp
-                        )
-                    }
-                }
-                is ProcessState.Preparing -> {
-                    val prep = processState as ProcessState.Preparing
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(
-                            color = EzzColors.Primary,
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 3.dp
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = "Preparing Launch...",
-                                color = EzzColors.TextPrimary,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = prep.stage,
-                                color = EzzColors.Primary,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-                }
-                is ProcessState.Running -> {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(EzzColors.AccentGlow)
-                            .padding(horizontal = 20.dp, vertical = 12.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(10.dp)
-                                .clip(RoundedCornerShape(5.dp))
-                                .background(EzzColors.Accent)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "GAME RUNNING",
-                            color = EzzColors.Accent,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
-                        )
-                    }
-                }
-                is ProcessState.Exited -> {
-                    Button(
-                        onClick = { viewModel.launchInstance() },
-                        colors = ButtonDefaults.buttonColors(containerColor = EzzColors.Accent),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.height(52.dp).width(200.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = Color(0xFF0B0F19))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "PLAY AGAIN", color = Color(0xFF0B0F19), fontWeight = FontWeight.Bold)
-                    }
-                }
-                is ProcessState.Failed -> {
-                    val fail = processState as ProcessState.Failed
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "Launch Failed",
-                                color = EzzColors.Danger,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
-                            Text(
-                                text = fail.error.message.take(45),
-                                color = EzzColors.TextMuted,
-                                fontSize = 11.sp
-                            )
-                        }
+            Spacer(modifier = Modifier.height(14.dp))
 
-                        Button(
-                            onClick = { viewModel.navigateTo(NavigationScreen.CONSOLE) },
-                            colors = ButtonDefaults.buttonColors(containerColor = EzzColors.SurfaceVariant),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("Logs", color = EzzColors.TextPrimary, fontSize = 12.sp)
-                        }
-
-                        Button(
-                            onClick = { viewModel.launchInstance() },
-                            colors = ButtonDefaults.buttonColors(containerColor = EzzColors.Danger),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("Retry", color = Color.White, fontSize = 12.sp)
-                        }
-                    }
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(instances, key = { it.id }) { inst ->
+                    val isSelected = inst.id == selectedInstance?.id
+                    InstanceQuickCard(
+                        instance = inst,
+                        isSelected = isSelected,
+                        onClick = { viewModel.selectInstance(inst) }
+                    )
                 }
             }
         }
@@ -503,25 +332,72 @@ fun HomeScreen(
 }
 
 @Composable
-private fun SpecItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+private fun InstanceQuickCard(
+    instance: Instance,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val colors = EzzTheme.colors
+
+    EzzCard(
+        modifier = Modifier.width(220.dp),
+        borderColor = if (isSelected) colors.primary else colors.border,
+        backgroundColor = if (isSelected) colors.surfaceVariant else colors.cardBackground,
+        onClick = onClick
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                EzzLoaderBadge(loaderType = instance.loaderType)
+                Text(
+                    text = "v${instance.minecraftVersion}",
+                    color = colors.textMuted,
+                    fontSize = 11.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = instance.name,
+                color = colors.textPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatItem(
+    icon: ImageVector,
     label: String,
     value: String
 ) {
+    val colors = EzzTheme.colors
+
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier = Modifier
-                .size(36.dp)
+                .size(38.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(EzzColors.SurfaceLight),
+                .background(colors.surface),
             contentAlignment = Alignment.Center
         ) {
-            Icon(imageVector = icon, contentDescription = null, tint = EzzColors.Primary, modifier = Modifier.size(20.dp))
+            Icon(imageVector = icon, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
         }
         Spacer(modifier = Modifier.width(10.dp))
         Column {
-            Text(text = label, color = EzzColors.TextSecondary, fontSize = 11.sp)
-            Text(text = value, color = EzzColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(text = label, color = colors.textSecondary, fontSize = 11.sp)
+            Text(text = value, color = colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         }
     }
 }

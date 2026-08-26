@@ -1,7 +1,6 @@
 package io.ezz.launcher.ui.instances
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,22 +16,20 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -48,114 +45,156 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LoaderType
-import io.ezz.launcher.ui.theme.EzzColors
+import io.ezz.launcher.ui.components.EzzBadge
+import io.ezz.launcher.ui.components.EzzBadgeVariant
+import io.ezz.launcher.ui.components.EzzButton
+import io.ezz.launcher.ui.components.EzzButtonSize
+import io.ezz.launcher.ui.components.EzzButtonVariant
+import io.ezz.launcher.ui.components.EzzCard
+import io.ezz.launcher.ui.components.EzzEmptyState
+import io.ezz.launcher.ui.components.EzzIconButton
+import io.ezz.launcher.ui.components.EzzLoaderBadge
+import io.ezz.launcher.ui.components.EzzSearchField
+import io.ezz.launcher.ui.components.EzzTabs
+import io.ezz.launcher.ui.components.TabItem
+import io.ezz.launcher.ui.theme.EzzTheme
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 import io.ezz.launcher.ui.viewmodel.NavigationScreen
+
+enum class InstanceFilter {
+    ALL,
+    VANILLA,
+    FABRIC,
+    OPTIFINE
+}
 
 @Composable
 fun InstancesScreen(
     viewModel: AppViewModel,
     modifier: Modifier = Modifier
 ) {
+    val colors = EzzTheme.colors
     val instances by viewModel.instanceRepository.instances.collectAsState()
     val selectedInstance by viewModel.selectedInstance.collectAsState()
-    var searchQuery by remember { mutableStateOf("") }
 
-    val filteredInstances = instances.filter {
-        it.name.contains(searchQuery, ignoreCase = true) ||
-        it.minecraftVersion.contains(searchQuery, ignoreCase = true) ||
-        it.loaderType.name.contains(searchQuery, ignoreCase = true)
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedFilter by remember { mutableStateOf(InstanceFilter.ALL) }
+
+    val filteredInstances = remember(instances, searchQuery, selectedFilter) {
+        instances.filter { inst ->
+            val matchesSearch = searchQuery.isBlank() ||
+                    inst.name.contains(searchQuery, ignoreCase = true) ||
+                    inst.minecraftVersion.contains(searchQuery, ignoreCase = true) ||
+                    inst.loaderType.name.contains(searchQuery, ignoreCase = true)
+
+            val matchesFilter = when (selectedFilter) {
+                InstanceFilter.ALL -> true
+                InstanceFilter.VANILLA -> inst.loaderType == LoaderType.VANILLA
+                InstanceFilter.FABRIC -> inst.loaderType == LoaderType.FABRIC
+                InstanceFilter.OPTIFINE -> inst.loaderType == LoaderType.OPTIFINE
+            }
+
+            matchesSearch && matchesFilter
+        }
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(EzzColors.Background)
+            .background(colors.background)
             .padding(32.dp)
     ) {
-        // Header
+        // Header Row
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Instances",
+                        color = colors.textPrimary,
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    EzzBadge(
+                        text = "${instances.size} Installed",
+                        variant = EzzBadgeVariant.NEUTRAL
+                    )
+                }
                 Text(
-                    text = "Instances",
-                    color = EzzColors.TextPrimary,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Manage your isolated Minecraft game installations (${instances.size} installed)",
-                    color = EzzColors.TextSecondary,
+                    text = "Manage your isolated Minecraft profiles, modpacks, and versions",
+                    color = colors.textSecondary,
                     fontSize = 14.sp
                 )
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Search Input
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text("Search instances...", color = EzzColors.TextMuted, fontSize = 13.sp) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = EzzColors.TextSecondary) },
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = EzzColors.Surface,
-                        unfocusedContainerColor = EzzColors.Surface,
-                        focusedTextColor = EzzColors.TextPrimary,
-                        unfocusedTextColor = EzzColors.TextPrimary,
-                        focusedIndicatorColor = EzzColors.Primary,
-                        unfocusedIndicatorColor = EzzColors.Border
-                    ),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.width(260.dp).height(48.dp)
-                )
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                Button(
-                    onClick = { viewModel.showCreateInstanceDialog.value = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = EzzColors.Primary),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.height(48.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = Color(0xFF0B0F19))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "Create Instance", color = Color(0xFF0B0F19), fontWeight = FontWeight.Bold)
-                }
-            }
+            EzzButton(
+                text = "New Instance",
+                onClick = { viewModel.showCreateInstanceDialog.value = true },
+                variant = EzzButtonVariant.PRIMARY,
+                size = EzzButtonSize.MEDIUM,
+                icon = Icons.Default.Add
+            )
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
-        // Instances Grid
+        // Search and Filter Bar
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            EzzSearchField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier.width(360.dp),
+                placeholder = "Search instances..."
+            )
+
+            EzzTabs(
+                items = listOf(
+                    TabItem(InstanceFilter.ALL, "All (${instances.size})"),
+                    TabItem(InstanceFilter.FABRIC, "Fabric (${instances.count { it.loaderType == LoaderType.FABRIC }})"),
+                    TabItem(InstanceFilter.OPTIFINE, "OptiFine (${instances.count { it.loaderType == LoaderType.OPTIFINE }})"),
+                    TabItem(InstanceFilter.VANILLA, "Vanilla (${instances.count { it.loaderType == LoaderType.VANILLA }})")
+                ),
+                selectedItem = selectedFilter,
+                onItemSelected = { selectedFilter = it }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Grid
         if (filteredInstances.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(300.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(EzzColors.Surface),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = if (searchQuery.isNotBlank()) "No instances matched '$searchQuery'" else "No instances created yet",
-                        color = EzzColors.TextSecondary,
-                        fontSize = 16.sp
-                    )
-                }
+            if (instances.isEmpty()) {
+                EzzEmptyState(
+                    title = "No Instances Created Yet",
+                    description = "Create your first isolated Minecraft instance to start playing Vanilla, Fabric, or OptiFine.",
+                    actionButtonText = "Create Instance",
+                    onActionClick = { viewModel.showCreateInstanceDialog.value = true }
+                )
+            } else {
+                EzzEmptyState(
+                    title = "No Matching Instances",
+                    description = "No instances match your search query '$searchQuery'.",
+                    actionButtonText = "Clear Search",
+                    onActionClick = { searchQuery = "" }
+                )
             }
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 320.dp),
+                columns = GridCells.Adaptive(minSize = 340.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(filteredInstances, key = { it.id }) { instance ->
-                    InstanceCard(
+                    InstanceGridCard(
                         instance = instance,
                         isSelected = instance.id == selectedInstance?.id,
                         onSelect = { viewModel.selectInstance(instance) },
@@ -163,6 +202,10 @@ fun InstancesScreen(
                             viewModel.selectInstance(instance)
                             viewModel.launchInstance(instance)
                             viewModel.navigateTo(NavigationScreen.HOME)
+                        },
+                        onManageMods = {
+                            viewModel.selectInstance(instance)
+                            viewModel.navigateTo(NavigationScreen.MODS)
                         },
                         onEdit = { viewModel.showEditInstanceDialog.value = instance },
                         onDuplicate = { viewModel.duplicateInstance(instance.id, "${instance.name} (Copy)") },
@@ -176,117 +219,150 @@ fun InstancesScreen(
 }
 
 @Composable
-fun InstanceCard(
+private fun InstanceGridCard(
     instance: Instance,
     isSelected: Boolean,
     onSelect: () -> Unit,
     onPlay: () -> Unit,
+    onManageMods: () -> Unit,
     onEdit: () -> Unit,
     onDuplicate: () -> Unit,
     onOpenFolder: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val borderColor = if (isSelected) EzzColors.Primary else EzzColors.Border
+    val colors = EzzTheme.colors
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(EzzColors.Surface)
-            .border(if (isSelected) 2.dp else 1.dp, borderColor, RoundedCornerShape(16.dp))
-            .clickable(onClick = onSelect)
-            .padding(20.dp)
+    EzzCard(
+        modifier = Modifier.fillMaxWidth(),
+        borderColor = if (isSelected) colors.primary else colors.border,
+        backgroundColor = if (isSelected) colors.surfaceVariant else colors.cardBackground,
+        onClick = onSelect
     ) {
-        Column {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Loader Badge
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(
-                            when (instance.loaderType) {
-                                LoaderType.FABRIC -> Color(0xFF3B82F6)
-                                LoaderType.OPTIFINE -> Color(0xFFEC4899)
-                                LoaderType.VANILLA -> EzzColors.Accent
-                            }
-                        )
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                // Top Meta Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    EzzLoaderBadge(loaderType = instance.loaderType)
+
                     Text(
-                        text = when (instance.loaderType) {
-                            LoaderType.FABRIC -> "Fabric"
-                            LoaderType.OPTIFINE -> "OptiFine"
-                            LoaderType.VANILLA -> "Vanilla"
-                        },
-                        color = Color.White,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                        text = "MC ${instance.minecraftVersion}",
+                        color = colors.textSecondary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
 
-                // Version string
-                Text(
-                    text = "v${instance.minecraftVersion}",
-                    color = EzzColors.TextSecondary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium
-                )
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Title and RAM
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) colors.primaryGlow else colors.surface)
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = null,
+                            tint = if (isSelected) colors.primary else colors.textSecondary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column {
+                        Text(
+                            text = instance.name,
+                            color = colors.textPrimary,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.Memory,
+                                contentDescription = null,
+                                tint = colors.textMuted,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "${instance.maxMemoryMb / 1024} GB RAM",
+                                color = colors.textMuted,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
             }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            Text(
-                text = instance.name,
-                color = EzzColors.TextPrimary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "RAM: ${instance.maxMemoryMb} MB",
-                color = EzzColors.TextMuted,
-                fontSize = 12.sp
-            )
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Action Buttons
+            // Action Buttons Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Button(
-                    onClick = onPlay,
-                    colors = ButtonDefaults.buttonColors(containerColor = EzzColors.Accent),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.height(36.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = Color(0xFF0B0F19), modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Play", color = Color(0xFF0B0F19), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    EzzButton(
+                        text = "Play",
+                        onClick = onPlay,
+                        variant = EzzButtonVariant.PRIMARY,
+                        size = EzzButtonSize.SMALL,
+                        icon = Icons.Default.PlayArrow
+                    )
+
+                    if (instance.loaderType == LoaderType.FABRIC) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        EzzButton(
+                            text = "Mods",
+                            onClick = onManageMods,
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.SMALL,
+                            icon = Icons.Default.Extension
+                        )
+                    }
                 }
 
-                Row {
-                    IconButton(onClick = onOpenFolder, modifier = Modifier.size(36.dp)) {
-                        Icon(imageVector = Icons.Default.FolderOpen, contentDescription = "Open Folder", tint = EzzColors.TextSecondary, modifier = Modifier.size(18.dp))
-                    }
-                    IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
-                        Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit", tint = EzzColors.TextSecondary, modifier = Modifier.size(18.dp))
-                    }
-                    IconButton(onClick = onDuplicate, modifier = Modifier.size(36.dp)) {
-                        Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Duplicate", tint = EzzColors.TextSecondary, modifier = Modifier.size(18.dp))
-                    }
-                    IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-                        Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", tint = EzzColors.Danger, modifier = Modifier.size(18.dp))
-                    }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    EzzIconButton(
+                        icon = Icons.Default.FolderOpen,
+                        onClick = onOpenFolder,
+                        contentDescription = "Open Folder",
+                        tint = colors.textMuted
+                    )
+                    EzzIconButton(
+                        icon = Icons.Default.Edit,
+                        onClick = onEdit,
+                        contentDescription = "Edit Instance",
+                        tint = colors.textMuted
+                    )
+                    EzzIconButton(
+                        icon = Icons.Default.ContentCopy,
+                        onClick = onDuplicate,
+                        contentDescription = "Duplicate Instance",
+                        tint = colors.textMuted
+                    )
+                    EzzIconButton(
+                        icon = Icons.Default.Delete,
+                        onClick = onDelete,
+                        contentDescription = "Delete Instance",
+                        tint = colors.danger
+                    )
                 }
             }
         }

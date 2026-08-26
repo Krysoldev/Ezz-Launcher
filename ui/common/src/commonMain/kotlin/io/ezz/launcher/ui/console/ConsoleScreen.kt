@@ -21,8 +21,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,21 +33,28 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.ezz.launcher.ui.theme.EzzColors
+import io.ezz.launcher.ui.components.EzzBadge
+import io.ezz.launcher.ui.components.EzzBadgeVariant
+import io.ezz.launcher.ui.components.EzzButton
+import io.ezz.launcher.ui.components.EzzButtonSize
+import io.ezz.launcher.ui.components.EzzButtonVariant
+import io.ezz.launcher.ui.components.ToastManager
+import io.ezz.launcher.ui.components.ToastType
+import io.ezz.launcher.ui.theme.EzzTheme
 import io.ezz.launcher.ui.viewmodel.AppViewModel
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
 
 @Composable
 fun ConsoleScreen(
     viewModel: AppViewModel,
     modifier: Modifier = Modifier
 ) {
+    val colors = EzzTheme.colors
     val logs by viewModel.logs.collectAsState()
     val listState = rememberLazyListState()
-    val clipboardManager = LocalClipboardManager.current
 
     // Auto-scroll to bottom on new log
     LaunchedEffect(logs.size) {
@@ -61,7 +66,7 @@ fun ConsoleScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(EzzColors.Background)
+            .background(colors.background)
             .padding(32.dp)
     ) {
         // Header
@@ -72,69 +77,74 @@ fun ConsoleScreen(
         ) {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Default.Terminal, contentDescription = null, tint = EzzColors.Primary, modifier = Modifier.size(28.dp))
+                    Icon(imageVector = Icons.Default.Terminal, contentDescription = null, tint = colors.primary, modifier = Modifier.size(28.dp))
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = "Game Console",
-                        color = EzzColors.TextPrimary,
+                        color = colors.textPrimary,
                         fontSize = 28.sp,
-                        fontWeight = FontWeight.Black
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    EzzBadge(
+                        text = "${logs.size} LINES",
+                        variant = EzzBadgeVariant.NEUTRAL
                     )
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Live STDOUT and STDERR stream from Minecraft process (${logs.size} lines)",
-                    color = EzzColors.TextSecondary,
+                    text = "Live STDOUT and STDERR stream from Minecraft process",
+                    color = colors.textSecondary,
                     fontSize = 14.sp
                 )
             }
 
             Row {
-                Button(
+                EzzButton(
+                    text = "Copy Logs",
                     onClick = {
                         val text = logs.joinToString("\n") { it.message }
-                        clipboardManager.setText(AnnotatedString(text))
+                        try {
+                            val selection = StringSelection(text)
+                            Toolkit.getDefaultToolkit().systemClipboard.setContents(selection, selection)
+                            ToastManager.show("Logs Copied", "${logs.size} log lines copied to clipboard", ToastType.SUCCESS)
+                        } catch (e: Exception) {
+                            ToastManager.show("Copy Failed", e.message, ToastType.ERROR)
+                        }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = EzzColors.SurfaceVariant),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.height(40.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, tint = EzzColors.Primary, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Copy Logs", color = EzzColors.TextPrimary, fontSize = 13.sp)
-                }
+                    variant = EzzButtonVariant.SECONDARY,
+                    size = EzzButtonSize.MEDIUM,
+                    icon = Icons.Default.ContentCopy
+                )
 
                 Spacer(modifier = Modifier.width(12.dp))
 
-                Button(
+                EzzButton(
+                    text = "Clear",
                     onClick = { viewModel.clearLogs() },
-                    colors = ButtonDefaults.buttonColors(containerColor = EzzColors.SurfaceVariant),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.height(40.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.Clear, contentDescription = null, tint = EzzColors.Danger, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Clear", color = EzzColors.TextPrimary, fontSize = 13.sp)
-                }
+                    variant = EzzButtonVariant.DANGER,
+                    size = EzzButtonSize.MEDIUM,
+                    icon = Icons.Default.Clear
+                )
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
-        // Console Box
+        // Console Terminal Box
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFF070A10))
-                .border(1.dp, EzzColors.Border, RoundedCornerShape(16.dp))
+                .background(Color(0xFF06090F))
+                .border(1.dp, colors.border, RoundedCornerShape(16.dp))
                 .padding(16.dp)
         ) {
             if (logs.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
                         text = "No logs yet. Launch an instance to view live output.",
-                        color = EzzColors.TextMuted,
+                        color = colors.textMuted,
                         fontSize = 14.sp
                     )
                 }
@@ -144,12 +154,18 @@ fun ConsoleScreen(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(logs) { log ->
+                        val logColor = when {
+                            log.isError -> colors.danger
+                            log.message.startsWith("===") -> colors.primary
+                            log.message.contains("WARN", ignoreCase = true) -> colors.warning
+                            else -> colors.textSecondary
+                        }
                         Text(
                             text = log.message,
-                            color = if (log.isError) EzzColors.Danger else if (log.message.startsWith("===")) EzzColors.Primary else EzzColors.TextSecondary,
+                            color = logColor,
                             fontFamily = FontFamily.Monospace,
                             fontSize = 12.sp,
-                            modifier = Modifier.padding(vertical = 2.dp)
+                            modifier = Modifier.padding(vertical = 1.dp)
                         )
                     }
                 }

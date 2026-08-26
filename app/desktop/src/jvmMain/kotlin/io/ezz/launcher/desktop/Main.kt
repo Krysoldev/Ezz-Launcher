@@ -103,6 +103,8 @@ fun main() = application {
         }
     )
 
+    val localModScanner = io.ezz.launcher.core.minecraft.mods.LocalModScanner(pathProvider)
+
     val viewModel = AppViewModel(
         instanceRepository = instanceRepository,
         accountRepository = accountRepository,
@@ -122,6 +124,7 @@ fun main() = application {
         announcementRepository = announcementRepository,
         launcherConfigRepository = launcherConfigRepository,
         featureFlagRepository = featureFlagRepository,
+        localModScanner = localModScanner,
         platformBridge = platformBridge
     )
 
