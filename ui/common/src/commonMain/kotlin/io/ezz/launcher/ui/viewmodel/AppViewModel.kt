@@ -177,8 +177,19 @@ class AppViewModel(
     private val _snapshotVersions = MutableStateFlow<List<VersionSummary>>(emptyList())
     val snapshotVersions: StateFlow<List<VersionSummary>> = _snapshotVersions.asStateFlow()
 
+    private val _betaVersions = MutableStateFlow<List<VersionSummary>>(emptyList())
+    val betaVersions: StateFlow<List<VersionSummary>> = _betaVersions.asStateFlow()
+
+    private val _alphaVersions = MutableStateFlow<List<VersionSummary>>(emptyList())
+    val alphaVersions: StateFlow<List<VersionSummary>> = _alphaVersions.asStateFlow()
+
     private val _oldVersions = MutableStateFlow<List<VersionSummary>>(emptyList())
     val oldVersions: StateFlow<List<VersionSummary>> = _oldVersions.asStateFlow()
+
+    val isVersionManifestLoading = MutableStateFlow(false)
+    val versionManifestError = MutableStateFlow<String?>(null)
+    val latestReleaseVersion = MutableStateFlow("1.21.4")
+    val latestSnapshotVersion = MutableStateFlow("24w46a")
 
     private val _detectedJavaRuntimes = MutableStateFlow<List<JavaRuntime>>(emptyList())
     val detectedJavaRuntimes: StateFlow<List<JavaRuntime>> = _detectedJavaRuntimes.asStateFlow()
@@ -513,20 +524,32 @@ class AppViewModel(
         _processState.value = ProcessState.Idle
     }
 
-    fun refreshAvailableVersions() {
+    fun refreshAvailableVersions(forceRefresh: Boolean = false) {
         scope.launch {
+            isVersionManifestLoading.value = true
+            versionManifestError.value = null
             try {
-                val manifest = versionManifestService.getVersionManifest()
+                val manifest = versionManifestService.getVersionManifest(forceRefresh)
                 val releases = manifest.versions.filter { it.type == "release" }
                 val snapshots = manifest.versions.filter { it.type == "snapshot" }
-                val olds = manifest.versions.filter { it.type == "old_beta" || it.type == "old_alpha" }
+                val beta = manifest.versions.filter { it.type == "old_beta" }
+                val alpha = manifest.versions.filter { it.type == "old_alpha" }
+                val olds = beta + alpha
                 
                 _allVersions.value = manifest.versions
-                _availableVersions.value = if (releases.isNotEmpty()) releases else manifest.versions
+                _availableVersions.value = releases
                 _snapshotVersions.value = snapshots
+                _betaVersions.value = beta
+                _alphaVersions.value = alpha
                 _oldVersions.value = olds
+
+                latestReleaseVersion.value = manifest.latest.release
+                latestSnapshotVersion.value = manifest.latest.snapshot
             } catch (e: Exception) {
                 println("Warning: failed to refresh versions: ${e.message}")
+                versionManifestError.value = e.message ?: "Unable to load Minecraft versions"
+            } finally {
+                isVersionManifestLoading.value = false
             }
         }
     }

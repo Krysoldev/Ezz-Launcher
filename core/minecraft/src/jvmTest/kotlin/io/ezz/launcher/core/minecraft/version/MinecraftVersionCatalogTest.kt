@@ -74,4 +74,33 @@ class MinecraftVersionCatalogTest {
         assertTrue(!JavaCompatibility.isJavaVersionCompatible(installedMajorVersion = 8, requiredMajorVersion = 17))
         assertTrue(!JavaCompatibility.isJavaVersionCompatible(installedMajorVersion = 8, requiredMajorVersion = 21))
     }
+
+    @Test
+    fun testVersionSearchFiltering() {
+        val sampleVersions = listOf(
+            VersionSummary("1.21.4", "release", "", "", "2024-12-03"),
+            VersionSummary("1.21.1", "release", "", "", "2024-08-08"),
+            VersionSummary("1.20.4", "release", "", "", "2023-12-07"),
+            VersionSummary("1.12.2", "release", "", "", "2017-09-18"),
+            VersionSummary("1.8.9", "release", "", "", "2015-12-03"),
+            VersionSummary("1.7.10", "release", "", "", "2014-06-26"),
+            VersionSummary("1.0.0", "release", "", "", "2011-11-18"),
+            VersionSummary("24w46a", "snapshot", "", "", "2024-11-13"),
+            VersionSummary("b1.7.3", "old_beta", "", "", "2011-07-08")
+        )
+
+        val search1_8 = sampleVersions.filter { it.id.contains("1.8") }
+        assertEquals(1, search1_8.size)
+        assertEquals("1.8.9", search1_8.first().id)
+
+        val search1_12 = sampleVersions.filter { it.id.contains("1.12") }
+        assertEquals(1, search1_12.size)
+        assertEquals("1.12.2", search1_12.first().id)
+
+        val search1_21 = sampleVersions.filter { it.id.contains("1.21") }
+        assertEquals(2, search1_21.size)
+
+        val releasesOnly = sampleVersions.filter { it.type == "release" }
+        assertEquals(7, releasesOnly.size)
+    }
 }
