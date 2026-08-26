@@ -133,10 +133,13 @@ class LaunchEngine(
 
             // Apply Vault Skin for Offline accounts
             var vaultSkinStatus = "Bypassed (Online Account / Disabled)"
+            var skinResolved = false
+            var skinPrepared = false
             if (validAccount.type == io.ezz.launcher.core.model.account.AccountType.OFFLINE && vaultSkinRepository != null) {
                 try {
                     val activeSkin = vaultSkinRepository.getActiveSkin(validAccount.id)
                     if (activeSkin != null) {
+                        skinResolved = true
                         val skinBytes = vaultSkinRepository.getSkinBytes(activeSkin)
                         val applied = io.ezz.launcher.core.runtime.skin.OfflineSkinInjector.applyVaultSkin(
                             instance = instance,
@@ -146,6 +149,7 @@ class LaunchEngine(
                             pathProvider = pathProvider,
                             fileSystem = fileSystem
                         )
+                        skinPrepared = applied
                         vaultSkinStatus = if (applied) "Applied '${activeSkin.name}' (${activeSkin.modelType})" else "Failed to apply"
                     } else {
                         vaultSkinStatus = "No active skin in Vault"
@@ -186,6 +190,9 @@ class LaunchEngine(
             emit(LaunchEvent.LogReceived("Java Runtime      : ${javaRuntime.path} (Java ${javaRuntime.majorVersion}, ${javaRuntime.vendor})", isError = false))
             emit(LaunchEvent.LogReceived("Required Java     : Java $requiredJavaMajor", isError = false))
             emit(LaunchEvent.LogReceived("Vault Skin        : $vaultSkinStatus", isError = false))
+            emit(LaunchEvent.LogReceived("Account Offline?  : ${if (validAccount.type == io.ezz.launcher.core.model.account.AccountType.OFFLINE) "YES" else "NO"}", isError = false))
+            emit(LaunchEvent.LogReceived("Skin Resolved?    : ${if (skinResolved) "YES" else "NO"}", isError = false))
+            emit(LaunchEvent.LogReceived("Skin Prepared?    : ${if (skinPrepared) "YES" else "NO"}", isError = false))
             emit(LaunchEvent.LogReceived("Game Directory    : $gameDir", isError = false))
             emit(LaunchEvent.LogReceived("Natives Directory : $nativesDir", isError = false))
             emit(LaunchEvent.LogReceived("Libraries Count   : ${classpath.size} JARs", isError = false))

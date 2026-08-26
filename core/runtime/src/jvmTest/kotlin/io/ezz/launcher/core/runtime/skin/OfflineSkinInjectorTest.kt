@@ -1,5 +1,6 @@
 package io.ezz.launcher.core.runtime.skin
 
+import io.ezz.launcher.core.model.account.MicrosoftAccount
 import io.ezz.launcher.core.model.account.OfflineAccount
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LoaderType
@@ -9,9 +10,12 @@ import io.ezz.launcher.core.storage.path.DefaultPathProvider
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import java.io.File
+import java.util.zip.ZipFile
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class OfflineSkinInjectorTest {
@@ -36,7 +40,7 @@ class OfflineSkinInjectorTest {
     }
 
     @Test
-    fun testApplyVaultSkinToOfflineInstance() {
+    fun testApplyVaultSkinToOfflineInstance_All9VariantsAndZip() {
         val instance = Instance(
             id = "test-instance-1",
             name = "Survival 1.21.4",
@@ -46,18 +50,18 @@ class OfflineSkinInjectorTest {
 
         val account = OfflineAccount(
             id = "offline-acc-1",
-            username = "TestPlayer",
+            username = "UnknownPixel_",
             uuid = "offline-uuid-1234"
         )
 
         val skin = VaultSkin(
             id = "skin-1",
-            name = "Hero Skin",
+            name = "PvP Skin",
             fileName = "skin-1.png",
             modelType = SkinModelType.STEVE
         )
 
-        val dummyBytes = "PNG_TEXTURE_DATA".toByteArray()
+        val dummyBytes = "REAL_MINECRAFT_PNG_SKIN_BYTES".toByteArray()
 
         val applied = OfflineSkinInjector.applyVaultSkin(
             instance = instance,
@@ -70,16 +74,95 @@ class OfflineSkinInjectorTest {
 
         assertTrue(applied)
 
-        // Verify resource pack was created
         val gameDir = pathProvider.getInstanceGameDirectory(instance.id)
         val skinPackDir = gameDir.resolve("resourcepacks").resolve("EzzVaultSkin")
-        assertTrue(fileSystem.exists(skinPackDir.resolve("pack.mcmeta")))
-        assertTrue(fileSystem.exists(skinPackDir.resolve("assets").resolve("minecraft").resolve("textures").resolve("entity").resolve("player").resolve("wide").resolve("steve.png")))
+        val skinZipFile = gameDir.resolve("resourcepacks").resolve("EzzVaultSkin.zip").toFile()
 
-        // Verify options.txt contains EzzVaultSkin
+        // Verify folder pack
+        assertTrue(fileSystem.exists(skinPackDir.resolve("pack.mcmeta")))
+        val mcmetaContent = fileSystem.read(skinPackDir.resolve("pack.mcmeta")) { readUtf8() }
+        assertTrue(mcmetaContent.contains("\"pack_format\": 46")) // 1.21.4 pack_format
+
+        // Verify all 9 skin variants in wide and slim
+        val expectedSkins = listOf("steve", "alex", "ari", "efe", "kai", "makena", "noor", "sunny", "zuri")
+        for (name in expectedSkins) {
+            assertTrue(
+                fileSystem.exists(skinPackDir.resolve("assets").resolve("minecraft").resolve("textures").resolve("entity").resolve("player").resolve("wide").resolve("$name.png")),
+                "Missing wide variant $name.png"
+            )
+            assertTrue(
+                fileSystem.exists(skinPackDir.resolve("assets").resolve("minecraft").resolve("textures").resolve("entity").resolve("player").resolve("slim").resolve("$name.png")),
+                "Missing slim variant $name.png"
+            )
+            assertTrue(
+                fileSystem.exists(skinPackDir.resolve("assets").resolve("minecraft").resolve("textures").resolve("entity").resolve("$name.png")),
+                "Missing standard entity variant $name.png"
+            )
+        }
+
+        // Verify ZIP archive was created and contains assets
+        assertTrue(skinZipFile.exists() && skinZipFile.length() > 0)
+        val zip = ZipFile(skinZipFile)
+        assertTrue(zip.getEntry("pack.mcmeta") != null)
+        assertTrue(zip.getEntry("assets/minecraft/textures/entity/player/wide/steve.png") != null)
+        assertTrue(zip.getEntry("assets/minecraft/textures/entity/player/slim/alex.png") != null)
+        assertTrue(zip.getEntry("assets/minecraft/textures/entity/player/wide/noor.png") != null)
+        zip.close()
+
+        // Verify options.txt updated
         val optionsFile = gameDir.resolve("options.txt")
         assertTrue(fileSystem.exists(optionsFile))
         val optionsContent = fileSystem.read(optionsFile) { readUtf8() }
         assertTrue(optionsContent.contains("file/EzzVaultSkin"))
+        assertTrue(optionsContent.contains("file/EzzVaultSkin.zip"))
+    }
+
+    @Test
+    fun testBypassOnlineAccount() {
+        val instance = Instance(
+            id = "test-instance-2",
+            name = "Fabric 1.20.1",
+            minecraftVersion = "1.20.1",
+            loaderType = LoaderType.FABRIC
+        )
+
+        val account = MicrosoftAccount(
+            id = "msa-1",
+            username = "OfficialPlayer",
+            uuid = "msa-uuid-5678",
+            msaRefreshToken = "dummy_refresh_token",
+            mcAccessToken = "valid_access_token",
+            expiresAt = System.currentTimeMillis() + 3600000L
+        )
+
+        val skin = VaultSkin(
+            id = "skin-1",
+            name = "Hero Skin",
+            fileName = "skin-1.png",
+            modelType = SkinModelType.STEVE
+        )
+
+        val applied = OfflineSkinInjector.applyVaultSkin(
+            instance = instance,
+            account = account,
+            skin = skin,
+            skinBytes = "PNG_BYTES".toByteArray(),
+            pathProvider = pathProvider,
+            fileSystem = fileSystem
+        )
+
+        assertFalse(applied, "Should not apply Vault skin to online account")
+    }
+
+    @Test
+    fun testResolvePackFormatAcrossVersions() {
+        assertEquals(46, OfflineSkinInjector.resolvePackFormat("1.21.4"))
+        assertEquals(42, OfflineSkinInjector.resolvePackFormat("1.21.3"))
+        assertEquals(34, OfflineSkinInjector.resolvePackFormat("1.21.1"))
+        assertEquals(18, OfflineSkinInjector.resolvePackFormat("1.20.2"))
+        assertEquals(15, OfflineSkinInjector.resolvePackFormat("1.20.1"))
+        assertEquals(7, OfflineSkinInjector.resolvePackFormat("1.16.5"))
+        assertEquals(3, OfflineSkinInjector.resolvePackFormat("1.12.2"))
+        assertEquals(1, OfflineSkinInjector.resolvePackFormat("1.8.9"))
     }
 }
