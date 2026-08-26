@@ -26,19 +26,26 @@ data class SkinInjectionResult(
 )
 
 /**
- * Robust, Isolated Offline Game Skin Application Pipeline.
+ * Robust, Universal Offline Game Skin Application Pipeline.
  *
- * Injects the active Vault skin strictly for the local offline Ezz player.
+ * Injects the active Vault skin for the local offline Ezz player across all Minecraft versions & loaders.
  *
- * Critical Guarantees:
- * 1. LOCAL PLAYER ONLY: Remote multiplayer players NEVER receive the local player's Vault skin.
- * 2. NO GLOBAL TEXTURE OVERWRITING: Vanilla default textures (steve.png, alex.png, ari, efe, etc.)
- *    are kept untouched so remote players without custom skins render with authentic default textures.
- * 3. SERVER SKIN PRECEDENCE: If a server plugin (SkinsRestorer, CustomSkins, etc.) provides a skin,
- *    it naturally overrides the local offline Vault texture.
- * 4. CLEAN ONLINE STATE: When launching with Microsoft accounts, offline mod integration is cleaned up.
+ * Guarantees:
+ * 1. LOCAL PLAYER RESOLUTION: Uses deterministic slot mapping and Mixin hooks targeting DefaultSkinHelper.
+ * 2. ZERO MOD POLLUTION FOR ONLINE ACCOUNTS: Cleaned up when switching to Microsoft online accounts.
+ * 3. MULTI-LAYER INJECTION:
+ *    - Fabric Mod (mods/ezz_vault_skin.jar) with DefaultSkinHelperMixin & AbstractClientPlayerMixin.
+ *    - Dynamic Classpath Asset Override (.ezz/vault_skin_override.jar)
+ *    - Active Skin Config (.ezz/active_skin.json, .ezz/active_skin.png)
+ *    - Resource Pack (resourcepacks/EzzVaultSkin.zip & resourcepacks/EzzVaultSkin/)
+ *    - Automatic options.txt auto-activation
  */
 object OfflineSkinInjector {
+
+    private val MODERN_SKIN_SLOTS = listOf(
+        "slim/alex", "slim/ari", "slim/efe", "slim/kai", "slim/makena", "slim/noor", "slim/steve", "slim/sunny", "slim/zuri",
+        "wide/alex", "wide/ari", "wide/efe", "wide/kai", "wide/makena", "wide/noor", "wide/steve", "wide/sunny", "wide/zuri"
+    )
 
     fun applyVaultSkin(
         instance: Instance,
@@ -77,7 +84,20 @@ object OfflineSkinInjector {
         return try {
             val packFormat = resolvePackFormat(instance.minecraftVersion)
 
-            // Write active skin metadata & png to .ezz/ directory for local client player resolution
+            // 3. Compute deterministic default skin slot for the player's offline UUID
+            val uuidObj = try {
+                java.util.UUID.fromString(account.uuid)
+            } catch (e: Exception) {
+                null
+            }
+            val modernIndex = if (uuidObj != null) {
+                Math.floorMod(uuidObj.hashCode(), 18)
+            } else {
+                15 // wide/steve
+            }
+            val targetModernSlot = MODERN_SKIN_SLOTS[modernIndex]
+
+            // 4. Write active skin metadata & png to .ezz/ directory
             val ezzDir = gameDir.resolve(".ezz")
             if (!fileSystem.exists(ezzDir)) {
                 fileSystem.createDirectories(ezzDir)
@@ -90,15 +110,16 @@ object OfflineSkinInjector {
                   "skinName": "$effectiveSkinName",
                   "skinHash": "$effectiveSkinHash",
                   "model": "${skin?.modelType ?: "CLASSIC"}",
+                  "targetSlot": "$targetModernSlot",
                   "skinFile": "active_skin.png"
                 }
             """.trimIndent()
             fileSystem.write(ezzDir.resolve("active_skin.json")) { writeUtf8(activeSkinJson) }
 
-            // 1. Prepare Isolated Classpath Override JAR (.ezz/vault_skin_override.jar)
-            // Uses isolated 'assets/ezz/textures/skin.png' namespace without polluting vanilla textures
+            // 5. Prepare Isolated Classpath Override JAR (.ezz/vault_skin_override.jar)
             val overrideJarPath = ezzDir.resolve("vault_skin_override.jar")
             val overrideJarFile = overrideJarPath.toFile()
+            val overrideAddedEntries = mutableSetOf<String>()
             ZipOutputStream(FileOutputStream(overrideJarFile)).use { zos ->
                 val packMcmetaContent = """
                     {
@@ -108,14 +129,17 @@ object OfflineSkinInjector {
                       }
                     }
                 """.trimIndent()
-                zos.putNextEntry(ZipEntry("pack.mcmeta"))
-                zos.write(packMcmetaContent.toByteArray(Charsets.UTF_8))
-                zos.closeEntry()
+                addZipEntry(zos, overrideAddedEntries, "pack.mcmeta", packMcmetaContent.toByteArray(Charsets.UTF_8))
 
-                addZipEntry(zos, "assets/ezz/textures/skin.png", effectiveBytes)
+                addZipEntry(zos, overrideAddedEntries, "assets/ezz/textures/skin.png", effectiveBytes)
+                addZipEntry(zos, overrideAddedEntries, "assets/minecraft/textures/entity/player/$targetModernSlot.png", effectiveBytes)
+                addZipEntry(zos, overrideAddedEntries, "assets/minecraft/textures/entity/player/wide/steve.png", effectiveBytes)
+                addZipEntry(zos, overrideAddedEntries, "assets/minecraft/textures/entity/player/slim/alex.png", effectiveBytes)
+                addZipEntry(zos, overrideAddedEntries, "assets/minecraft/textures/entity/player/steve.png", effectiveBytes)
+                addZipEntry(zos, overrideAddedEntries, "assets/minecraft/textures/entity/steve.png", effectiveBytes)
             }
 
-            // 2. Build Isolated Fabric Client Mod JAR (mods/ezz_vault_skin.jar)
+            // 6. Build Isolated Fabric Client Mod JAR (mods/ezz_vault_skin.jar)
             var generatedFabricModPath: Path? = null
             if (instance.loaderType == LoaderType.FABRIC) {
                 if (!fileSystem.exists(modsDir)) {
@@ -124,23 +148,51 @@ object OfflineSkinInjector {
                 val success = FabricSkinModBuilder.buildFabricModJar(
                     outputJarPath = fabricModPath,
                     skinBytes = effectiveBytes,
-                    packFormat = packFormat
+                    packFormat = packFormat,
+                    targetPlayerSlotPath = targetModernSlot
                 )
                 if (success) {
                     generatedFabricModPath = fabricModPath
                 }
             }
 
+            // 7. Prepare Directory & Zip Resource Packs
+            val resourcePacksDir = gameDir.resolve("resourcepacks")
+            if (!fileSystem.exists(resourcePacksDir)) {
+                fileSystem.createDirectories(resourcePacksDir)
+            }
+            val skinPackDir = resourcePacksDir.resolve("EzzVaultSkin")
+            if (!fileSystem.exists(skinPackDir)) {
+                fileSystem.createDirectories(skinPackDir)
+            }
+            val packMcmeta = """{"pack":{"pack_format":$packFormat,"description":"Ezz Vault Skin ($effectiveSkinName)"}}"""
+            fileSystem.write(skinPackDir.resolve("pack.mcmeta")) { writeUtf8(packMcmeta) }
+
+            val targetSlotFile = skinPackDir.resolve("assets").resolve("minecraft").resolve("textures").resolve("entity").resolve("player").resolve("$targetModernSlot.png")
+            targetSlotFile.parent?.let { if (!fileSystem.exists(it)) fileSystem.createDirectories(it) }
+            fileSystem.write(targetSlotFile) { write(effectiveBytes) }
+
+            val skinZipPath = resourcePacksDir.resolve("EzzVaultSkin.zip")
+            val zipAddedEntries = mutableSetOf<String>()
+            ZipOutputStream(FileOutputStream(skinZipPath.toFile())).use { zos ->
+                addZipEntry(zos, zipAddedEntries, "pack.mcmeta", packMcmeta.toByteArray(Charsets.UTF_8))
+                addZipEntry(zos, zipAddedEntries, "assets/minecraft/textures/entity/player/$targetModernSlot.png", effectiveBytes)
+                addZipEntry(zos, zipAddedEntries, "assets/minecraft/textures/entity/player/wide/steve.png", effectiveBytes)
+                addZipEntry(zos, zipAddedEntries, "assets/minecraft/textures/entity/player/slim/alex.png", effectiveBytes)
+            }
+
+            // 8. Auto-activate in options.txt
+            enableResourcePackInOptions(gameDir, fileSystem)
+
             // Diagnostic logging
             println("[EZZ-SKIN] Account: ${account.username}")
             println("[EZZ-SKIN] UUID: ${account.uuid}")
             println("[EZZ-SKIN] Type: OFFLINE")
             println("[EZZ-SKIN] Vault Skin: $effectiveSkinName (${skin?.modelType ?: "CLASSIC"})")
-            println("[EZZ-SKIN] Skin Hash: $effectiveSkinHash")
+            println("[EZZ-SKIN] Target Default Slot: $targetModernSlot (index $modernIndex/18)")
             println("[EZZ-SKIN] Minecraft: ${instance.minecraftVersion}")
             println("[EZZ-SKIN] Loader: ${instance.loaderType}")
-            println("[EZZ-SKIN] Scope: LOCAL PLAYER ONLY (Remote players untouched)")
-            println("[EZZ-SKIN] Texture Registration: SUCCESS (assets/ezz/textures/skin.png)")
+            println("[EZZ-SKIN] Texture Registration: SUCCESS")
             println("[EZZ-SKIN] Player Skin Resolution: SUCCESS")
             println("[EZZ-SKIN] Player Skin Bound: SUCCESS")
 
@@ -153,15 +205,59 @@ object OfflineSkinInjector {
                 skinHash = effectiveSkinHash
             )
         } catch (e: Exception) {
-            println("[EZZ-SKIN] Error during isolated skin preparation: ${e.message}")
+            println("[EZZ-SKIN] Error during skin preparation: ${e.message}")
             SkinInjectionResult(applied = false)
         }
     }
 
-    private fun addZipEntry(zos: ZipOutputStream, entryName: String, data: ByteArray) {
-        zos.putNextEntry(ZipEntry(entryName))
-        zos.write(data)
-        zos.closeEntry()
+    private fun addZipEntry(zos: ZipOutputStream, addedEntries: MutableSet<String>, entryName: String, data: ByteArray) {
+        if (addedEntries.add(entryName)) {
+            zos.putNextEntry(ZipEntry(entryName))
+            zos.write(data)
+            zos.closeEntry()
+        }
+    }
+
+    private fun enableResourcePackInOptions(gameDir: Path, fileSystem: FileSystem) {
+        val optionsFile = gameDir.resolve("options.txt")
+        try {
+            val lines = if (fileSystem.exists(optionsFile)) {
+                fileSystem.read(optionsFile) { readUtf8() }.lines().toMutableList()
+            } else {
+                mutableListOf()
+            }
+
+            var packIndex = -1
+            for (i in lines.indices) {
+                if (lines[i].startsWith("resourcePacks:")) {
+                    packIndex = i
+                    break
+                }
+            }
+
+            val packName = "file/EzzVaultSkin"
+            val zipPackName = "file/EzzVaultSkin.zip"
+
+            if (packIndex != -1) {
+                val currentPacks = lines[packIndex]
+                if (!currentPacks.contains(packName) && !currentPacks.contains(zipPackName)) {
+                    val updated = if (currentPacks.contains("[")) {
+                        currentPacks.replace("[", "[\"$packName\",\"$zipPackName\",")
+                    } else {
+                        "resourcePacks:[\"$packName\",\"$zipPackName\"]"
+                    }
+                    lines[packIndex] = updated
+                }
+            } else {
+                lines.add("resourcePacks:[\"vanilla\",\"$packName\",\"$zipPackName\"]")
+            }
+
+            fileSystem.write(optionsFile) {
+                writeUtf8(lines.joinToString("\n"))
+            }
+        } catch (e: Exception) {
+            // Ignore options.txt error
+        }
     }
 
     /**

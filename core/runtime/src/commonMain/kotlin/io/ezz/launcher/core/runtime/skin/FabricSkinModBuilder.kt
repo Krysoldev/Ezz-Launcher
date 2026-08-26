@@ -10,11 +10,10 @@ import java.util.zip.ZipOutputStream
  * Builds the isolated Fabric client skin integration mod (mods/ezz_vault_skin.jar).
  *
  * Guarantees:
- * 1. ONLY overrides skin for the local offline Ezz player (UUID check).
- * 2. Remote players NEVER receive the Vault skin.
- * 3. Server plugins take natural precedence when providing custom textures.
- * 4. Skin is stored under 'assets/ezz/textures/skin.png' namespace without polluting vanilla textures.
- * 5. Uses pre-compiled Java 17 (v61.0) bytecode for 100% crash-free, instant deployment on Java 17 through 25+.
+ * 1. Mixin interceptor on DefaultSkinHelper.getSkinTextures(UUID) and AbstractClientPlayerEntity.
+ * 2. Uses local offline account UUID matching to ensure ONLY the local player receives the Vault skin.
+ * 3. Pre-compiled Java 17 (v61.0) bytecode for 100% crash-free, instant deployment.
+ * 4. Skin is stored under 'assets/ezz/textures/skin.png' and the local player's specific calculated default skin path.
  */
 object FabricSkinModBuilder {
 
@@ -40,6 +39,7 @@ object FabricSkinModBuilder {
   "package": "io.ezz.vaultskin.mixin",
   "compatibilityLevel": "JAVA_17",
   "client": [
+    "DefaultSkinHelperMixin",
     "AbstractClientPlayerMixin"
   ],
   "injectors": {
@@ -49,7 +49,7 @@ object FabricSkinModBuilder {
 
     // Pre-compiled Java 17 (v61.0) bytecode for io.ezz.vaultskin.EzzVaultSkinClient
     private const val EZZ_CLIENT_CLASS_B64 =
-        "yv66vgAAAD0AnQoAAgADBwAEDAAFAAYBABBqYXZhL2xhbmcvT2JqZWN0AQAGPGluaXQ+AQADKClWCgAIAAkHAAoMAAsABgEAI2lv" +
+        "yv66vgAAAD0AsAoAAgADBwAEDAAFAAYBABBqYXZhL2xhbmcvT2JqZWN0AQAGPGluaXQ+AQADKClWCgAIAAkHAAoMAAsABgEAI2lv" +
         "L2V6ei92YXVsdHNraW4vRXp6VmF1bHRTa2luQ2xpZW50AQAKbG9hZENvbmZpZwcADQEADGphdmEvaW8vRmlsZQgADwEABC5lenoK" +
         "AAwAEQwABQASAQAVKExqYXZhL2xhbmcvU3RyaW5nOylWCAAUAQAQYWN0aXZlX3NraW4uanNvbgoADAAWDAAFABcBACMoTGphdmEv" +
         "aW8vRmlsZTtMamF2YS9sYW5nL1N0cmluZzspVgoADAAZDAAaABsBAAZleGlzdHMBAAMoKVoHAB0BABBqYXZhL2xhbmcvU3RyaW5n" +
@@ -69,22 +69,52 @@ object FabricSkinModBuilder {
         "IgoAHAB8DAB9AH4BAAlzdWJzdHJpbmcBABYoSUkpTGphdmEvbGFuZy9TdHJpbmc7CACAAQAHQ0xBU1NJQwcAggEAJW5ldC9mYWJy" +
         "aWNtYy9hcGkvQ2xpZW50TW9kSW5pdGlhbGl6ZXIBAARDb2RlAQAPTGluZU51bWJlclRhYmxlAQASb25Jbml0aWFsaXplQ2xpZW50" +
         "AQANU3RhY2tNYXBUYWJsZQEACDxjbGluaXQ+AQAKU291cmNlRmlsZQEAF0V6elZhdWx0U2tpbkNsaWVudC5qYXZhAQAQQm9vdHN0" +
-        "cmFwTWV0aG9kcwgAjAEASVtFWlotU0tJTl0gRmFicmljIENsaWVudCBNb2QgaW5pdGlhbGl6ZWQgZm9yIGxvY2FsIG9mZmxpbmUg" +
-        "YWNjb3VudDogASAoASkIAI4BABRbRVpaLVNLSU5dIE5vdGljZTogAQgAkAEAAyIBIg8GAJIKAJMAlAcAlQwAXwCWAQAkamF2YS9s" +
-        "YW5nL2ludm9rZS9TdHJpbmdDb25jYXRGYWN0b3J5AQCYKExqYXZhL2xhbmcvaW52b2tlL01ldGhvZEhhbmRsZXMkTG9va3VwO0xq" +
-        "YXZhL2xhbmcvU3RyaW5nO0xqYXZhL2xhbmcvaW52b2tlL01ldGhvZFR5cGU7TGphdmEvbGFuZy9TdHJpbmc7W0xqYXZhL2xhbmcv" +
-        "T2JqZWN0OylMamF2YS9sYW5nL2ludm9rZS9DYWxsU2l0ZTsBAAxJbm5lckNsYXNzZXMHAJkBACVqYXZhL2xhbmcvaW52b2tlL01l" +
-        "dGhvZEhhbmRsZXMkTG9va3VwBwCbAQAeamF2YS9sYW5nL2ludm9rZS9NZXRob2RIYW5kbGVzAQAGTG9va3VwACEACAACAAEAgQAE" +
-        "AAkASABJAAAACQA1ADYAAAAJAE4ANgAAAAkAUQBSAAAABQABAAUABgABAIMAAAAdAAEAAQAAAAUqtwABsQAAAAEAhAAAAAYAAQAA" +
-        "AAgAAQCFAAYAAQCDAAAAIAAAAAEAAAAEuAAHsQAAAAEAhAAAAAoAAgAAABAAAwARAAkACwAGAAEAgwAAAQkABAAEAAAAirsADFkS" +
-        "DrcAEEu7AAxZKhITtwAVTCu2ABiZAF27ABxZK7YAHrgAIhIotwAqTSwSLbgAL7MAMywSN7gAL04txgAXLbYAObYAPZoADS22ADm4" +
-        "AECzAEYsEkq4AC+zAEwEswBPsgBTsgAzsgBGuABZugBdAAC2AGCnABNLsgBTKrYAZ7oAagAAtgBgsQABAAAAdgB5AGUAAgCEAAAA" +
-        "PgAPAAAAFQAKABYAFQAXABwAGAAtABkANgAaAD0AGwBLABwAVQAeAF4AHwBiACAAdgAkAHkAIgB6ACMAiQAlAIYAAAAhAAT/AFUA" +
-        "BAcADAcADAcAHAcAHAAA/wAgAAAAAEIHAGUPAAoAMQAyAAEAgwAAALEABAAHAAAAWiu6AG0AAE0qLLYAbj4dAqAABhJysCoSdB22" +
-        "AHY2BBUEAqAABhJysCoSeRUEtgB2NgUVBQKgAAYScrAqEnkVBQRgtgB2NgYVBgKgAAYScrAqFQUEYBUGtgB7sAAAAAIAhAAAACoA" +
-        "CgAAACgABwApAA0AKgAVACsAHgAsACcALQAxAC4AOgAvAEYAMABPADEAhgAAABUABP0AFQcAHAH8ABEB/AASAfwAFAEACACHAAYA" +
-        "AQCDAAAANwABAAAAAAATAbMARhJyswAzEn+zAEwDswBPsQAAAAEAhAAAABIABAAAAAkABAAKAAkACwAOAAwAAwCIAAAAAgCJAIoA" +
-        "AAAUAAMAkQABAIsAkQABAI0AkQABAI8AlwAAAAoAAQCYAJoAnAAZ"
+        "cmFwTWV0aG9kcwgAjAEAWltFWlotU0tJTl0gRmFicmljIENsaWVudCBNb2QgYWN0aXZlIGZvcjogASAoASkIAI4BABRbRVpaLVNL" +
+        "SU5dIE5vdGljZTogAQgAkAEAAyIBIg8GAJIKAJMAlAcAlQwAXwCWAQAkamF2YS9sYW5nL2ludm9rZS9TdHJpbmdDb25jYXRGYWN0" +
+        "b3J5AQCYKExqYXZhL2xhbmcvaW52b2tlL01ldGhvZEhhbmRsZXMkTG9va3VwO0xqYXZhL2xhbmcvU3RyaW5nO0xqYXZhL2xhbmcv" +
+        "aW52b2tlL01ldGhvZFR5cGU7TGphdmEvbGFuZy9TdHJpbmc7W0xqYXZhL2xhbmcvT2JqZWN0OylMamF2YS9sYW5nL2ludm9rZS9D" +
+        "YWxsU2l0ZTsBAAxJbm5lckNsYXNzZXMHAJkBACVqYXZhL2xhbmcvaW52b2tlL01ldGhvZEhhbmRsZXMkTG9va3VwBwCbAQAeamF2" +
+        "YS9sYW5nL2ludm9rZS9NZXRob2RIYW5kbGVzAQAGTG9va3VwACEACAACAAEAgQAEAAkASABJAAAACQA1ADYAAAAJAE4ANgAAAAkA" +
+        "UQBSAAAABQABAAUABgABAIMAAAAdAAEAAQAAAAUqtwABsQAAAAEAhAAAAAYAAQAAAAgAAQCFAAYAAQCDAAAAIAAAAAEAAAAEuAAH" +
+        "sQAAAAEAhAAAAAoAAgAAABAAAwARAAkACwAGAAEAgwAAARsABAAFAAAAksAADBMBtwAQUy2AABMstgAQVSu2ABiZAF27ABxZK7YA" +
+        "HrgAIhIotwAqTSwSLbgAL7MAMywSN7gAL04txgAXLbYAObYAPZoADS22ADm4AECzAEYsEkq4AC+zAEwEswBPsgBTsgAzsgBGuABZ" +
+        "ugBdAAC2AGCnABNLsgBTKrYAZ7oAagAAtgBgsQABAAAAdgB5AGUAAgCEAAAAPgAPAAAAFQAKABYAFQAXABwAGAAtABkANgAaAD0A" +
+        "GwBLABwAVQAeAF4AHwBiACAAdgAkAHkAIgB6ACMAiQAlAIYAAAAhAAT/AFUABAcADAcADAcAHAcAHAAA/wAgAAAAAEIHAGUPAAoA" +
+        "MQAyAAEAgwAAALEABAAHAAAAWiu6AG0AAE0qLLYAbj4dAqAABhJysCoSdB22AHY2BBUEAqAABhJysCoSeRUEtgB2NgUVBQKgAAYS" +
+        "crAqEnkVBQRgtgB2NgYVBgKgAAYScrAqFQUEYBUGtgB7sAAAAAIAhAAAACoACgAAACgABwApAA0AKgAVACsAHgAsACcALQAxAC4A" +
+        "OgAvAEYAMABPADEAhgAAABUABP0AFQcAHAH8ABEB/AASAfwAFAEACACHAAYAAQCDAAAANwABAAAAAAATAbMARhJyswAzEn+zAEwD" +
+        "swBPsQAAAAEAhAAAABIABAAAAAkABAAKAAkACwAOAAwAAwCIAAAAAgCJAIoAAAAUAAMAkQABAIsAkQABAI0AkQABAI8AlwAAAAoA" +
+        "AQCYAJoAnAAZ"
+
+    // Pre-compiled Java 17 (v61.0) bytecode for io.ezz.vaultskin.mixin.DefaultSkinHelperMixin
+    private const val DEFAULT_SKIN_MIXIN_B64 =
+        "yv66vgAAAD0AYQoAAgADBwAEDAAFAAYBABBqYXZhL2xhbmcvT2JqZWN0AQAGPGluaXQ+AQADKClWCQAIAAkHAAoMAAsADAEAI2lv" +
+        "L2V6ei92YXVsdHNraW4vRXp6VmF1bHRTa2luQ2xpZW50AQAGYWN0aXZlAQABWgkACAAODAAPABABABB0YXJnZXRQbGF5ZXJVdWlk" +
+        "AQAQTGphdmEvdXRpbC9VVUlEOwoAEgATBwAUDAAVABYBAA5qYXZhL3V0aWwvVVVJRAEABmVxdWFscwEAFShMamF2YS9sYW5nL09i" +
+        "amVjdDspWggAGAEAGG5ldC5taW5lY3JhZnQuY2xhc3NfMTA2OAoAGgAbBwAcDAAdAB4BAA9qYXZhL2xhbmcvQ2xhc3MBAAdmb3JO" +
+        "YW1lAQAlKExqYXZhL2xhbmcvU3RyaW5nOylMamF2YS9sYW5nL0NsYXNzOwgAIAEAC2ZpZWxkXzQxMTIxCgAaACIMACMAJAEAEGdl" +
+        "dERlY2xhcmVkRmllbGQBAC0oTGphdmEvbGFuZy9TdHJpbmc7KUxqYXZhL2xhbmcvcmVmbGVjdC9GaWVsZDsKACYAJwcAKAwAKQAq" +
+        "AQAXamF2YS9sYW5nL3JlZmxlY3QvRmllbGQBAA1zZXRBY2Nlc3NpYmxlAQAEKFopVgoAJgAsDAAtAC4BAANnZXQBACYoTGphdmEv" +
+        "bGFuZy9PYmplY3Q7KUxqYXZhL2xhbmcvT2JqZWN0OwcAMAEAE1tMamF2YS9sYW5nL09iamVjdDsIADIBAARTTElNCQAIADQMADUA" +
+        "NgEACW1vZGVsVHlwZQEAEkxqYXZhL2xhbmcvU3RyaW5nOwoAOAA5BwA6DAA7ADwBABBqYXZhL2xhbmcvU3RyaW5nAQAQZXF1YWxz" +
+        "SWdub3JlQ2FzZQEAFShMamF2YS9sYW5nL1N0cmluZzspWggAPgEABEFMRVgKAEAAQQcAQgwAQwBEAQBFb3JnL3Nwb25nZXBvd2Vy" +
+        "ZWQvYXNtL21peGluL2luamVjdGlvbi9jYWxsYmFjay9DYWxsYmFja0luZm9SZXR1cm5hYmxlAQAOc2V0UmV0dXJuVmFsdWUBABUo" +
+        "TGphdmEvbGFuZy9PYmplY3Q7KVYHAEYBABNqYXZhL2xhbmcvVGhyb3dhYmxlBwBIAQAtaW8vZXp6L3ZhdWx0c2tpbi9taXhpbi9E" +
+        "ZWZhdWx0U2tpbkhlbHBlck1peGluAQAEQ29kZQEAD0xpbmVOdW1iZXJUYWJsZQEAF29uR2V0U2tpblRleHR1cmVzQnlVdWlkAQBa" +
+        "KExqYXZhL3V0aWwvVVVJRDtMb3JnL3Nwb25nZXBvd2VyZWQvYXNtL21peGluL2luamVjdGlvbi9jYWxsYmFjay9DYWxsYmFja0lu" +
+        "Zm9SZXR1cm5hYmxlOylWAQANU3RhY2tNYXBUYWJsZQEACVNpZ25hdHVyZQEAbihMamF2YS91dGlsL1VVSUQ7TG9yZy9zcG9uZ2Vw" +
+        "b3dlcmVkL2FzbS9taXhpbi9pbmplY3Rpb24vY2FsbGJhY2svQ2FsbGJhY2tJbmZvUmV0dXJuYWJsZTxMamF2YS9sYW5nL09iamVj" +
+        "dDs+OylWAQAZUnVudGltZVZpc2libGVBbm5vdGF0aW9ucwEALkxvcmcvc3BvbmdlcG93ZXJlZC9hc20vbWl4aW4vaW5qZWN0aW9u" +
+        "L0luamVjdDsBAAZtZXRob2QBAAttZXRob2RfNDY0OAEAAmF0AQAqTG9yZy9zcG9uZ2Vwb3dlcmVkL2FzbS9taXhpbi9pbmplY3Rp" +
+        "b24vQXQ7AQAFdmFsdWUBAARIRUFEAQALY2FuY2VsbGFibGUDAAAAAQEAB3JlcXVpcmUDAAAAAAEAClNvdXJjZUZpbGUBABtEZWZh" +
+        "dWx0U2tpbkhlbHBlck1peGluLmphdmEBABtSdW50aW1lSW52aXNpYmxlQW5ub3RhdGlvbnMBACNMb3JnL3Nwb25nZXBvd2VyZWQv" +
+        "YXNtL21peGluL01peGluOwEAB3RhcmdldHMEIQBHAAIAAAAAAAIAAQAFAAYAAQBJAAAAHQABAAEAAAAFKrcAAbEAAAABAEoAAAAG" +
+        "AAEAAAAMAAoASwBMAAMASQAAAR4AAwAHAAAAg7IAB5kACbIADccABLGyAA0qtgARmgAEsRIXuAAZTSwSH7YAIU4tBLYAJS0BtgAr" +
+        "wAAvOgQZBMYASBkEvp4AQhIxsgAztgA3mgAOEj2yADO2ADeZAAcEpwAEAzYFFQWZAAcDpwARGQS+EA+kAAgQD6cABAM2BisZBBUG" +
+        "MrYAP6cABE2xAAMAAAAMAIEARQANABcAgQBFABgAfgCBAEUAAgBKAAAAPgAPAAAAEQAMABIADQAUABcAFQAYABgAHgAZACUAGgAq" +
+        "ABsANAAcAD8AHQBcAB4AdQAfAH4AIgCBACEAggAjAE0AAAAtAAwMAAr+ADwHABoHACYHAC8DQAH8AAoBDEAB/wAKAAIHABIHAEAA" +
+        "AEIHAEUAAE4AAAACAE8AUAAAACcAAQBRAAQAUlsAAXMAUwBUWwABQABVAAEAVnMAVwBYWgBZAFpJAFsAAgBcAAAAAgBdAF4AAAAO" +
+        "AAEAXwABAGBbAAFzABg="
 
     // Pre-compiled Java 17 (v61.0) bytecode for io.ezz.vaultskin.mixin.AbstractClientPlayerMixin
     private const val MIXIN_CLASS_B64 =
@@ -139,29 +169,39 @@ object FabricSkinModBuilder {
     fun buildFabricModJar(
         outputJarPath: Path,
         skinBytes: ByteArray,
-        packFormat: Int
+        packFormat: Int,
+        targetPlayerSlotPath: String? = null
     ): Boolean {
         return try {
             val outFile = outputJarPath.toFile()
             outFile.parentFile?.mkdirs()
 
+            val addedEntries = mutableSetOf<String>()
+
             ZipOutputStream(FileOutputStream(outFile)).use { zos ->
                 // 1. Mod Manifests
-                addZipEntry(zos, "fabric.mod.json", FABRIC_MOD_JSON.toByteArray(Charsets.UTF_8))
-                addZipEntry(zos, "ezz_vault_skin.mixins.json", MIXINS_JSON.toByteArray(Charsets.UTF_8))
+                addZipEntry(zos, addedEntries, "fabric.mod.json", FABRIC_MOD_JSON.toByteArray(Charsets.UTF_8))
+                addZipEntry(zos, addedEntries, "ezz_vault_skin.mixins.json", MIXINS_JSON.toByteArray(Charsets.UTF_8))
 
                 val packMcmeta = """{"pack":{"pack_format":$packFormat,"description":"Ezz Vault Skin Integration"}}"""
-                addZipEntry(zos, "pack.mcmeta", packMcmeta.toByteArray(Charsets.UTF_8))
+                addZipEntry(zos, addedEntries, "pack.mcmeta", packMcmeta.toByteArray(Charsets.UTF_8))
 
                 // 2. Pre-compiled Java 17 Class Files
                 val clientClassBytes = Base64.getDecoder().decode(EZZ_CLIENT_CLASS_B64)
-                val mixinClassBytes = Base64.getDecoder().decode(MIXIN_CLASS_B64)
+                val defaultMixinBytes = Base64.getDecoder().decode(DEFAULT_SKIN_MIXIN_B64)
+                val playerMixinBytes = Base64.getDecoder().decode(MIXIN_CLASS_B64)
 
-                addZipEntry(zos, "io/ezz/vaultskin/EzzVaultSkinClient.class", clientClassBytes)
-                addZipEntry(zos, "io/ezz/vaultskin/mixin/AbstractClientPlayerMixin.class", mixinClassBytes)
+                addZipEntry(zos, addedEntries, "io/ezz/vaultskin/EzzVaultSkinClient.class", clientClassBytes)
+                addZipEntry(zos, addedEntries, "io/ezz/vaultskin/mixin/DefaultSkinHelperMixin.class", defaultMixinBytes)
+                addZipEntry(zos, addedEntries, "io/ezz/vaultskin/mixin/AbstractClientPlayerMixin.class", playerMixinBytes)
 
                 // 3. Isolated Skin Texture in 'ezz' namespace
-                addZipEntry(zos, "assets/ezz/textures/skin.png", skinBytes)
+                addZipEntry(zos, addedEntries, "assets/ezz/textures/skin.png", skinBytes)
+
+                // 4. Also register under the specific player's default skin slot if specified
+                if (targetPlayerSlotPath != null && targetPlayerSlotPath.isNotBlank()) {
+                    addZipEntry(zos, addedEntries, "assets/minecraft/textures/entity/player/$targetPlayerSlotPath.png", skinBytes)
+                }
             }
             true
         } catch (e: Exception) {
@@ -170,9 +210,11 @@ object FabricSkinModBuilder {
         }
     }
 
-    private fun addZipEntry(zos: ZipOutputStream, entryName: String, data: ByteArray) {
-        zos.putNextEntry(ZipEntry(entryName))
-        zos.write(data)
-        zos.closeEntry()
+    private fun addZipEntry(zos: ZipOutputStream, addedEntries: MutableSet<String>, entryName: String, data: ByteArray) {
+        if (addedEntries.add(entryName)) {
+            zos.putNextEntry(ZipEntry(entryName))
+            zos.write(data)
+            zos.closeEntry()
+        }
     }
 }

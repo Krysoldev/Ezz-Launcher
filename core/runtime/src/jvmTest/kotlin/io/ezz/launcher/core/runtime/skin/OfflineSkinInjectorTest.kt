@@ -83,14 +83,13 @@ class OfflineSkinInjectorTest {
         assertTrue(fileSystem.exists(gameDir.resolve(".ezz").resolve("active_skin.json")))
         assertTrue(fileSystem.exists(gameDir.resolve(".ezz").resolve("active_skin.png")))
 
-        // Verify Override JAR was created with isolated ezz namespace
+        // Verify Override JAR was created with isolated ezz namespace and default fallback
         val jarFile = result.overrideJarPath!!.toFile()
         assertTrue(jarFile.exists() && jarFile.length() > 0)
         val jar = ZipFile(jarFile)
         assertTrue(jar.getEntry("pack.mcmeta") != null)
         assertTrue(jar.getEntry("assets/ezz/textures/skin.png") != null, "Skin must be in isolated ezz namespace")
-        // Verify it NEVER overwrites vanilla steve.png globally
-        assertTrue(jar.getEntry("assets/minecraft/textures/entity/player/wide/steve.png") == null, "Must NOT pollute vanilla textures")
+        assertTrue(jar.getEntry("assets/minecraft/textures/entity/player/wide/steve.png") != null)
         jar.close()
     }
 
@@ -184,9 +183,9 @@ class OfflineSkinInjectorTest {
         assertTrue(modZip.getEntry("fabric.mod.json") != null)
         assertTrue(modZip.getEntry("ezz_vault_skin.mixins.json") != null)
         assertTrue(modZip.getEntry("io/ezz/vaultskin/EzzVaultSkinClient.class") != null)
+        assertTrue(modZip.getEntry("io/ezz/vaultskin/mixin/DefaultSkinHelperMixin.class") != null)
         assertTrue(modZip.getEntry("io/ezz/vaultskin/mixin/AbstractClientPlayerMixin.class") != null)
         assertTrue(modZip.getEntry("assets/ezz/textures/skin.png") != null, "Skin must be in isolated ezz namespace")
-        assertTrue(modZip.getEntry("assets/minecraft/textures/entity/player/wide/steve.png") == null, "Must NOT pollute vanilla textures")
         modZip.close()
 
         val gameDir = pathProvider.getInstanceGameDirectory(fabricInstance.id)
