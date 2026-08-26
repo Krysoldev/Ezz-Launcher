@@ -57,8 +57,6 @@ fun BottomPlayBar(
     val selectedInstance by viewModel.selectedInstance.collectAsState()
     val selectedAccount by viewModel.accountRepository.selectedAccount.collectAsState()
     val processState by viewModel.processState.collectAsState()
-    val tickerTime by viewModel.tickerTime.collectAsState()
-    val runtimeFormatted = selectedInstance?.let { viewModel.getInstanceRuntimeFormatted(it.id) }
 
     Surface(
         modifier = modifier
@@ -231,14 +229,51 @@ fun BottomPlayBar(
                 ) {
                     when (val state = processState) {
                         is ProcessState.Running -> {
-                            EzzButton(
-                                text = "STOP (${runtimeFormatted ?: "00:00:00"})",
-                                onClick = { viewModel.stopInstance() },
-                                variant = EzzButtonVariant.DANGER,
-                                size = EzzButtonSize.LARGE,
-                                icon = Icons.Default.Stop,
-                                fullWidth = true
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFFDC2626))
+                                    .clickable { viewModel.stopInstance() }
+                                    .padding(horizontal = 16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Stop,
+                                        contentDescription = "Stop",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "STOP",
+                                        color = Color.White,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "(",
+                                        color = Color.White.copy(alpha = 0.85f),
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    RuntimeDisplay(
+                                        startedAt = state.startedAt,
+                                        showDot = false,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = ")",
+                                        color = Color.White.copy(alpha = 0.85f),
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                         }
                         is ProcessState.Preparing -> {
                             val p = state.progress

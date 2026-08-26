@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LoaderType
+import io.ezz.launcher.ui.components.CompactRuntimeBadge
 import io.ezz.launcher.ui.components.EzzBadge
 import io.ezz.launcher.ui.components.EzzBadgeVariant
 import io.ezz.launcher.ui.components.EzzButton
@@ -100,7 +101,6 @@ fun InstancesScreen(
         }
     }
 
-    val tickerTime by viewModel.tickerTime.collectAsState()
     val runningSessions by viewModel.runningSessions.collectAsState()
 
     Column(
@@ -138,11 +138,10 @@ fun InstancesScreen(
             }
 
             EzzButton(
-                text = "Create Instance",
+                text = "+ Create Instance",
                 onClick = { viewModel.showCreateInstanceDialog.value = true },
                 variant = EzzButtonVariant.PRIMARY,
-                size = EzzButtonSize.MEDIUM,
-                icon = Icons.Default.Add
+                size = EzzButtonSize.MEDIUM
             )
         }
 
@@ -198,25 +197,22 @@ fun InstancesScreen(
 
         Spacer(modifier = Modifier.height(18.dp))
 
-        // Responsive Grid
+        // Instance Grid / Empty State
         if (filteredInstances.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(280.dp)
+                    .weight(1f)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF0F0F0F))
-                    .border(1.dp, Color(0xFF202020), RoundedCornerShape(8.dp)),
+                    .background(Color(0xFF0D0D0D))
+                    .border(1.dp, Color(0xFF1E1E1E), RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 EzzEmptyState(
-                    title = if (instances.isEmpty()) "No Instances Created Yet" else "No Matching Instances",
-                    description = if (instances.isEmpty()) "Create your first isolated Minecraft instance to start playing." else "No instance matched '$searchQuery'.",
-                    actionLabel = if (instances.isEmpty()) "Create Instance" else "Clear Search",
-                    onAction = {
-                        if (instances.isEmpty()) viewModel.showCreateInstanceDialog.value = true
-                        else searchQuery = ""
-                    }
+                    title = if (searchQuery.isNotEmpty()) "No instances match \"$searchQuery\"" else "No instances in this category",
+                    description = "Try adjusting your search query or create a new Minecraft instance.",
+                    actionLabel = "+ Create Instance",
+                    onAction = { viewModel.showCreateInstanceDialog.value = true }
                 )
             }
         } else {
@@ -227,14 +223,12 @@ fun InstancesScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(filteredInstances, key = { it.id }) { instance ->
-                    val isInstRunning = viewModel.isInstanceRunning(instance.id)
-                    val instRuntime = if (isInstRunning) viewModel.getInstanceRuntimeFormatted(instance.id) else null
+                    val instStartedAt = runningSessions[instance.id]?.startedAt
 
                     InstanceGridCard(
                         instance = instance,
                         isSelected = instance.id == selectedInstance?.id,
-                        isRunning = isInstRunning,
-                        runtimeFormatted = instRuntime,
+                        startedAt = instStartedAt,
                         onSelect = { viewModel.selectInstance(instance) },
                         onPlay = {
                             viewModel.selectInstance(instance)
@@ -260,8 +254,7 @@ fun InstancesScreen(
 private fun InstanceGridCard(
     instance: Instance,
     isSelected: Boolean,
-    isRunning: Boolean = false,
-    runtimeFormatted: String? = null,
+    startedAt: Long? = null,
     onSelect: () -> Unit,
     onPlay: () -> Unit,
     onManageMods: () -> Unit,
@@ -371,31 +364,11 @@ private fun InstanceGridCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (isRunning) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFF161616))
-                                .border(1.dp, Color(0xFF10B981).copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFF10B981))
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = runtimeFormatted ?: "00:00:00",
-                                    color = Color.White,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
+                    if (startedAt != null) {
+                        CompactRuntimeBadge(
+                            startedAt = startedAt,
+                            onClick = onPlay
+                        )
                     } else {
                         EzzButton(
                             text = "Launch",

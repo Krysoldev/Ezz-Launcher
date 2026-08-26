@@ -53,6 +53,7 @@ import io.ezz.launcher.core.model.account.AccountType
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LoaderType
 import io.ezz.launcher.core.model.runtime.ProcessState
+import io.ezz.launcher.ui.components.CompactRuntimeBadge
 import io.ezz.launcher.ui.components.EzzBadge
 import io.ezz.launcher.ui.components.EzzBadgeVariant
 import io.ezz.launcher.ui.components.EzzButton
@@ -61,6 +62,8 @@ import io.ezz.launcher.ui.components.EzzButtonVariant
 import io.ezz.launcher.ui.components.EzzEmptyState
 import io.ezz.launcher.ui.components.EzzIconButton
 import io.ezz.launcher.ui.components.EzzLoaderBadge
+import io.ezz.launcher.ui.components.HeroRuntimeActionDisplay
+import io.ezz.launcher.ui.components.RuntimeDisplay
 import io.ezz.launcher.ui.theme.EzzTheme
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 import io.ezz.launcher.ui.viewmodel.NavigationScreen
@@ -158,16 +161,15 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(14.dp))
         }
 
-        val tickerTime by viewModel.tickerTime.collectAsState()
         val runningSessions by viewModel.runningSessions.collectAsState()
-        val selectedRuntime = selectedInstance?.let { viewModel.getInstanceRuntimeFormatted(it.id) }
+        val selectedStartedAt = selectedInstance?.let { runningSessions[it.id]?.startedAt }
 
         // 3. Top Hero Section & High-Contrast Launch Button
         HeroBannerSection(
             instance = selectedInstance,
             accountName = selectedAccount?.username ?: "Offline Player",
             processState = processState,
-            runtimeFormatted = selectedRuntime,
+            startedAt = selectedStartedAt,
             modCount = installedMods.size,
             onLaunch = { viewModel.launchInstance(selectedInstance) },
             onConfigure = {
@@ -239,14 +241,12 @@ fun HomeScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         instances.forEach { inst ->
                             val isSelected = inst.id == selectedInstance?.id
-                            val isInstRunning = viewModel.isInstanceRunning(inst.id)
-                            val instRuntime = if (isInstRunning) viewModel.getInstanceRuntimeFormatted(inst.id) else null
+                            val instStartedAt = runningSessions[inst.id]?.startedAt
 
                             InstanceCompactCard(
                                 instance = inst,
                                 isSelected = isSelected,
-                                isRunning = isInstRunning,
-                                runtimeFormatted = instRuntime,
+                                startedAt = instStartedAt,
                                 onSelect = { viewModel.selectInstance(inst) },
                                 onPlay = {
                                     viewModel.selectInstance(inst)
@@ -280,7 +280,7 @@ private fun HeroBannerSection(
     instance: Instance?,
     accountName: String,
     processState: ProcessState,
-    runtimeFormatted: String?,
+    startedAt: Long?,
     modCount: Int,
     onLaunch: () -> Unit,
     onConfigure: () -> Unit,
@@ -316,25 +316,16 @@ private fun HeroBannerSection(
             ) {
                 if (instance != null) {
                     val javaReq = io.ezz.launcher.core.minecraft.version.JavaCompatibility.getRequiredJavaMajorVersion(instance.minecraftVersion)
-                    val isRunning = processState is ProcessState.Running || runtimeFormatted != null
+                    val isRunning = processState is ProcessState.Running || startedAt != null
 
-                    if (isRunning) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF10B981))
-                            )
-                            Spacer(modifier = Modifier.width(7.dp))
-                            Text(
-                                text = "RUNTIME  ${runtimeFormatted ?: "00:00:00"}",
-                                color = Color(0xFF10B981),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 0.8.sp
-                            )
-                        }
+                    if (isRunning && startedAt != null) {
+                        RuntimeDisplay(
+                            startedAt = startedAt,
+                            showPrefix = true,
+                            prefixText = "RUNTIME",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     } else {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
@@ -348,23 +339,22 @@ private fun HeroBannerSection(
                                 text = "READY • JAVA $javaReq • $accountName",
                                 color = Color(0xFFA0A0A0),
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 0.8.sp
+                                fontWeight = FontWeight.Medium
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
                         text = instance.name,
                         color = Color.White,
-                        fontSize = 26.sp,
+                        fontSize = 28.sp,
                         fontWeight = FontWeight.Black,
                         maxLines = 1
                     )
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -372,11 +362,7 @@ private fun HeroBannerSection(
                     ) {
                         EzzLoaderBadge(loaderType = instance.loaderType)
                         EzzBadge(
-                            text = "Minecraft ${instance.minecraftVersion}",
-                            variant = EzzBadgeVariant.NEUTRAL
-                        )
-                        EzzBadge(
-                            text = "Java $javaReq Runtime",
+                            text = "MC ${instance.minecraftVersion}",
                             variant = EzzBadgeVariant.NEUTRAL
                         )
                         EzzBadge(
@@ -426,7 +412,7 @@ private fun HeroBannerSection(
                 verticalArrangement = Arrangement.Center
             ) {
                 if (instance != null) {
-                    val isRunning = processState is ProcessState.Running || runtimeFormatted != null
+                    val isRunning = processState is ProcessState.Running || startedAt != null
                     val isPreparing = processState is ProcessState.Preparing
 
                     val interactionSource = remember { MutableInteractionSource() }
@@ -464,8 +450,8 @@ private fun HeroBannerSection(
                             .padding(horizontal = 28.dp, vertical = 16.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (isPreparing) {
+                        if (isPreparing) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(18.dp),
                                     color = Color.White,
@@ -479,22 +465,11 @@ private fun HeroBannerSection(
                                     fontWeight = FontWeight.Black,
                                     letterSpacing = 0.8.sp
                                 )
-                            } else if (isRunning) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFF10B981))
-                                )
-                                Spacer(modifier = Modifier.width(9.dp))
-                                Text(
-                                    text = runtimeFormatted ?: "00:00:00",
-                                    color = Color.White,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 1.sp
-                                )
-                            } else {
+                            }
+                        } else if (isRunning && startedAt != null) {
+                            HeroRuntimeActionDisplay(startedAt = startedAt)
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     imageVector = Icons.Default.PlayArrow,
                                     contentDescription = "Launch",
@@ -549,8 +524,7 @@ private fun HeroBannerSection(
 private fun InstanceCompactCard(
     instance: Instance,
     isSelected: Boolean,
-    isRunning: Boolean,
-    runtimeFormatted: String?,
+    startedAt: Long? = null,
     onSelect: () -> Unit,
     onPlay: () -> Unit,
     onEdit: () -> Unit,
@@ -677,31 +651,11 @@ private fun InstanceCompactCard(
                     variant = EzzButtonVariant.GHOST
                 )
 
-                if (isRunning) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color(0xFF161616))
-                            .border(1.dp, Color(0xFF10B981).copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF10B981))
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = runtimeFormatted ?: "00:00:00",
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
+                if (startedAt != null) {
+                    CompactRuntimeBadge(
+                        startedAt = startedAt,
+                        onClick = onPlay
+                    )
                 } else {
                     EzzButton(
                         text = "Launch",
