@@ -545,49 +545,12 @@ fun CreateInstanceDialog(
                                     StudioCard(title = "MINECRAFT RELEASE VERSION") {
                                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                             // Search Input
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .height(34.dp)
-                                                    .clip(RoundedCornerShape(6.dp))
-                                                    .background(Color(0xFF141414))
-                                                    .border(1.dp, Color(0xFF242424), RoundedCornerShape(6.dp))
-                                                    .padding(horizontal = 10.dp),
-                                                contentAlignment = Alignment.CenterStart
-                                            ) {
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                    modifier = Modifier.fillMaxWidth()
-                                                ) {
-                                                    Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF666666), modifier = Modifier.size(14.dp))
-                                                    TextField(
-                                                        value = versionSearchQuery,
-                                                        onValueChange = { versionSearchQuery = it },
-                                                        placeholder = { Text("Search release versions (e.g. 1.21, 1.20, 1.12, 1.8)...", color = Color(0xFF444444), fontSize = 11.5.sp) },
-                                                        colors = TextFieldDefaults.colors(
-                                                            focusedContainerColor = Color.Transparent,
-                                                            unfocusedContainerColor = Color.Transparent,
-                                                            focusedTextColor = Color.White,
-                                                            unfocusedTextColor = Color.White,
-                                                            focusedIndicatorColor = Color.Transparent,
-                                                            unfocusedIndicatorColor = Color.Transparent
-                                                        ),
-                                                        singleLine = true,
-                                                        modifier = Modifier.weight(1f)
-                                                    )
-                                                    if (versionSearchQuery.isNotBlank()) {
-                                                        Icon(
-                                                            imageVector = Icons.Default.Close,
-                                                            contentDescription = "Clear",
-                                                            tint = Color(0xFF888888),
-                                                            modifier = Modifier
-                                                                .size(14.dp)
-                                                                .clickable { versionSearchQuery = "" }
-                                                        )
-                                                    }
-                                                }
-                                            }
+                                            io.ezz.launcher.ui.components.EzzSearchField(
+                                                value = versionSearchQuery,
+                                                onValueChange = { versionSearchQuery = it },
+                                                placeholder = "Search release versions (e.g. 1.21, 1.20, 1.12, 1.8)...",
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
 
                                             // Latest Release Quick Pick Banner
                                             if (latestReleaseId.isNotBlank() && versionSearchQuery.isBlank()) {
