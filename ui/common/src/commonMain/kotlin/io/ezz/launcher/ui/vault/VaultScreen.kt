@@ -114,7 +114,6 @@ fun VaultScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     // 3D Viewport Controls
-    var autoRotate by remember { mutableStateOf(true) }
     var resetTrigger by remember { mutableIntStateOf(0) }
 
     // Filter and Sort Skins
@@ -216,7 +215,6 @@ fun VaultScreen(
                 MinecraftPlayerModel3DView(
                     skinBytes = selectedSkinBytes,
                     modelType = selectedSkin?.modelType ?: SkinModelType.STEVE,
-                    autoRotate = autoRotate,
                     resetTrigger = resetTrigger,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -229,31 +227,6 @@ fun VaultScreen(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Auto-Rotate Button
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (autoRotate) Color(0xFF222222) else Color(0xCC000000))
-                            .border(1.dp, if (autoRotate) Color.White else Color(0xFF333333), RoundedCornerShape(6.dp))
-                            .clickable { autoRotate = !autoRotate }
-                            .padding(horizontal = 9.dp, vertical = 5.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Auto Rotate",
-                                tint = if (autoRotate) Color.White else Color(0xFF888888),
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Text(
-                                text = if (autoRotate) "Auto Rotate: ON" else "Auto Rotate: OFF",
-                                color = if (autoRotate) Color.White else Color(0xFF888888),
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
                     // Reset View Button
                     Box(
                         modifier = Modifier

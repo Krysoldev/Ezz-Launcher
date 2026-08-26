@@ -63,22 +63,18 @@ import kotlin.math.sin
 fun MinecraftPlayerModel3DView(
     skinBytes: ByteArray?,
     modelType: SkinModelType = SkinModelType.STEVE,
-    autoRotate: Boolean = true,
     resetTrigger: Int = 0,
     modifier: Modifier = Modifier
 ) {
-    // Camera Target Angles (Updated by user interaction or auto-rotation)
+    // Camera Target Angles (Updated by user manual drag)
     var targetYaw by remember { mutableFloatStateOf(-20f) }
     var targetPitch by remember { mutableFloatStateOf(6f) }
     var targetZoom by remember { mutableFloatStateOf(1.0f) }
 
-    // Interpolated Damped Camera Angles (Rendered smoothly every frame)
+    // Interpolated Damped Camera Angles (Smooth manual transition)
     var currentYaw by remember { mutableFloatStateOf(-20f) }
     var currentPitch by remember { mutableFloatStateOf(6f) }
     var currentZoom by remember { mutableFloatStateOf(1.0f) }
-
-    var isDragging by remember { mutableStateOf(false) }
-    var lastDragEndTime by remember { mutableLongStateOf(0L) }
 
     // Smooth Reset View Handler
     LaunchedEffect(resetTrigger) {
@@ -95,7 +91,6 @@ fun MinecraftPlayerModel3DView(
             try {
                 val img = ImageIO.read(ByteArrayInputStream(skinBytes))
                 if (img != null) {
-                    println("[VaultRenderer] Skin: 64x64, Filter: Nearest, Wrap: ClampToEdge, Alpha: Cutout, Model: $modelType")
                     img
                 } else {
                     generateDefaultSteveSkin()
@@ -108,34 +103,16 @@ fun MinecraftPlayerModel3DView(
         }
     }
 
-    // Subtle Harmonic Idle Animation (Breathing & Limb swing)
-    val infiniteTransition = rememberInfiniteTransition(label = "idle_anim")
-    val animTime by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = (2 * PI).toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 3800, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "animTime"
-    )
-
-    // Frame-rate Independent Delta-Time Animation Loop for Orbit Damping & Auto-Rotation
-    LaunchedEffect(autoRotate) {
+    // Frame-rate Independent Delta-Time Animation Loop for Smooth Damping (NO auto-rotation)
+    LaunchedEffect(Unit) {
         var lastTimeNanos = 0L
         while (true) {
             withFrameNanos { timeNanos ->
                 if (lastTimeNanos != 0L) {
                     val deltaSeconds = ((timeNanos - lastTimeNanos) / 1_000_000_000.0).toFloat().coerceIn(0.001f, 0.1f)
-                    val now = System.currentTimeMillis()
 
-                    // Auto-Rotate PlayerRoot around Y axis (1 full 360 rotation every 12 seconds = 30 deg/s)
-                    if (autoRotate && !isDragging && (now - lastDragEndTime > 1500L)) {
-                        targetYaw = (targetYaw + 30f * deltaSeconds) % 360f
-                    }
-
-                    // Exponential smooth damping (Spring factor: 16.0)
-                    val dampFactor = (1.0 - exp(-16.0 * deltaSeconds)).toFloat()
+                    // Exponential smooth damping (Spring factor: 20.0 for crisp, responsive manual tracking)
+                    val dampFactor = (1.0 - exp(-20.0 * deltaSeconds)).toFloat()
                     currentYaw += (targetYaw - currentYaw) * dampFactor
                     currentPitch += (targetPitch - currentPitch) * dampFactor
                     currentZoom += (targetZoom - currentZoom) * dampFactor
@@ -160,27 +137,14 @@ fun MinecraftPlayerModel3DView(
                 )
             )
             .border(1.dp, Color(0xFF222222), RoundedCornerShape(10.dp))
-            // Mouse Drag: Rotates PlayerRoot around Y axis horizontally, subtle pitch vertically
+            // Mouse Drag: Drag RIGHT -> Rotate RIGHT, Drag LEFT -> Rotate LEFT
             .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = {
-                        isDragging = true
-                    },
-                    onDragEnd = {
-                        isDragging = false
-                        lastDragEndTime = System.currentTimeMillis()
-                    },
-                    onDragCancel = {
-                        isDragging = false
-                        lastDragEndTime = System.currentTimeMillis()
-                    }
-                ) { change, dragAmount ->
+                detectDragGestures { change, dragAmount ->
                     change.consume()
-                    isDragging = true
-                    lastDragEndTime = System.currentTimeMillis()
 
-                    // Horizontal drag: Rotates player around vertical Y axis
-                    targetYaw = (targetYaw - dragAmount.x * 0.45f) % 360f
+                    // Mouse drag RIGHT (dragAmount.x > 0) -> Player rotates RIGHT (targetYaw increases)
+                    // Mouse drag LEFT (dragAmount.x < 0) -> Player rotates LEFT (targetYaw decreases)
+                    targetYaw = (targetYaw + dragAmount.x * 0.45f) % 360f
 
                     // Vertical drag: Subtle camera pitch adjustment (Clamped [-28°, +28°] to prevent flipping)
                     targetPitch = (targetPitch + dragAmount.y * 0.30f).coerceIn(-28f, 28f)
@@ -194,7 +158,6 @@ fun MinecraftPlayerModel3DView(
                         if (event.type == PointerEventType.Scroll) {
                             val delta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
                             if (delta != 0f) {
-                                lastDragEndTime = System.currentTimeMillis()
                                 targetZoom = (targetZoom - delta * 0.08f).coerceIn(0.70f, 1.80f)
                             }
                         }
@@ -206,7 +169,7 @@ fun MinecraftPlayerModel3DView(
         val heightPx = with(density) { maxHeight.toPx().toInt() }.coerceAtLeast(100)
 
         // Render current 3D frame using our high-performance Z-buffer rasterizer
-        val renderedFrame = remember(widthPx, heightPx, currentYaw, currentPitch, currentZoom, modelType, skinImage, animTime) {
+        val renderedFrame = remember(widthPx, heightPx, currentYaw, currentPitch, currentZoom, modelType, skinImage) {
             renderPlayerModelFrame(
                 width = widthPx,
                 height = heightPx,
@@ -214,8 +177,7 @@ fun MinecraftPlayerModel3DView(
                 pitch = currentPitch,
                 zoom = currentZoom,
                 modelType = modelType,
-                skin = skinImage,
-                animTime = animTime
+                skin = skinImage
             )
         }
 
@@ -239,8 +201,7 @@ private fun renderPlayerModelFrame(
     pitch: Float,
     zoom: Float,
     modelType: SkinModelType,
-    skin: BufferedImage,
-    animTime: Float
+    skin: BufferedImage
 ): ImageBitmap? {
     if (width <= 0 || height <= 0) return null
 
@@ -270,10 +231,6 @@ private fun renderPlayerModelFrame(
 
     val armW = if (modelType == SkinModelType.ALEX) 3f else 4f
 
-    // Idle harmonic breathing offset & arm swing
-    val breathOffset = sin(animTime.toDouble()).toFloat() * 0.20f
-    val armSwing = sin(animTime.toDouble()).toFloat() * 1.8f
-
     // List of 3D triangles to render
     val triangles = mutableListOf<ModelTriangle3D>()
 
@@ -283,7 +240,7 @@ private fun renderPlayerModelFrame(
     addCuboidTriangles(
         triangles = triangles,
         minX = -4f, maxX = 4f,
-        minY = -32f - breathOffset, maxY = -24f - breathOffset,
+        minY = -32f, maxY = -24f,
         minZ = -4f, maxZ = 4f,
         uvTop = UvRect(8, 0, 8, 8),
         uvBottom = UvRect(16, 0, 8, 8),
@@ -297,7 +254,7 @@ private fun renderPlayerModelFrame(
     addCuboidTriangles(
         triangles = triangles,
         minX = -4.45f, maxX = 4.45f,
-        minY = -32.45f - breathOffset, maxY = -23.55f - breathOffset,
+        minY = -32.45f, maxY = -23.55f,
         minZ = -4.45f, maxZ = 4.45f,
         uvTop = UvRect(40, 0, 8, 8),
         uvBottom = UvRect(48, 0, 8, 8),
@@ -314,7 +271,7 @@ private fun renderPlayerModelFrame(
     addCuboidTriangles(
         triangles = triangles,
         minX = -4f, maxX = 4f,
-        minY = -24f - breathOffset, maxY = -12f,
+        minY = -24f, maxY = -12f,
         minZ = -2f, maxZ = 2f,
         uvTop = UvRect(20, 16, 8, 4),
         uvBottom = UvRect(28, 16, 8, 4),
@@ -328,7 +285,7 @@ private fun renderPlayerModelFrame(
     addCuboidTriangles(
         triangles = triangles,
         minX = -4.35f, maxX = 4.35f,
-        minY = -24.35f - breathOffset, maxY = -11.65f,
+        minY = -24.35f, maxY = -11.65f,
         minZ = -2.35f, maxZ = 2.35f,
         uvTop = UvRect(20, 32, 8, 4),
         uvBottom = UvRect(28, 32, 8, 4),
@@ -348,7 +305,7 @@ private fun renderPlayerModelFrame(
         addCuboidTriangles(
             triangles = triangles,
             minX = rArmMinX, maxX = rArmMaxX,
-            minY = -24f - breathOffset, maxY = -12f - breathOffset,
+            minY = -24f, maxY = -12f,
             minZ = -2f, maxZ = 2f,
             uvTop = UvRect(44, 16, 3, 4),
             uvBottom = UvRect(47, 16, 3, 4),
@@ -356,14 +313,13 @@ private fun renderPlayerModelFrame(
             uvFront = UvRect(44, 20, 3, 12),
             uvLeft = UvRect(47, 20, 4, 12),
             uvBack = UvRect(51, 20, 3, 12),
-            isOverlay = false,
-            pitchOffset = armSwing
+            isOverlay = false
         )
         // Alex Right Arm Sleeve
         addCuboidTriangles(
             triangles = triangles,
             minX = rArmMinX - 0.35f, maxX = rArmMaxX + 0.35f,
-            minY = -24.35f - breathOffset, maxY = -11.65f - breathOffset,
+            minY = -24.35f, maxY = -11.65f,
             minZ = -2.35f, maxZ = 2.35f,
             uvTop = UvRect(44, 32, 3, 4),
             uvBottom = UvRect(47, 32, 3, 4),
@@ -371,14 +327,13 @@ private fun renderPlayerModelFrame(
             uvFront = UvRect(44, 36, 3, 12),
             uvLeft = UvRect(47, 36, 4, 12),
             uvBack = UvRect(51, 36, 3, 12),
-            isOverlay = true,
-            pitchOffset = armSwing
+            isOverlay = true
         )
     } else {
         addCuboidTriangles(
             triangles = triangles,
             minX = rArmMinX, maxX = rArmMaxX,
-            minY = -24f - breathOffset, maxY = -12f - breathOffset,
+            minY = -24f, maxY = -12f,
             minZ = -2f, maxZ = 2f,
             uvTop = UvRect(44, 16, 4, 4),
             uvBottom = UvRect(48, 16, 4, 4),
@@ -386,14 +341,13 @@ private fun renderPlayerModelFrame(
             uvFront = UvRect(44, 20, 4, 12),
             uvLeft = UvRect(48, 20, 4, 12),
             uvBack = UvRect(52, 20, 4, 12),
-            isOverlay = false,
-            pitchOffset = armSwing
+            isOverlay = false
         )
         // Steve Right Arm Sleeve
         addCuboidTriangles(
             triangles = triangles,
             minX = rArmMinX - 0.35f, maxX = rArmMaxX + 0.35f,
-            minY = -24.35f - breathOffset, maxY = -11.65f - breathOffset,
+            minY = -24.35f, maxY = -11.65f,
             minZ = -2.35f, maxZ = 2.35f,
             uvTop = UvRect(44, 32, 4, 4),
             uvBottom = UvRect(48, 32, 4, 4),
@@ -401,8 +355,7 @@ private fun renderPlayerModelFrame(
             uvFront = UvRect(44, 36, 4, 12),
             uvLeft = UvRect(48, 36, 4, 12),
             uvBack = UvRect(52, 36, 4, 12),
-            isOverlay = true,
-            pitchOffset = armSwing
+            isOverlay = true
         )
     }
 
@@ -415,7 +368,7 @@ private fun renderPlayerModelFrame(
         addCuboidTriangles(
             triangles = triangles,
             minX = lArmMinX, maxX = lArmMaxX,
-            minY = -24f - breathOffset, maxY = -12f - breathOffset,
+            minY = -24f, maxY = -12f,
             minZ = -2f, maxZ = 2f,
             uvTop = UvRect(36, 48, 3, 4),
             uvBottom = UvRect(39, 48, 3, 4),
@@ -423,14 +376,13 @@ private fun renderPlayerModelFrame(
             uvFront = UvRect(36, 52, 3, 12),
             uvLeft = UvRect(39, 52, 4, 12),
             uvBack = UvRect(43, 52, 3, 12),
-            isOverlay = false,
-            pitchOffset = -armSwing
+            isOverlay = false
         )
         // Alex Left Arm Sleeve
         addCuboidTriangles(
             triangles = triangles,
             minX = lArmMinX - 0.35f, maxX = lArmMaxX + 0.35f,
-            minY = -24.35f - breathOffset, maxY = -11.65f - breathOffset,
+            minY = -24.35f, maxY = -11.65f,
             minZ = -2.35f, maxZ = 2.35f,
             uvTop = UvRect(52, 48, 3, 4),
             uvBottom = UvRect(55, 48, 3, 4),
@@ -438,14 +390,13 @@ private fun renderPlayerModelFrame(
             uvFront = UvRect(52, 52, 3, 12),
             uvLeft = UvRect(55, 52, 4, 12),
             uvBack = UvRect(59, 52, 3, 12),
-            isOverlay = true,
-            pitchOffset = -armSwing
+            isOverlay = true
         )
     } else {
         addCuboidTriangles(
             triangles = triangles,
             minX = lArmMinX, maxX = lArmMaxX,
-            minY = -24f - breathOffset, maxY = -12f - breathOffset,
+            minY = -24f, maxY = -12f,
             minZ = -2f, maxZ = 2f,
             uvTop = UvRect(36, 48, 4, 4),
             uvBottom = UvRect(40, 48, 4, 4),
@@ -453,14 +404,13 @@ private fun renderPlayerModelFrame(
             uvFront = UvRect(36, 52, 4, 12),
             uvLeft = UvRect(40, 52, 4, 12),
             uvBack = UvRect(44, 52, 4, 12),
-            isOverlay = false,
-            pitchOffset = -armSwing
+            isOverlay = false
         )
         // Steve Left Arm Sleeve
         addCuboidTriangles(
             triangles = triangles,
             minX = lArmMinX - 0.35f, maxX = lArmMaxX + 0.35f,
-            minY = -24.35f - breathOffset, maxY = -11.65f - breathOffset,
+            minY = -24.35f, maxY = -11.65f,
             minZ = -2.35f, maxZ = 2.35f,
             uvTop = UvRect(52, 48, 4, 4),
             uvBottom = UvRect(56, 48, 4, 4),
@@ -468,8 +418,7 @@ private fun renderPlayerModelFrame(
             uvFront = UvRect(52, 52, 4, 12),
             uvLeft = UvRect(56, 52, 4, 12),
             uvBack = UvRect(60, 52, 4, 12),
-            isOverlay = true,
-            pitchOffset = -armSwing
+            isOverlay = true
         )
     }
 
@@ -835,21 +784,8 @@ private fun addCuboidTriangles(
     uvFront: UvRect,
     uvLeft: UvRect,
     uvBack: UvRect,
-    isOverlay: Boolean,
-    pitchOffset: Float = 0f
+    isOverlay: Boolean
 ) {
-    val rad = (pitchOffset * PI / 180.0).toFloat()
-    val cosP = cos(rad)
-    val sinP = sin(rad)
-    fun rot(v: Vec3): Vec3 {
-        if (pitchOffset == 0f) return v
-        val dy = v.y - minY
-        val dz = v.z
-        val newY = minY + dy * cosP - dz * sinP
-        val newZ = dy * sinP + dz * cosP
-        return Vec3(v.x, newY, newZ)
-    }
-
     fun addQuad(
         v0: Vec3, v1: Vec3, v2: Vec3, v3: Vec3,
         uv: UvRect,
@@ -863,9 +799,9 @@ private fun addCuboidTriangles(
         // Triangle 1: (v0, v1, v2)
         triangles.add(
             ModelTriangle3D(
-                v0 = rot(v0), u0 = uL, vTex0 = vT,
-                v1 = rot(v1), u1 = uR, vTex1 = vT,
-                v2 = rot(v2), u2 = uR, vTex2 = vB,
+                v0 = v0, u0 = uL, vTex0 = vT,
+                v1 = v1, u1 = uR, vTex1 = vT,
+                v2 = v2, u2 = uR, vTex2 = vB,
                 light = light,
                 isOverlay = isOverlay
             )
@@ -873,9 +809,9 @@ private fun addCuboidTriangles(
         // Triangle 2: (v0, v2, v3)
         triangles.add(
             ModelTriangle3D(
-                v0 = rot(v0), u0 = uL, vTex0 = vT,
-                v1 = rot(v2), u1 = uR, vTex1 = vB,
-                v2 = rot(v3), u2 = uL, vTex2 = vB,
+                v0 = v0, u0 = uL, vTex0 = vT,
+                v1 = v2, u1 = uR, vTex1 = vB,
+                v2 = v3, u2 = uL, vTex2 = vB,
                 light = light,
                 isOverlay = isOverlay
             )
