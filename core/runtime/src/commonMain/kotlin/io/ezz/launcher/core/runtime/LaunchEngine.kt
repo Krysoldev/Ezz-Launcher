@@ -48,6 +48,7 @@ class LaunchEngine(
     private val authManager: AuthManager,
     private val instanceRepository: InstanceRepository,
     private val processLauncher: ProcessLauncher,
+    private val vaultSkinRepository: io.ezz.launcher.core.storage.repository.VaultSkinRepository? = null,
     private val fileSystem: FileSystem = FileSystem.SYSTEM
 ) {
 
@@ -130,6 +131,30 @@ class LaunchEngine(
             val gameDir = pathProvider.getInstanceGameDirectory(instance.id)
             val assetsDir = pathProvider.assetsDirectory
 
+            // Apply Vault Skin for Offline accounts
+            var vaultSkinStatus = "Bypassed (Online Account / Disabled)"
+            if (validAccount.type == io.ezz.launcher.core.model.account.AccountType.OFFLINE && vaultSkinRepository != null) {
+                try {
+                    val activeSkin = vaultSkinRepository.getActiveSkin(validAccount.id)
+                    if (activeSkin != null) {
+                        val skinBytes = vaultSkinRepository.getSkinBytes(activeSkin)
+                        val applied = io.ezz.launcher.core.runtime.skin.OfflineSkinInjector.applyVaultSkin(
+                            instance = instance,
+                            account = validAccount,
+                            skin = activeSkin,
+                            skinBytes = skinBytes,
+                            pathProvider = pathProvider,
+                            fileSystem = fileSystem
+                        )
+                        vaultSkinStatus = if (applied) "Applied '${activeSkin.name}' (${activeSkin.modelType})" else "Failed to apply"
+                    } else {
+                        vaultSkinStatus = "No active skin in Vault"
+                    }
+                } catch (e: Exception) {
+                    vaultSkinStatus = "Error: ${e.message}"
+                }
+            }
+
             emit(LaunchEvent.StateChanged(ProcessState.Preparing("Building launch command...")))
             val launchCommand = LaunchArgumentBuilder.buildLaunchCommand(
                 instance = instance,
@@ -160,6 +185,7 @@ class LaunchEngine(
             emit(LaunchEvent.LogReceived("Mod Loader        : ${instance.loaderType} (${instance.loaderVersion ?: "default"})", isError = false))
             emit(LaunchEvent.LogReceived("Java Runtime      : ${javaRuntime.path} (Java ${javaRuntime.majorVersion}, ${javaRuntime.vendor})", isError = false))
             emit(LaunchEvent.LogReceived("Required Java     : Java $requiredJavaMajor", isError = false))
+            emit(LaunchEvent.LogReceived("Vault Skin        : $vaultSkinStatus", isError = false))
             emit(LaunchEvent.LogReceived("Game Directory    : $gameDir", isError = false))
             emit(LaunchEvent.LogReceived("Natives Directory : $nativesDir", isError = false))
             emit(LaunchEvent.LogReceived("Libraries Count   : ${classpath.size} JARs", isError = false))

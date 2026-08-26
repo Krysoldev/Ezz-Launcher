@@ -125,6 +125,12 @@ fun TopBar(
                 onClick = { viewModel.navigateTo(NavigationScreen.INSTANCES) }
             )
             TopNavTab(
+                label = "VAULT",
+                icon = Icons.Default.AccountCircle,
+                isSelected = currentScreen == NavigationScreen.VAULT,
+                onClick = { viewModel.navigateTo(NavigationScreen.VAULT) }
+            )
+            TopNavTab(
                 label = "ACCOUNTS",
                 icon = Icons.Default.AccountCircle,
                 isSelected = currentScreen == NavigationScreen.ACCOUNTS,

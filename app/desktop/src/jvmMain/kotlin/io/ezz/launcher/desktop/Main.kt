@@ -68,6 +68,8 @@ fun main() = application {
     val authManager = AuthManager(accountRepository, microsoftAuthService)
     val processLauncher = DesktopProcessLauncher()
 
+    val vaultSkinRepository = io.ezz.launcher.core.storage.repository.LocalVaultSkinRepository(pathProvider)
+
     val launchEngine = LaunchEngine(
         pathProvider = pathProvider,
         versionManifestService = versionManifestService,
@@ -78,7 +80,8 @@ fun main() = application {
         downloadManager = downloadManager,
         authManager = authManager,
         instanceRepository = instanceRepository,
-        processLauncher = processLauncher
+        processLauncher = processLauncher,
+        vaultSkinRepository = vaultSkinRepository
     )
 
     val platformBridge = DefaultPlatformBridge(
@@ -134,6 +137,7 @@ fun main() = application {
         processSessionTracker = processSessionTracker,
         localInstanceManager = localInstanceManager,
         modrinthService = modrinthService,
+        vaultSkinRepository = vaultSkinRepository,
         platformBridge = platformBridge
     )
 

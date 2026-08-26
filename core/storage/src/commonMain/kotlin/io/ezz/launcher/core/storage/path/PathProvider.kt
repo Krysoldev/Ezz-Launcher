@@ -14,6 +14,8 @@ interface PathProvider {
     val assetsObjectsDirectory: Path get() = assetsDirectory.resolve("objects")
     val cacheDirectory: Path get() = rootDirectory.resolve("cache")
     val skinsDirectory: Path get() = cacheDirectory.resolve("skins")
+    val vaultDirectory: Path get() = rootDirectory.resolve("vault")
+    val vaultSkinsDirectory: Path get() = vaultDirectory.resolve("skins")
 
     fun getInstanceDirectory(instanceId: String): Path = instancesDirectory.resolve(instanceId)
     fun getInstanceGameDirectory(instanceId: String): Path = getInstanceDirectory(instanceId).resolve(".minecraft")
@@ -29,6 +31,8 @@ interface PathProvider {
         if (!fileSystem.exists(assetsObjectsDirectory)) fileSystem.createDirectories(assetsObjectsDirectory)
         if (!fileSystem.exists(cacheDirectory)) fileSystem.createDirectories(cacheDirectory)
         if (!fileSystem.exists(skinsDirectory)) fileSystem.createDirectories(skinsDirectory)
+        if (!fileSystem.exists(vaultDirectory)) fileSystem.createDirectories(vaultDirectory)
+        if (!fileSystem.exists(vaultSkinsDirectory)) fileSystem.createDirectories(vaultSkinsDirectory)
     }
 }
 

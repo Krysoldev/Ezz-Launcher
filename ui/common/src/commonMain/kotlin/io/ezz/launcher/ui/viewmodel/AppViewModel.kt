@@ -62,11 +62,17 @@ import io.ezz.launcher.core.network.modrinth.ModrinthService
 import io.ezz.launcher.ui.image.ModrinthImageLoader
 import io.ezz.launcher.ui.platform.PlatformBridge
 import io.ezz.launcher.ui.platform.DefaultPlatformBridge
+import io.ezz.launcher.core.model.skin.SkinModelType
+import io.ezz.launcher.core.model.skin.VaultManifest
+import io.ezz.launcher.core.model.skin.VaultSkin
+import io.ezz.launcher.core.storage.repository.VaultSkinRepository
+import io.ezz.launcher.core.storage.repository.LocalVaultSkinRepository
 import kotlinx.coroutines.Job
 
 enum class NavigationScreen {
     HOME,
     INSTANCES,
+    VAULT,
     ACCOUNTS,
     MODS,
     SERVERS,
@@ -123,10 +129,14 @@ class AppViewModel(
     val processSessionTracker: io.ezz.launcher.core.runtime.process.ProcessSessionTracker? = null,
     val localInstanceManager: LocalInstanceManager? = null,
     val modrinthService: ModrinthService? = null,
+    val vaultSkinRepository: VaultSkinRepository? = null,
     val platformBridge: PlatformBridge = DefaultPlatformBridge(),
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main)
 ) {
     val currentLauncherVersion = "1.0.0"
+
+    val vaultRepository: VaultSkinRepository =
+        vaultSkinRepository ?: LocalVaultSkinRepository(pathProvider)
 
     val instanceManager: LocalInstanceManager =
         localInstanceManager ?: LocalInstanceManager(pathProvider, instanceRepository)
@@ -228,6 +238,12 @@ class AppViewModel(
 
     // Diagnostic Error Dialog State
     val launchErrorDialogData = MutableStateFlow<LaunchErrorData?>(null)
+
+    // Vault Skin Flows
+    val vaultSkins: StateFlow<List<VaultSkin>> = vaultRepository.skins
+    val activeVaultSkinId: StateFlow<String?> = vaultRepository.activeSkinId
+    private val _selectedVaultSkin = MutableStateFlow<VaultSkin?>(null)
+    val selectedVaultSkin: StateFlow<VaultSkin?> = _selectedVaultSkin.asStateFlow()
 
     // Dialog States
     val showCreateInstanceDialog = MutableStateFlow(false)
@@ -1518,4 +1534,67 @@ class AppViewModel(
             }
         }
     }
+
+    // ==========================================
+    // VAULT SKIN SYSTEM ACTIONS
+    // ==========================================
+
+    fun selectVaultSkin(skin: VaultSkin?) {
+        _selectedVaultSkin.value = skin
+    }
+
+    fun importVaultSkin(
+        bytes: ByteArray,
+        preferredName: String?,
+        explicitModel: SkinModelType? = null,
+        onResult: (Result<VaultSkin>) -> Unit
+    ) {
+        scope.launch {
+            val result = vaultRepository.importSkin(bytes, preferredName, explicitModel)
+            if (result.isSuccess) {
+                _selectedVaultSkin.value = result.getOrNull()
+            }
+            onResult(result)
+        }
+    }
+
+    fun setActiveVaultSkin(skinId: String?, accountId: String? = null) {
+        scope.launch {
+            vaultRepository.setActiveSkin(skinId, accountId)
+        }
+    }
+
+    fun renameVaultSkin(skinId: String, newName: String, onResult: ((Result<VaultSkin>) -> Unit)? = null) {
+        scope.launch {
+            val result = vaultRepository.renameSkin(skinId, newName)
+            if (result.isSuccess && _selectedVaultSkin.value?.id == skinId) {
+                _selectedVaultSkin.value = result.getOrNull()
+            }
+            onResult?.invoke(result)
+        }
+    }
+
+    fun updateVaultSkinModel(skinId: String, modelType: SkinModelType) {
+        scope.launch {
+            val result = vaultRepository.updateSkinModel(skinId, modelType)
+            if (result.isSuccess && _selectedVaultSkin.value?.id == skinId) {
+                _selectedVaultSkin.value = result.getOrNull()
+            }
+        }
+    }
+
+    fun deleteVaultSkin(skinId: String) {
+        scope.launch {
+            val isCurrentSelected = _selectedVaultSkin.value?.id == skinId
+            vaultRepository.deleteSkin(skinId)
+            if (isCurrentSelected) {
+                _selectedVaultSkin.value = vaultRepository.skins.value.firstOrNull()
+            }
+        }
+    }
+
+    fun getVaultSkinBytes(skin: VaultSkin): ByteArray? {
+        return vaultRepository.getSkinBytes(skin)
+    }
 }
+

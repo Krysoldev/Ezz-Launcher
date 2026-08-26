@@ -92,6 +92,7 @@ fun MainScreen(
                         when (screen) {
                             NavigationScreen.HOME -> HomeScreen(viewModel = viewModel)
                             NavigationScreen.INSTANCES -> InstancesScreen(viewModel = viewModel)
+                            NavigationScreen.VAULT -> io.ezz.launcher.ui.vault.VaultScreen(viewModel = viewModel)
                             NavigationScreen.ACCOUNTS -> AccountsScreen(viewModel = viewModel)
                             NavigationScreen.MODS -> ModsScreen(viewModel = viewModel)
                             NavigationScreen.SERVERS -> ServersScreen(viewModel = viewModel)
