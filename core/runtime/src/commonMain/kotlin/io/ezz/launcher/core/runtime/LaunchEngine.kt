@@ -141,10 +141,12 @@ class LaunchEngine(
                     if (activeSkin != null) {
                         activeVaultSkinName = activeSkin.name
                         activeVaultSkinModel = activeSkin.modelType.name
+                        val skinBytes = vaultSkinRepository.getSkinBytes(activeSkin)
                         io.ezz.launcher.core.runtime.skin.OfflineSkinManager.syncOfflineSkin(
                             instance = instance,
                             account = validAccount,
                             skin = activeSkin,
+                            skinBytes = skinBytes,
                             pathProvider = pathProvider,
                             fileSystem = fileSystem
                         )
@@ -153,6 +155,7 @@ class LaunchEngine(
                             instance = instance,
                             account = validAccount,
                             skin = null,
+                            skinBytes = null,
                             pathProvider = pathProvider,
                             fileSystem = fileSystem
                         )
