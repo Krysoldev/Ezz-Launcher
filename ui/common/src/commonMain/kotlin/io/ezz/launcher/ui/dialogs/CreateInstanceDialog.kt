@@ -33,23 +33,20 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.VideogameAsset
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -80,7 +77,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import io.ezz.launcher.core.minecraft.loader.optifine.OptiFineCompatibilityValidator
 import io.ezz.launcher.core.minecraft.loader.optifine.OptiFineVersionOption
 import io.ezz.launcher.core.minecraft.version.JavaCompatibility
@@ -101,8 +97,8 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 /**
- * Ezz Launcher — Create Instance Studio (Redesigned from Scratch)
- * Studio-grade, ultra-clean 2-pane Minecraft Java Edition creation experience.
+ * Ezz Launcher — Create Instance Studio (Rebuilt from Scratch)
+ * Full-frame, studio-grade creation experience for Minecraft Java Edition.
  */
 @Composable
 fun CreateInstanceDialog(
@@ -122,17 +118,17 @@ fun CreateInstanceDialog(
     val settings by viewModel.settingsRepository.settings.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
-    // 1. Instance Identity State
+    // 1. Instance Identity
     var name by remember { mutableStateOf("") }
     var isUserCustomName by remember { mutableStateOf(false) }
     var customIconFile by remember { mutableStateOf<File?>(null) }
 
-    // 2. Minecraft Version Catalog State
-    var versionTab by remember { mutableStateOf("RELEASES") } // "RELEASES", "SNAPSHOTS", "LEGACY", "ALL"
+    // 2. Minecraft Version Catalog
+    var versionCategoryTab by remember { mutableStateOf("RELEASES") } // "RELEASES", "SNAPSHOTS", "LEGACY", "ALL"
     var versionSearchQuery by remember { mutableStateOf("") }
 
-    val activeVersionSource = remember(versionTab, availableReleases, snapshotVersions, betaVersions, alphaVersions, allVersions) {
-        when (versionTab) {
+    val activeVersionList = remember(versionCategoryTab, availableReleases, snapshotVersions, betaVersions, alphaVersions, allVersions) {
+        when (versionCategoryTab) {
             "RELEASES" -> availableReleases
             "SNAPSHOTS" -> snapshotVersions
             "LEGACY" -> betaVersions + alphaVersions
@@ -141,18 +137,18 @@ fun CreateInstanceDialog(
         }
     }
 
-    val filteredVersions = remember(activeVersionSource, versionSearchQuery) {
+    val filteredVersions = remember(activeVersionList, versionSearchQuery) {
         val q = versionSearchQuery.trim().lowercase()
-        val list = if (q.isBlank()) activeVersionSource else activeVersionSource.filter { it.id.lowercase().contains(q) }
+        val list = if (q.isBlank()) activeVersionList else activeVersionList.filter { it.id.lowercase().contains(q) }
         MinecraftVersionComparator.sort(list, VersionSortOrder.NEWEST_FIRST)
     }
 
-    // Currently Selected Minecraft Version
+    // Selected Version (defaults to latest official Mojang release)
     var selectedMcVersion by remember(availableReleases, latestReleaseId) {
         mutableStateOf(latestReleaseId.ifBlank { availableReleases.firstOrNull()?.id ?: "1.21.4" })
     }
 
-    // 3. Mod Loader Selection State
+    // 3. Mod Loader Selection
     var selectedLoader by remember { mutableStateOf(LoaderType.VANILLA) }
     var fabricLoaders by remember { mutableStateOf<List<String>>(emptyList()) }
     var selectedFabricLoader by remember { mutableStateOf<String?>(null) }
@@ -161,22 +157,22 @@ fun CreateInstanceDialog(
     var optifineVersions by remember { mutableStateOf<List<OptiFineVersionOption>>(emptyList()) }
     var selectedOptiFineVersion by remember { mutableStateOf<String?>(null) }
 
-    // 4. Java Runtime & RAM State
+    // 4. Java Runtime & RAM
     val requiredJavaMajor = remember(selectedMcVersion) {
         JavaCompatibility.getRequiredJavaMajorVersion(selectedMcVersion)
     }
     var selectedJavaPath by remember { mutableStateOf<String?>(null) }
     var maxRamMb by remember { mutableStateOf(settings.defaultMaxMemoryMb.toFloat().coerceIn(1024f, 16384f)) }
 
-    // 5. Advanced Settings State
+    // 5. Advanced Settings
     var isAdvancedExpanded by remember { mutableStateOf(false) }
     var windowWidth by remember { mutableStateOf(1280) }
     var windowHeight by remember { mutableStateOf(720) }
     var isFullscreen by remember { mutableStateOf(false) }
     var customJvmArgs by remember { mutableStateOf(settings.globalJvmArgs.joinToString(" ")) }
 
-    // 6. Multi-stage Creation Pipeline State
-    var creationStep by remember { mutableStateOf(0) } // 0: Config, 1..4: Creating, 5: Success
+    // 6. Multi-Stage Creation Pipeline
+    var creationStep by remember { mutableStateOf(0) } // 0: Form, 1..4: Creating, 5: Success
     var creationProgressText by remember { mutableStateOf("") }
     var createdInstanceResult by remember { mutableStateOf<Instance?>(null) }
     var creationErrorMessage by remember { mutableStateOf<String?>(null) }
@@ -188,7 +184,7 @@ fun CreateInstanceDialog(
         }
     }
 
-    // Intelligent default instance name auto-population
+    // Default instance name auto-population
     LaunchedEffect(selectedMcVersion, selectedLoader) {
         if (!isUserCustomName) {
             val prefix = when (selectedLoader) {
@@ -200,7 +196,7 @@ fun CreateInstanceDialog(
         }
     }
 
-    // Dynamic Fabric Loader fetching
+    // Dynamic Fabric Loader resolution from Fabric Meta API
     LaunchedEffect(selectedMcVersion, selectedLoader) {
         if (selectedLoader == LoaderType.FABRIC) {
             isLoadingFabricLoaders = true
@@ -219,7 +215,7 @@ fun CreateInstanceDialog(
         }
     }
 
-    // Dynamic OptiFine version fetching
+    // Dynamic OptiFine version resolution
     LaunchedEffect(selectedMcVersion, selectedLoader) {
         if (selectedLoader == LoaderType.OPTIFINE) {
             val opts = OptiFineCompatibilityValidator.getAvailableOptiFineVersions(selectedMcVersion)
@@ -238,27 +234,43 @@ fun CreateInstanceDialog(
 
     val validationError = when {
         isNameEmpty -> "Instance name is required"
-        hasInvalidFsChars -> "Name contains invalid characters (/ \\ : * ? \" < > |)"
+        hasInvalidFsChars -> "Name contains invalid filesystem characters (/ \\ : * ? \" < > |)"
         isDuplicateName -> "An instance with this name already exists"
         isFabricIncompatible -> "Fabric loader is not available for Minecraft $selectedMcVersion"
         isOptiFineIncompatible -> "OptiFine is not supported for Minecraft $selectedMcVersion"
         else -> null
     }
-    val isFormValid = validationError == null && creationStep == 0
+    val isFormReady = validationError == null && creationStep == 0
 
-    Dialog(onDismissRequest = { if (creationStep == 0 || creationStep == 5) onDismiss() }) {
+    // Fullscreen Overlay Container
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xE6050505))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { if (creationStep == 0 || creationStep == 5) onDismiss() }
+            ),
+        contentAlignment = Alignment.Center
+    ) {
         Box(
             modifier = Modifier
-                .widthIn(min = 960.dp, max = 1040.dp)
-                .heightIn(min = 640.dp, max = 720.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(Color(0xFF0A0A0A))
-                .border(1.dp, Color(0xFF222222), RoundedCornerShape(18.dp))
+                .widthIn(min = 960.dp, max = 1060.dp)
+                .heightIn(min = 640.dp, max = 740.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFF0D0D0D))
+                .border(1.dp, Color(0xFF262626), RoundedCornerShape(20.dp))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {} // Consume inner clicks
+                )
                 .padding(24.dp)
         ) {
             Crossfade(targetState = creationStep) { step ->
                 when {
-                    // Success View
+                    // Success View (Step 5)
                     step == 5 && createdInstanceResult != null -> {
                         val inst = createdInstanceResult!!
                         StudioSuccessView(
@@ -278,7 +290,7 @@ fun CreateInstanceDialog(
                         )
                     }
 
-                    // Progress View
+                    // Multi-Stage Progress View (Step 1..4)
                     step in 1..4 -> {
                         StudioProgressView(
                             instanceName = trimmedName,
@@ -294,7 +306,7 @@ fun CreateInstanceDialog(
                         )
                     }
 
-                    // Main 2-Pane Creation Studio
+                    // Main Creation Workspace (Step 0)
                     else -> {
                         Column(modifier = Modifier.fillMaxSize()) {
                             // Top Bar Header
@@ -303,50 +315,75 @@ fun CreateInstanceDialog(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
                                     Box(
                                         modifier = Modifier
-                                            .size(32.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(Color(0xFF1C1C1C)),
+                                            .size(36.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(Color(0xFF1E1E1E))
+                                            .clickable(onClick = onDismiss),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(Icons.Default.VideogameAsset, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(18.dp))
                                     }
+
                                     Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Text(
+                                                text = "CREATE MINECRAFT INSTANCE",
+                                                color = Color.White,
+                                                fontSize = 17.sp,
+                                                fontWeight = FontWeight.Black,
+                                                letterSpacing = 0.6.sp
+                                            )
+                                            if (availableReleases.isNotEmpty()) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(Color(0xFF142414))
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text("OFFICIAL MOJANG MANIFEST", color = Color(0xFF4CAF50), fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                        }
                                         Text(
-                                            text = "Create Instance",
-                                            color = Color.White,
-                                            fontSize = 17.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            letterSpacing = 0.4.sp
-                                        )
-                                        Text(
-                                            text = "Configure your isolated Minecraft Java Edition installation",
+                                            text = "Set up an isolated instance with custom loader, memory, and runtime settings",
                                             color = Color(0xFF777777),
                                             fontSize = 11.5.sp
                                         )
                                     }
                                 }
 
-                                EzzIconButton(
-                                    icon = Icons.Default.Close,
-                                    onClick = onDismiss,
-                                    size = io.ezz.launcher.ui.components.EzzButtonSize.SMALL,
-                                    variant = io.ezz.launcher.ui.components.EzzButtonVariant.GHOST
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    EzzIconButton(
+                                        icon = Icons.Default.Refresh,
+                                        onClick = { viewModel.refreshAvailableVersions(forceRefresh = true) },
+                                        size = io.ezz.launcher.ui.components.EzzButtonSize.SMALL,
+                                        variant = io.ezz.launcher.ui.components.EzzButtonVariant.GHOST
+                                    )
+                                    EzzIconButton(
+                                        icon = Icons.Default.Close,
+                                        onClick = onDismiss,
+                                        size = io.ezz.launcher.ui.components.EzzButtonSize.SMALL,
+                                        variant = io.ezz.launcher.ui.components.EzzButtonVariant.GHOST
+                                    )
+                                }
                             }
 
                             Spacer(modifier = Modifier.height(16.dp))
 
-                            // 2-Pane Studio Body
+                            // 2-Column Studio Body
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .weight(1f),
-                                horizontalArrangement = Arrangement.spacedBy(22.dp)
+                                horizontalArrangement = Arrangement.spacedBy(20.dp)
                             ) {
-                                // LEFT PANE (~64%): Configuration Sections
+                                // LEFT COLUMN (~64%): Configuration Panels
                                 val scrollState = rememberScrollState()
                                 Column(
                                     modifier = Modifier
@@ -355,17 +392,17 @@ fun CreateInstanceDialog(
                                         .verticalScroll(scrollState),
                                     verticalArrangement = Arrangement.spacedBy(14.dp)
                                 ) {
-                                    // 1. IDENTITY & NAME
+                                    // 1. INSTANCE IDENTITY
                                     StudioCard(title = "INSTANCE IDENTITY") {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(16.dp)
                                         ) {
-                                            // Icon Box
+                                            // Icon Picker Thumbnail Box
                                             Box(
                                                 modifier = Modifier
-                                                    .size(68.dp)
+                                                    .size(72.dp)
                                                     .clip(RoundedCornerShape(12.dp))
                                                     .background(Color(0xFF141414))
                                                     .border(1.dp, Color(0xFF333333), RoundedCornerShape(12.dp))
@@ -384,30 +421,30 @@ fun CreateInstanceDialog(
                                                         minecraftVersion = selectedMcVersion,
                                                         loaderType = selectedLoader
                                                     ),
-                                                    size = 68.dp,
+                                                    size = 72.dp,
                                                     customFile = customIconFile,
                                                     showBadge = false
                                                 )
                                             }
 
-                                            // Name input
+                                            // Name Input & File info
                                             Column(
                                                 modifier = Modifier.weight(1f),
                                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                                             ) {
-                                                Text("Name", color = Color(0xFF999999), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                                Text("Instance Name", color = Color(0xFFAAAAAA), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                                 TextField(
                                                     value = name,
                                                     onValueChange = {
                                                         name = it
                                                         isUserCustomName = true
                                                     },
-                                                    placeholder = { Text("e.g. My Survival, 1.21 Modded", color = Color(0xFF444444), fontSize = 13.sp) },
-                                                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                                                    placeholder = { Text("e.g. Survival 1.21, Fabric SMP", color = Color(0xFF444444), fontSize = 13.sp) },
+                                                    modifier = Modifier.fillMaxWidth().height(46.dp),
                                                     shape = RoundedCornerShape(8.dp),
                                                     colors = TextFieldDefaults.colors(
-                                                        focusedContainerColor = Color(0xFF121212),
-                                                        unfocusedContainerColor = Color(0xFF121212),
+                                                        focusedContainerColor = Color(0xFF141414),
+                                                        unfocusedContainerColor = Color(0xFF141414),
                                                         focusedTextColor = Color.White,
                                                         unfocusedTextColor = Color.White,
                                                         focusedIndicatorColor = Color.Transparent,
@@ -421,8 +458,8 @@ fun CreateInstanceDialog(
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
                                                     Text(
-                                                        text = if (customIconFile != null) "Icon: ${customIconFile?.name}" else "Click artwork square to upload custom icon",
-                                                        color = Color(0xFF555555),
+                                                        text = if (customIconFile != null) "Custom Icon: ${customIconFile?.name}" else "Click square to upload PNG / JPG / WEBP",
+                                                        color = Color(0xFF666666),
                                                         fontSize = 10.sp
                                                     )
                                                     if (customIconFile != null) {
@@ -439,7 +476,7 @@ fun CreateInstanceDialog(
                                         }
                                     }
 
-                                    // 2. MOD LOADER CARDS
+                                    // 2. MOD LOADER ENGINE
                                     StudioCard(title = "MOD ENGINE") {
                                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                             Row(
@@ -448,7 +485,7 @@ fun CreateInstanceDialog(
                                             ) {
                                                 StudioLoaderCard(
                                                     title = "Vanilla",
-                                                    description = "Official Clean Minecraft",
+                                                    description = "Official Minecraft",
                                                     icon = Icons.Default.VideogameAsset,
                                                     isSelected = selectedLoader == LoaderType.VANILLA,
                                                     onClick = { selectedLoader = LoaderType.VANILLA },
@@ -456,7 +493,7 @@ fun CreateInstanceDialog(
                                                 )
                                                 StudioLoaderCard(
                                                     title = "Fabric",
-                                                    description = "Lightweight Modding",
+                                                    description = "Lightweight Mods",
                                                     icon = Icons.Default.Extension,
                                                     isSelected = selectedLoader == LoaderType.FABRIC,
                                                     onClick = { selectedLoader = LoaderType.FABRIC },
@@ -464,7 +501,7 @@ fun CreateInstanceDialog(
                                                 )
                                                 StudioLoaderCard(
                                                     title = "OptiFine",
-                                                    description = "Shaders & Performance",
+                                                    description = "Shaders & FPS",
                                                     icon = Icons.Default.Layers,
                                                     isSelected = selectedLoader == LoaderType.OPTIFINE,
                                                     onClick = { selectedLoader = LoaderType.OPTIFINE },
@@ -472,7 +509,7 @@ fun CreateInstanceDialog(
                                                 )
                                             }
 
-                                            // Sub-option details for Loader
+                                            // Sub-configuration for Fabric / OptiFine
                                             if (selectedLoader == LoaderType.FABRIC) {
                                                 Row(
                                                     modifier = Modifier
@@ -488,10 +525,10 @@ fun CreateInstanceDialog(
                                                     if (isLoadingFabricLoaders) {
                                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                                             CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 1.5.dp, color = Color.White)
-                                                            Text("Fetching...", color = Color(0xFF666666), fontSize = 11.sp)
+                                                            Text("Resolving compatible loader...", color = Color(0xFF666666), fontSize = 11.sp)
                                                         }
                                                     } else if (fabricLoaders.isEmpty()) {
-                                                        Text("No compatible loader found", color = Color(0xFFEF5350), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                        Text("No compatible Fabric loader for $selectedMcVersion", color = Color(0xFFEF5350), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                                     } else {
                                                         Text(
                                                             text = selectedFabricLoader ?: "Latest Stable",
@@ -515,7 +552,7 @@ fun CreateInstanceDialog(
                                                 ) {
                                                     Text("OptiFine Edition", color = Color(0xFF888888), fontSize = 11.sp, fontWeight = FontWeight.Medium)
                                                     if (!isSupported) {
-                                                        Text("Not compatible with $selectedMcVersion", color = Color(0xFFEF5350), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                        Text("Not supported for $selectedMcVersion", color = Color(0xFFEF5350), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                                     } else {
                                                         Text(
                                                             text = selectedOptiFineVersion ?: "HD_U_I7",
@@ -529,10 +566,10 @@ fun CreateInstanceDialog(
                                         }
                                     }
 
-                                    // 3. MINECRAFT VERSION BROWSER
+                                    // 3. MINECRAFT VERSION CATALOG
                                     StudioCard(title = "MINECRAFT VERSION (OFFICIAL MOJANG)") {
                                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                            // Tab bar & Search
+                                            // Tab Bar & Instant Search
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -547,12 +584,12 @@ fun CreateInstanceDialog(
                                                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                                                 ) {
                                                     listOf("RELEASES", "SNAPSHOTS", "LEGACY", "ALL").forEach { tab ->
-                                                        val isSelected = versionTab == tab
+                                                        val isSelected = versionCategoryTab == tab
                                                         Box(
                                                             modifier = Modifier
                                                                 .clip(RoundedCornerShape(4.dp))
                                                                 .background(if (isSelected) Color(0xFF262626) else Color.Transparent)
-                                                                .clickable { versionTab = tab }
+                                                                .clickable { versionCategoryTab = tab }
                                                                 .padding(horizontal = 10.dp, vertical = 4.dp)
                                                         ) {
                                                             Text(
@@ -568,7 +605,7 @@ fun CreateInstanceDialog(
                                                 // Search Input
                                                 Box(
                                                     modifier = Modifier
-                                                        .width(150.dp)
+                                                        .width(160.dp)
                                                         .height(28.dp)
                                                         .clip(RoundedCornerShape(6.dp))
                                                         .background(Color(0xFF141414))
@@ -584,7 +621,7 @@ fun CreateInstanceDialog(
                                                         TextField(
                                                             value = versionSearchQuery,
                                                             onValueChange = { versionSearchQuery = it },
-                                                            placeholder = { Text("Filter...", color = Color(0xFF444444), fontSize = 11.sp) },
+                                                            placeholder = { Text("Search...", color = Color(0xFF444444), fontSize = 11.sp) },
                                                             colors = TextFieldDefaults.colors(
                                                                 focusedContainerColor = Color.Transparent,
                                                                 unfocusedContainerColor = Color.Transparent,
@@ -600,8 +637,8 @@ fun CreateInstanceDialog(
                                                 }
                                             }
 
-                                            // Latest Release Quick Banner
-                                            if (latestReleaseId.isNotBlank() && versionTab == "RELEASES" && versionSearchQuery.isBlank()) {
+                                            // Latest Release Quick Pick Banner
+                                            if (latestReleaseId.isNotBlank() && versionCategoryTab == "RELEASES" && versionSearchQuery.isBlank()) {
                                                 Row(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
@@ -954,7 +991,7 @@ fun CreateInstanceDialog(
                                     }
                                 }
 
-                                // RIGHT PANE (~36%): Hero Live Instance Preview
+                                // RIGHT COLUMN (~36%): Hero Live Preview Panel
                                 Column(
                                     modifier = Modifier
                                         .weight(0.36f)
@@ -1118,7 +1155,7 @@ fun CreateInstanceDialog(
 
                                         Button(
                                             onClick = {
-                                                if (isFormValid) {
+                                                if (isFormReady) {
                                                     coroutineScope.launch {
                                                         try {
                                                             creationStep = 1
@@ -1173,7 +1210,7 @@ fun CreateInstanceDialog(
                                                     }
                                                 }
                                             },
-                                            enabled = isFormValid,
+                                            enabled = isFormReady,
                                             modifier = Modifier.weight(1.5f).height(44.dp),
                                             shape = RoundedCornerShape(8.dp),
                                             colors = ButtonDefaults.buttonColors(
@@ -1237,7 +1274,7 @@ private fun StudioProgressView(
                         .padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    StudioProgressStepRow("1. Preparing instance directory", isDone = currentStep > 1, isActive = currentStep == 1)
+                    StudioProgressStepRow("1. Preparing isolated instance directory", isDone = currentStep > 1, isActive = currentStep == 1)
                     StudioProgressStepRow("2. Resolving official version manifest", isDone = currentStep > 2, isActive = currentStep == 2)
                     StudioProgressStepRow("3. Configuring ${loaderType.name} loader engine", isDone = currentStep > 3, isActive = currentStep == 3)
                     StudioProgressStepRow("4. Finalizing local registration", isDone = currentStep > 4, isActive = currentStep == 4)
