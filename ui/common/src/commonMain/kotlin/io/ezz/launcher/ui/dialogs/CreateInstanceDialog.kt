@@ -73,7 +73,6 @@ fun CreateInstanceDialog(
     viewModel: AppViewModel,
     onDismiss: () -> Unit
 ) {
-    val allVersions by viewModel.allVersions.collectAsState()
     val availableReleases by viewModel.availableVersions.collectAsState()
     val detectedJavaRuntimes by viewModel.detectedJavaRuntimes.collectAsState()
     val settings by viewModel.settingsRepository.settings.collectAsState()
@@ -119,9 +118,8 @@ fun CreateInstanceDialog(
         )
     }
 
-    val sourceList = remember(allVersions, availableReleases) {
-        if (allVersions.isNotEmpty()) allVersions
-        else if (availableReleases.isNotEmpty()) availableReleases
+    val sourceList = remember(availableReleases) {
+        if (availableReleases.isNotEmpty()) availableReleases.filter { it.type == "release" }
         else fallbackVersions
     }
 
