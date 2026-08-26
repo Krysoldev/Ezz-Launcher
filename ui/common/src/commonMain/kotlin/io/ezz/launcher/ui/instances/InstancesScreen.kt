@@ -66,13 +66,6 @@ import io.ezz.launcher.ui.theme.EzzTheme
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 import io.ezz.launcher.ui.viewmodel.NavigationScreen
 
-enum class InstanceFilter {
-    ALL,
-    VANILLA,
-    FABRIC,
-    OPTIFINE
-}
-
 @Composable
 fun InstancesScreen(
     viewModel: AppViewModel,
@@ -80,29 +73,8 @@ fun InstancesScreen(
 ) {
     val instances by viewModel.instanceRepository.instances.collectAsState()
     val selectedInstance by viewModel.selectedInstance.collectAsState()
-
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedFilter by remember { mutableStateOf(InstanceFilter.ALL) }
-
-    val filteredInstances = remember(instances, searchQuery, selectedFilter) {
-        instances.filter { inst ->
-            val matchesSearch = searchQuery.isBlank() ||
-                    inst.name.contains(searchQuery, ignoreCase = true) ||
-                    inst.minecraftVersion.contains(searchQuery, ignoreCase = true) ||
-                    inst.loaderType.name.contains(searchQuery, ignoreCase = true)
-
-            val matchesFilter = when (selectedFilter) {
-                InstanceFilter.ALL -> true
-                InstanceFilter.VANILLA -> inst.loaderType == LoaderType.VANILLA
-                InstanceFilter.FABRIC -> inst.loaderType == LoaderType.FABRIC
-                InstanceFilter.OPTIFINE -> inst.loaderType == LoaderType.OPTIFINE
-            }
-
-            matchesSearch && matchesFilter
-        }
-    }
-
     val runningSessions by viewModel.runningSessions.collectAsState()
+    val filteredInstances = instances
 
     Column(
         modifier = modifier
@@ -146,57 +118,7 @@ fun InstancesScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(18.dp))
-
-        // Search & Filters Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(modifier = Modifier.width(320.dp)) {
-                EzzSearchField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = "Search instances, versions..."
-                )
-            }
-
-            // Filter Chips
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFF141414))
-                    .border(1.dp, Color(0xFF242424), RoundedCornerShape(6.dp))
-                    .padding(2.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                listOf(
-                    Pair(InstanceFilter.ALL, "All (${instances.size})"),
-                    Pair(InstanceFilter.FABRIC, "Fabric (${instances.count { it.loaderType == LoaderType.FABRIC }})"),
-                    Pair(InstanceFilter.OPTIFINE, "OptiFine (${instances.count { it.loaderType == LoaderType.OPTIFINE }})"),
-                    Pair(InstanceFilter.VANILLA, "Vanilla (${instances.count { it.loaderType == LoaderType.VANILLA }})")
-                ).forEach { (filter, label) ->
-                    val isSelected = selectedFilter == filter
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(if (isSelected) Color(0xFF242424) else Color.Transparent)
-                            .clickable { selectedFilter = filter }
-                            .padding(horizontal = 11.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = label,
-                            color = if (isSelected) Color.White else Color(0xFF888888),
-                            fontSize = 11.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                        )
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         // Instance Grid / Empty State
         if (filteredInstances.isEmpty()) {
@@ -210,8 +132,8 @@ fun InstancesScreen(
                 contentAlignment = Alignment.Center
             ) {
                 EzzEmptyState(
-                    title = if (searchQuery.isNotEmpty()) "No instances match \"$searchQuery\"" else "No instances in this category",
-                    description = "Try adjusting your search query or create a new Minecraft instance.",
+                    title = "No instances found",
+                    description = "Create your first Minecraft instance to get started.",
                     actionLabel = "+ Create Instance",
                     onAction = { viewModel.showCreateInstanceDialog.value = true }
                 )
