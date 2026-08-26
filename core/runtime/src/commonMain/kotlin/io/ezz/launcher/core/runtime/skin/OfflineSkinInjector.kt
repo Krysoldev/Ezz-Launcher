@@ -124,8 +124,7 @@ object OfflineSkinInjector {
                 val success = FabricSkinModBuilder.buildFabricModJar(
                     outputJarPath = fabricModPath,
                     skinBytes = effectiveBytes,
-                    packFormat = packFormat,
-                    fileSystem = fileSystem
+                    packFormat = packFormat
                 )
                 if (success) {
                     generatedFabricModPath = fabricModPath

@@ -182,6 +182,9 @@ class OfflineSkinInjectorTest {
 
         val modZip = ZipFile(result.fabricModJarPath!!.toFile())
         assertTrue(modZip.getEntry("fabric.mod.json") != null)
+        assertTrue(modZip.getEntry("ezz_vault_skin.mixins.json") != null)
+        assertTrue(modZip.getEntry("io/ezz/vaultskin/EzzVaultSkinClient.class") != null)
+        assertTrue(modZip.getEntry("io/ezz/vaultskin/mixin/AbstractClientPlayerMixin.class") != null)
         assertTrue(modZip.getEntry("assets/ezz/textures/skin.png") != null, "Skin must be in isolated ezz namespace")
         assertTrue(modZip.getEntry("assets/minecraft/textures/entity/player/wide/steve.png") == null, "Must NOT pollute vanilla textures")
         modZip.close()
