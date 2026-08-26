@@ -22,8 +22,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
@@ -349,7 +349,7 @@ fun CreateInstanceDialog(
                             onClick = { currentStep -= 1 },
                             variant = EzzButtonVariant.SECONDARY,
                             size = EzzButtonSize.MEDIUM,
-                            icon = Icons.Default.ArrowBack
+                            icon = Icons.AutoMirrored.Filled.ArrowBack
                         )
                     } else {
                         EzzButton(
@@ -366,7 +366,7 @@ fun CreateInstanceDialog(
                             onClick = { currentStep = 2 },
                             variant = EzzButtonVariant.PRIMARY,
                             size = EzzButtonSize.MEDIUM,
-                            trailingIcon = Icons.Default.ArrowForward
+                            trailingIcon = Icons.AutoMirrored.Filled.ArrowForward
                         )
                     } else {
                         EzzButton(

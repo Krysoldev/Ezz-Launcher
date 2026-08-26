@@ -13,11 +13,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 enum class ThemePreset(val displayName: String) {
-    OBSIDIAN("Ezz Obsidian (Default)"),
+    EZZ_DARK("Ezz Dark Red (Default)"),
+    OBSIDIAN("Obsidian Slate"),
     MIDNIGHT_NEON("Midnight Neon"),
     AMETHYST_GLOW("Amethyst Glow"),
     CYBER_GOLD("Cyber Gold"),
-    CRIMSON_BLADE("Crimson Blade"),
     FROST_LIGHT("Frost Light")
 }
 
@@ -28,6 +28,7 @@ data class EzzColorScheme(
     val surfaceVariant: Color,
     val surfaceLight: Color,
     val cardBackground: Color,
+    val inputBackground: Color,
     val primary: Color,
     val primaryHover: Color,
     val primaryGlow: Color,
@@ -45,6 +46,31 @@ data class EzzColorScheme(
 )
 
 object EzzThemePresets {
+    // Primary Ezz Signature Dark Gaming Theme
+    val EzzDark = EzzColorScheme(
+        isDark = true,
+        background = Color(0xFF070809),
+        surface = Color(0xFF0D0F10),
+        surfaceVariant = Color(0xFF121416),
+        surfaceLight = Color(0xFF181B1E),
+        cardBackground = Color(0xFF151719),
+        inputBackground = Color(0xFF191B1D),
+        primary = Color(0xFFEF4444),       // Ezz Signature Red
+        primaryHover = Color(0xFFDC2626),  // Deep Red Hover
+        primaryGlow = Color(0x33EF4444),
+        secondary = Color(0xFFE11D48),
+        accent = Color(0xFF10B981),        // Success / Online Green
+        accentGlow = Color(0x3310B981),
+        warning = Color(0xFFF59E0B),
+        danger = Color(0xFFEF4444),
+        dangerGlow = Color(0x33EF4444),
+        textPrimary = Color(0xFFF5F5F5),
+        textSecondary = Color(0xFFA0A3A6),
+        textMuted = Color(0xFF6E7276),
+        border = Color(0xFF24272A),
+        borderLight = Color(0xFF32363A)
+    )
+
     val Obsidian = EzzColorScheme(
         isDark = true,
         background = Color(0xFF0B0F19),
@@ -52,6 +78,7 @@ object EzzThemePresets {
         surfaceVariant = Color(0xFF1E293B),
         surfaceLight = Color(0xFF283548),
         cardBackground = Color(0xFF162032),
+        inputBackground = Color(0xFF1E293B),
         primary = Color(0xFF00E5FF),
         primaryHover = Color(0xFF38EFFF),
         primaryGlow = Color(0x3300E5FF),
@@ -75,6 +102,7 @@ object EzzThemePresets {
         surfaceVariant = Color(0xFF161B22),
         surfaceLight = Color(0xFF21262D),
         cardBackground = Color(0xFF0E141E),
+        inputBackground = Color(0xFF161B22),
         primary = Color(0xFF10B981),
         primaryHover = Color(0xFF34D399),
         primaryGlow = Color(0x3310B981),
@@ -98,6 +126,7 @@ object EzzThemePresets {
         surfaceVariant = Color(0xFF241C3E),
         surfaceLight = Color(0xFF322854),
         cardBackground = Color(0xFF1E1736),
+        inputBackground = Color(0xFF241C3E),
         primary = Color(0xFFA855F7),
         primaryHover = Color(0xFFC084FC),
         primaryGlow = Color(0x33A855F7),
@@ -121,6 +150,7 @@ object EzzThemePresets {
         surfaceVariant = Color(0xFF292524),
         surfaceLight = Color(0xFF44403C),
         cardBackground = Color(0xFF23201D),
+        inputBackground = Color(0xFF292524),
         primary = Color(0xFFF59E0B),
         primaryHover = Color(0xFFFBBF24),
         primaryGlow = Color(0x33F59E0B),
@@ -137,29 +167,6 @@ object EzzThemePresets {
         borderLight = Color(0xFF57534E)
     )
 
-    val CrimsonBlade = EzzColorScheme(
-        isDark = true,
-        background = Color(0xFF0F0808),
-        surface = Color(0xFF1C1010),
-        surfaceVariant = Color(0xFF291717),
-        surfaceLight = Color(0xFF3B2020),
-        cardBackground = Color(0xFF241313),
-        primary = Color(0xFFEF4444),
-        primaryHover = Color(0xFFF87171),
-        primaryGlow = Color(0x33EF4444),
-        secondary = Color(0xFFDC2626),
-        accent = Color(0xFFF59E0B),
-        accentGlow = Color(0x33F59E0B),
-        warning = Color(0xFFF59E0B),
-        danger = Color(0xFFDC2626),
-        dangerGlow = Color(0x33DC2626),
-        textPrimary = Color(0xFFFEF2F2),
-        textSecondary = Color(0xFFE2E8F0),
-        textMuted = Color(0xFF94A3B8),
-        border = Color(0xFF450A0A),
-        borderLight = Color(0xFF5F0D0D)
-    )
-
     val FrostLight = EzzColorScheme(
         isDark = false,
         background = Color(0xFFF8FAFC),
@@ -167,6 +174,7 @@ object EzzThemePresets {
         surfaceVariant = Color(0xFFF1F5F9),
         surfaceLight = Color(0xFFE2E8F0),
         cardBackground = Color(0xFFFFFFFF),
+        inputBackground = Color(0xFFF1F5F9),
         primary = Color(0xFF0284C7),
         primaryHover = Color(0xFF0369A1),
         primaryGlow = Color(0x330284C7),
@@ -185,20 +193,20 @@ object EzzThemePresets {
 }
 
 class ThemeState {
-    var preset by mutableStateOf(ThemePreset.OBSIDIAN)
+    var preset by mutableStateOf(ThemePreset.EZZ_DARK)
     var customPrimaryColor by mutableStateOf<Color?>(null)
-    var cardCornerRadius by mutableStateOf(16.dp)
+    var cardCornerRadius by mutableStateOf(10.dp)
     var enableAnimations by mutableStateOf(true)
-    var isCompactDensity by mutableStateOf(false)
+    var isCompactDensity by mutableStateOf(true)
 
     val currentColors: EzzColorScheme
         get() {
             val base = when (preset) {
+                ThemePreset.EZZ_DARK -> EzzThemePresets.EzzDark
                 ThemePreset.OBSIDIAN -> EzzThemePresets.Obsidian
                 ThemePreset.MIDNIGHT_NEON -> EzzThemePresets.MidnightNeon
                 ThemePreset.AMETHYST_GLOW -> EzzThemePresets.AmethystGlow
                 ThemePreset.CYBER_GOLD -> EzzThemePresets.CyberGold
-                ThemePreset.CRIMSON_BLADE -> EzzThemePresets.CrimsonBlade
                 ThemePreset.FROST_LIGHT -> EzzThemePresets.FrostLight
             }
             return if (customPrimaryColor != null) {
@@ -215,7 +223,7 @@ class ThemeState {
 }
 
 val LocalThemeState = staticCompositionLocalOf { ThemeState() }
-val LocalEzzColors = staticCompositionLocalOf { EzzThemePresets.Obsidian }
+val LocalEzzColors = staticCompositionLocalOf { EzzThemePresets.EzzDark }
 
 object EzzTheme {
     val colors: EzzColorScheme

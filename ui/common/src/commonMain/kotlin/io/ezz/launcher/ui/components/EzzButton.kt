@@ -177,6 +177,44 @@ fun EzzIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    variant: EzzButtonVariant = EzzButtonVariant.SECONDARY,
+    size: EzzButtonSize = EzzButtonSize.MEDIUM,
+    enabled: Boolean = true
+) {
+    val colors = EzzTheme.colors
+    val (dimension, iconDim) = when (size) {
+        EzzButtonSize.SMALL -> Pair(32.dp, 16.dp)
+        EzzButtonSize.MEDIUM -> Pair(38.dp, 18.dp)
+        EzzButtonSize.LARGE -> Pair(46.dp, 22.dp)
+    }
+
+    val (bg, fg) = when (variant) {
+        EzzButtonVariant.PRIMARY -> Pair(colors.primary, Color.White)
+        EzzButtonVariant.SECONDARY -> Pair(colors.surfaceVariant, colors.textPrimary)
+        EzzButtonVariant.OUTLINE -> Pair(Color.Transparent, colors.textSecondary)
+        EzzButtonVariant.DANGER -> Pair(colors.danger.copy(alpha = 0.15f), colors.danger)
+        EzzButtonVariant.GHOST -> Pair(Color.Transparent, colors.textSecondary)
+    }
+
+    EzzIconButton(
+        icon = icon,
+        onClick = onClick,
+        modifier = modifier,
+        contentDescription = contentDescription,
+        tint = fg,
+        backgroundColor = bg,
+        size = dimension,
+        iconSize = iconDim,
+        enabled = enabled
+    )
+}
+
+@Composable
+fun EzzIconButton(
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
     tint: Color = EzzTheme.colors.textSecondary,
     backgroundColor: Color = Color.Transparent,
     size: Dp = 36.dp,
@@ -198,8 +236,8 @@ fun EzzIconButton(
                 onClick = onClick
             ),
         shape = RoundedCornerShape(8.dp),
-        color = if (isHovered) colors.surfaceVariant else backgroundColor,
-        border = if (isHovered) BorderStroke(1.dp, colors.border) else null
+        color = if (isHovered) colors.surfaceLight else backgroundColor,
+        border = if (isHovered) BorderStroke(1.dp, colors.borderLight) else BorderStroke(1.dp, colors.border.copy(alpha = 0.5f))
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(

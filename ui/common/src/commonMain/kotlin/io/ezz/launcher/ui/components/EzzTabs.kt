@@ -55,10 +55,10 @@ fun <T> EzzTabs(
 
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(colors.surface)
-            .border(1.dp, colors.border, RoundedCornerShape(10.dp))
-            .padding(4.dp),
+            .border(1.dp, colors.border, RoundedCornerShape(8.dp))
+            .padding(3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         items.forEach { tab ->
@@ -74,14 +74,14 @@ fun <T> EzzTabs(
 
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(6.dp))
                     .background(bg)
                     .clickable(
                         interactionSource = interactionSource,
                         indication = null,
                         onClick = { onItemSelected(tab.value) }
                     )
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -90,7 +90,7 @@ fun <T> EzzTabs(
                             imageVector = tab.icon,
                             contentDescription = null,
                             tint = fg,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                     }
@@ -98,7 +98,7 @@ fun <T> EzzTabs(
                     Text(
                         text = tab.title,
                         color = fg,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                     )
 
@@ -122,6 +122,24 @@ fun <T> EzzTabs(
             }
         }
     }
+}
+
+@Composable
+fun EzzTabs(
+    tabs: List<String>,
+    selectedIndex: Int,
+    onTabSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val items = remember(tabs) {
+        tabs.mapIndexed { index, title -> TabItem(index, title) }
+    }
+    EzzTabs(
+        items = items,
+        selectedItem = selectedIndex,
+        onItemSelected = onTabSelected,
+        modifier = modifier
+    )
 }
 
 @Composable
@@ -152,9 +170,9 @@ fun <T> EzzDropdown(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(colors.surface)
-                    .border(1.dp, if (expanded) colors.primary else colors.border, RoundedCornerShape(10.dp))
+                    .border(1.dp, if (expanded) colors.primary else colors.border, RoundedCornerShape(8.dp))
                     .clickable { expanded = !expanded }
                     .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -162,7 +180,7 @@ fun <T> EzzDropdown(
                 Text(
                     text = if (selectedItem != null) itemToString(selectedItem) else placeholder,
                     color = if (selectedItem != null) colors.textPrimary else colors.textMuted,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     modifier = Modifier.weight(1f)
                 )
 

@@ -35,20 +35,24 @@ fun EzzEmptyState(
     modifier: Modifier = Modifier,
     icon: ImageVector = Icons.Default.FolderOpen,
     actionButtonText: String? = null,
-    onActionClick: (() -> Unit)? = null
+    onActionClick: (() -> Unit)? = null,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null
 ) {
     val colors = EzzTheme.colors
+    val btnText = actionButtonText ?: actionLabel
+    val btnClick = onActionClick ?: onAction
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(32.dp),
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Box(
             modifier = Modifier
-                .size(64.dp)
+                .size(52.dp)
                 .clip(CircleShape)
                 .background(colors.surfaceVariant)
                 .border(1.dp, colors.border, CircleShape),
@@ -58,36 +62,37 @@ fun EzzEmptyState(
                 imageVector = icon,
                 contentDescription = null,
                 tint = colors.primary,
-                modifier = Modifier.size(30.dp)
+                modifier = Modifier.size(24.dp)
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         Text(
             text = title,
             color = colors.textPrimary,
-            fontSize = 18.sp,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         Text(
             text = description,
             color = colors.textSecondary,
-            fontSize = 14.sp,
+            fontSize = 13.sp,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 24.dp)
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
 
-        if (actionButtonText != null && onActionClick != null) {
-            Spacer(modifier = Modifier.height(20.dp))
+        if (btnText != null && btnClick != null) {
+            Spacer(modifier = Modifier.height(16.dp))
             EzzButton(
-                text = actionButtonText,
-                onClick = onActionClick,
-                variant = EzzButtonVariant.PRIMARY
+                text = btnText,
+                onClick = btnClick,
+                variant = EzzButtonVariant.PRIMARY,
+                size = EzzButtonSize.SMALL
             )
         }
     }
@@ -106,13 +111,13 @@ fun EzzErrorState(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(32.dp),
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Box(
             modifier = Modifier
-                .size(64.dp)
+                .size(52.dp)
                 .clip(CircleShape)
                 .background(colors.dangerGlow)
                 .border(1.dp, colors.danger, CircleShape),
@@ -122,36 +127,37 @@ fun EzzErrorState(
                 imageVector = Icons.Default.ErrorOutline,
                 contentDescription = null,
                 tint = colors.danger,
-                modifier = Modifier.size(30.dp)
+                modifier = Modifier.size(24.dp)
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         Text(
             text = title,
             color = colors.textPrimary,
-            fontSize = 18.sp,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         Text(
             text = description,
             color = colors.danger,
-            fontSize = 13.sp,
+            fontSize = 12.sp,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 24.dp)
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
 
         if (actionButtonText != null && onActionClick != null) {
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             EzzButton(
                 text = actionButtonText,
                 onClick = onActionClick,
-                variant = EzzButtonVariant.SECONDARY
+                variant = EzzButtonVariant.SECONDARY,
+                size = EzzButtonSize.SMALL
             )
         }
     }

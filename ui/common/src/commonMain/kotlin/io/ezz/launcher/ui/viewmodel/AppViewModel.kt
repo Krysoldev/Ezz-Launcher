@@ -46,12 +46,30 @@ import io.ezz.launcher.ui.platform.PlatformBridge
 enum class NavigationScreen {
     HOME,
     INSTANCES,
-    MODS,
     ACCOUNTS,
+    MODS,
+    SERVERS,
     PROFILES,
     SETTINGS,
     CONSOLE
 }
+
+data class LaunchErrorData(
+    val instanceName: String,
+    val minecraftVersion: String,
+    val javaVersion: String,
+    val errorSummary: String,
+    val details: String? = null
+)
+
+data class ActiveDownloadState(
+    val stage: String = "PREPARING",
+    val currentFile: String = "",
+    val progress: Float = 0f,
+    val downloadedBytes: Long = 0L,
+    val totalBytes: Long = 0L,
+    val speedText: String = ""
+)
 
 data class ConsoleLogEntry(
     val timestamp: Long = System.currentTimeMillis(),
@@ -127,12 +145,24 @@ class AppViewModel(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    // Server List Flow
+    private val _savedServers = MutableStateFlow<List<io.ezz.launcher.core.model.instance.ServerEntry>>(emptyList())
+    val savedServers: StateFlow<List<io.ezz.launcher.core.model.instance.ServerEntry>> = _savedServers.asStateFlow()
+
+    // Download & Launch Progress HUD
+    val activeDownloadState = MutableStateFlow<ActiveDownloadState?>(null)
+
+    // Diagnostic Error Dialog State
+    val launchErrorDialogData = MutableStateFlow<LaunchErrorData?>(null)
+
     // Dialog States
     val showCreateInstanceDialog = MutableStateFlow(false)
     val showEditInstanceDialog = MutableStateFlow<Instance?>(null)
     val showAddOfflineAccountDialog = MutableStateFlow(false)
     val showMicrosoftLoginDialog = MutableStateFlow(false)
     val showEzzAuthDialog = MutableStateFlow(false)
+    val showAddServerDialog = MutableStateFlow(false)
+    val showSearchDialog = MutableStateFlow(false)
     val microsoftLoginProgress = MutableStateFlow<MicrosoftLoginProgress?>(null)
 
     init {
@@ -356,6 +386,29 @@ class AppViewModel(
         }
     }
 
+    fun addServer(name: String, address: String) {
+        val entry = io.ezz.launcher.core.model.instance.ServerEntry(
+            id = "server_${System.currentTimeMillis()}",
+            name = name.ifBlank { "Minecraft Server" },
+            address = address.trim(),
+            motd = "Custom Server",
+            isFeatured = false
+        )
+        _savedServers.value = _savedServers.value + entry
+    }
+
+    fun removeServer(id: String) {
+        _savedServers.value = _savedServers.value.filterNot { it.id == id }
+    }
+
+    fun repairInstance(instance: Instance? = _selectedInstance.value) {
+        val target = instance ?: return
+        scope.launch {
+            _logs.value = _logs.value + ConsoleLogEntry(message = "=== Validating & Repairing ${target.name} files ===")
+            launchInstance(target)
+        }
+    }
+
     fun launchInstance(instance: Instance? = _selectedInstance.value) {
         val targetInstance = instance ?: _selectedInstance.value
         if (targetInstance == null) {
@@ -381,28 +434,76 @@ class AppViewModel(
 
         scope.launch {
             _logs.value = listOf(ConsoleLogEntry(message = "=== Launching ${targetInstance.name} (${targetInstance.minecraftVersion}) as ${launchAccount.username} ==="))
-            launchEngine.launch(targetInstance, launchAccount).collect { event ->
-                when (event) {
-                    is LaunchEvent.StateChanged -> {
-                        val state = event.state
-                        _processState.value = state
-                        when (state) {
-                            is ProcessState.Running -> {
-                                _logs.value = _logs.value + ConsoleLogEntry(message = "=== Process started (PID: ${state.processId}) ===")
+            activeDownloadState.value = ActiveDownloadState(
+                stage = "PREPARING",
+                currentFile = "Checking dependencies...",
+                progress = 0.05f
+            )
+
+            try {
+                launchEngine.launch(targetInstance, launchAccount).collect { event ->
+                    when (event) {
+                        is LaunchEvent.StateChanged -> {
+                            val state = event.state
+                            _processState.value = state
+                            when (state) {
+                                is ProcessState.Preparing -> {
+                                    activeDownloadState.value = ActiveDownloadState(
+                                        stage = state.stage.uppercase(),
+                                        currentFile = state.stage,
+                                        progress = state.progress ?: 0.2f
+                                    )
+                                }
+                                is ProcessState.Running -> {
+                                    activeDownloadState.value = null
+                                    _logs.value = _logs.value + ConsoleLogEntry(message = "=== Process started (PID: ${state.processId}) ===")
+                                }
+                                is ProcessState.Exited -> {
+                                    activeDownloadState.value = null
+                                    _logs.value = _logs.value + ConsoleLogEntry(message = "=== Process exited with code ${state.exitCode} ===")
+                                }
+                                is ProcessState.Failed -> {
+                                    activeDownloadState.value = null
+                                    _logs.value = _logs.value + ConsoleLogEntry(message = "=== Launch Failed: ${state.error.message} ===", isError = true)
+                                    launchErrorDialogData.value = LaunchErrorData(
+                                        instanceName = targetInstance.name,
+                                        minecraftVersion = targetInstance.minecraftVersion,
+                                        javaVersion = targetInstance.javaPath ?: "System Default Runtime",
+                                        errorSummary = state.error.message,
+                                        details = (state.error as? io.ezz.launcher.core.model.runtime.LaunchError.ExecutionFailed)?.cause?.stackTraceToString()
+                                    )
+                                }
+                                else -> {
+                                    activeDownloadState.value = null
+                                }
                             }
-                            is ProcessState.Exited -> {
-                                _logs.value = _logs.value + ConsoleLogEntry(message = "=== Process exited with code ${state.exitCode} ===")
-                            }
-                            else -> {}
+                        }
+                        is LaunchEvent.ProgressUpdate -> {
+                            val dl = event.progress
+                            activeDownloadState.value = ActiveDownloadState(
+                                stage = "DOWNLOADING",
+                                currentFile = dl.currentItemName,
+                                progress = dl.percentage,
+                                downloadedBytes = dl.bytesDownloaded,
+                                totalBytes = dl.totalBytes,
+                                speedText = if (dl.totalBytes > 0) "${(dl.bytesDownloaded / 1024 / 1024)} MB / ${(dl.totalBytes / 1024 / 1024)} MB" else "${(dl.bytesDownloaded / 1024)} KB"
+                            )
+                        }
+                        is LaunchEvent.LogReceived -> {
+                            _logs.value = _logs.value + ConsoleLogEntry(message = event.line, isError = event.isError)
                         }
                     }
-                    is LaunchEvent.ProgressUpdate -> {
-                        // Progress update
-                    }
-                    is LaunchEvent.LogReceived -> {
-                        _logs.value = _logs.value + ConsoleLogEntry(message = event.line, isError = event.isError)
-                    }
                 }
+            } catch (e: Exception) {
+                _processState.value = ProcessState.Failed(io.ezz.launcher.core.model.runtime.LaunchError.ExecutionFailed(e.message ?: "Launch Failed", e))
+                activeDownloadState.value = null
+                launchErrorDialogData.value = LaunchErrorData(
+                    instanceName = targetInstance.name,
+                    minecraftVersion = targetInstance.minecraftVersion,
+                    javaVersion = targetInstance.javaPath ?: "System Default Runtime",
+                    errorSummary = e.message ?: "Unknown launch failure",
+                    details = e.stackTraceToString()
+                )
             }
         }
     }
