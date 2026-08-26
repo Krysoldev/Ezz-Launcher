@@ -1,7 +1,10 @@
 package io.ezz.launcher.ui.home
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -82,7 +85,7 @@ fun HomeScreen(
             .fillMaxSize()
             .background(Color(0xFF050505))
             .verticalScroll(rememberScrollState())
-            .padding(22.dp)
+            .padding(24.dp)
     ) {
         // 1. Maintenance Notification (if active)
         if (isMaintenanceMode) {
@@ -160,7 +163,6 @@ fun HomeScreen(
         HeroBannerSection(
             instance = selectedInstance,
             accountName = selectedAccount?.username ?: "Offline Player",
-            accountType = selectedAccount?.type ?: AccountType.OFFLINE,
             processState = processState,
             modCount = installedMods.size,
             onLaunch = { viewModel.launchInstance(selectedInstance) },
@@ -173,7 +175,7 @@ fun HomeScreen(
             onCreateInstance = { viewModel.showCreateInstanceDialog.value = true }
         )
 
-        Spacer(modifier = Modifier.height(22.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         // 4. Main Body: My Instances (68% width) + Quick Info & Announcements (32% width)
         Row(
@@ -216,16 +218,16 @@ fun HomeScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(200.dp)
+                            .height(180.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF101010))
-                            .border(1.dp, Color(0xFF242424), RoundedCornerShape(8.dp)),
+                            .background(Color(0xFF0D0D0D))
+                            .border(1.dp, Color(0xFF1E1E1E), RoundedCornerShape(8.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         EzzEmptyState(
-                            title = "No Minecraft Instances Yet",
-                            description = "Create your first instance to start playing Vanilla, Fabric, or OptiFine.",
-                            actionLabel = "Create Instance",
+                            title = "No Instances Created",
+                            description = "Create a custom instance with Fabric, OptiFine or Vanilla.",
+                            actionLabel = "+ Create Instance",
                             onAction = { viewModel.showCreateInstanceDialog.value = true }
                         )
                     }
@@ -233,10 +235,12 @@ fun HomeScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         instances.forEach { inst ->
                             val isSelected = inst.id == selectedInstance?.id
+                            val isRunning = processState is ProcessState.Running && isSelected
+
                             InstanceCompactCard(
                                 instance = inst,
                                 isSelected = isSelected,
-                                isRunning = processState is ProcessState.Running && isSelected,
+                                isRunning = isRunning,
                                 onSelect = { viewModel.selectInstance(inst) },
                                 onPlay = {
                                     viewModel.selectInstance(inst)
@@ -250,19 +254,17 @@ fun HomeScreen(
                 }
             }
 
-            // Right Column: Quick Stats & Announcements Feed
+            // Right Column: System Specs & Network Announcements
             Column(
                 modifier = Modifier.weight(0.32f),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // Quick Info Panel
                 QuickInfoPanel(
                     instance = selectedInstance,
                     accountName = selectedAccount?.username ?: "Offline Player",
                     onViewSettings = { viewModel.navigateTo(NavigationScreen.SETTINGS) }
                 )
 
-                // Announcements Feed
                 AnnouncementsPanel(
                     announcements = announcements,
                     onOpenAnnouncements = { viewModel.platformBridge.openUrl("https://github.com/Krysoldev/Ezz-Launcher") }
@@ -276,7 +278,6 @@ fun HomeScreen(
 private fun HeroBannerSection(
     instance: Instance?,
     accountName: String,
-    accountType: AccountType,
     processState: ProcessState,
     modCount: Int,
     onLaunch: () -> Unit,
@@ -288,17 +289,17 @@ private fun HeroBannerSection(
         modifier = Modifier
             .fillMaxWidth()
             .height(210.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(10.dp))
             .background(
                 Brush.linearGradient(
                     listOf(
                         Color(0xFF161616),
                         Color(0xFF0F0F0F),
-                        Color(0xFF0A0A0A)
+                        Color(0xFF080808)
                     )
                 )
             )
-            .border(1.dp, Color(0xFF282828), RoundedCornerShape(8.dp))
+            .border(1.dp, Color(0xFF242424), RoundedCornerShape(10.dp))
             .padding(26.dp)
     ) {
         Row(
@@ -311,36 +312,36 @@ private fun HeroBannerSection(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.Center
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF10B981))
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "READY TO PLAY • $accountName",
-                        color = Color(0xFFA0A0A0),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.8.sp
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Text(
-                    text = instance?.name ?: "No Instance Selected",
-                    color = Color.White,
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Black,
-                    maxLines = 1
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
                 if (instance != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF10B981))
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "READY TO PLAY • $accountName",
+                            color = Color(0xFFA0A0A0),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = instance.name,
+                        color = Color.White,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -363,9 +364,28 @@ private fun HeroBannerSection(
                     }
                 } else {
                     Text(
-                        text = "Create a Minecraft Java Edition instance to launch",
-                        color = Color(0xFF777777),
-                        fontSize = 13.sp
+                        text = "WELCOME BACK",
+                        color = Color(0xFF888888),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.2.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = accountName,
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Black
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "Create your first Minecraft Java Edition instance to start playing.",
+                        color = Color(0xFFA0A0A0),
+                        fontSize = 12.5.sp
                     )
                 }
             }
@@ -380,7 +400,6 @@ private fun HeroBannerSection(
                 if (instance != null) {
                     val isRunning = processState is ProcessState.Running
                     val isPreparing = processState is ProcessState.Preparing
-                    val isFailed = processState is ProcessState.Failed
 
                     val interactionSource = remember { MutableInteractionSource() }
                     val isHovered by interactionSource.collectIsHoveredAsState()
@@ -654,7 +673,7 @@ private fun QuickInfoPanel(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "SYSTEM & GAME SPECS",
+                    text = "SYSTEM",
                     color = Color(0xFF888888),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
@@ -672,9 +691,9 @@ private fun QuickInfoPanel(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            SpecRow(label = "Active Player", value = accountName)
-            SpecRow(label = "Java Runtime", value = instance?.javaPath?.substringAfterLast("\\") ?: "System Auto")
-            SpecRow(label = "RAM Allocation", value = "${(instance?.maxMemoryMb ?: 4096) / 1024} GB")
+            SpecRow(label = "Account", value = accountName)
+            SpecRow(label = "Java", value = instance?.javaPath?.substringAfterLast("\\") ?: "System Auto")
+            SpecRow(label = "RAM", value = "${(instance?.maxMemoryMb ?: 4096) / 1024} GB")
             SpecRow(label = "Resolution", value = "${instance?.windowWidth ?: 1280}x${instance?.windowHeight ?: 720}")
             SpecRow(label = "Platform", value = "Windows x64")
         }
