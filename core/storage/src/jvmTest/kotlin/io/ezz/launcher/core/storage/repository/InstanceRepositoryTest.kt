@@ -2,18 +2,7 @@ package io.ezz.launcher.core.storage.repository
 
 import io.ezz.launcher.core.model.instance.LoaderType
 import io.ezz.launcher.core.storage.path.DefaultPathProvider
-import io.ezz.launcher.core.storage.supabase.SupabaseClient
-import io.ezz.launcher.core.storage.supabase.SupabaseConfig
-import io.ezz.launcher.core.storage.supabase.SupabaseInstanceDto
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.mock.MockEngine
-import io.ktor.client.engine.mock.respond
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.headersOf
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import okio.Path.Companion.toPath
 import java.io.File
 import kotlin.test.AfterTest
@@ -27,9 +16,7 @@ class InstanceRepositoryTest {
 
     private lateinit var tempDir: File
     private lateinit var pathProvider: DefaultPathProvider
-    private lateinit var repository: SupabaseInstanceRepository
-    private val json = Json { ignoreUnknownKeys = true }
-    private val databaseRows = mutableListOf<SupabaseInstanceDto>()
+    private lateinit var repository: LocalInstanceRepository
 
     @BeforeTest
     fun setUp() {
@@ -39,43 +26,7 @@ class InstanceRepositoryTest {
         }
         pathProvider = DefaultPathProvider(tempDir.absolutePath.toPath())
         pathProvider.initializeDirectories()
-        databaseRows.clear()
-
-        val mockEngine = MockEngine { request ->
-            val path = request.url.encodedPath
-            val method = request.method.value
-            val responseHeaders = headersOf(HttpHeaders.ContentType, "application/json")
-
-            when {
-                path.contains("/rest/v1/instances") && method == "GET" -> {
-                    respond(json.encodeToString(databaseRows), HttpStatusCode.OK, responseHeaders)
-                }
-                path.contains("/rest/v1/instances") && method == "POST" -> {
-                    val bodyString = (request.body as? io.ktor.http.content.TextContent)?.text ?: ""
-                    val dto = json.decodeFromString<SupabaseInstanceDto>(bodyString)
-                    databaseRows.add(dto)
-                    respond(json.encodeToString(listOf(dto)), HttpStatusCode.Created, responseHeaders)
-                }
-                path.contains("/rest/v1/instances") && method == "PATCH" -> {
-                    val bodyString = (request.body as? io.ktor.http.content.TextContent)?.text ?: ""
-                    val dto = json.decodeFromString<SupabaseInstanceDto>(bodyString)
-                    databaseRows.removeIf { it.id == dto.id }
-                    databaseRows.add(dto)
-                    respond(json.encodeToString(listOf(dto)), HttpStatusCode.OK, responseHeaders)
-                }
-                path.contains("/rest/v1/instances") && method == "DELETE" -> {
-                    respond("{}", HttpStatusCode.OK, responseHeaders)
-                }
-                else -> {
-                    respond("[]", HttpStatusCode.OK, responseHeaders)
-                }
-            }
-        }
-
-        val httpClient = HttpClient(mockEngine)
-        val supabaseConfig = SupabaseConfig("https://mock.supabase.co", "mock-anon-key")
-        val supabaseClient = SupabaseClient(supabaseConfig, httpClient)
-        repository = SupabaseInstanceRepository(supabaseClient, pathProvider)
+        repository = LocalInstanceRepository(pathProvider)
     }
 
     @AfterTest
@@ -98,64 +49,68 @@ class InstanceRepositoryTest {
         assertNotNull(instance.id)
         assertEquals("Test Survival", instance.name)
         assertEquals("1.21.4", instance.minecraftVersion)
-        assertEquals(1, databaseRows.size, "Supabase PostgreSQL must contain the newly inserted instance")
 
-        // Verify isolated subdirectories exist
-        val gameDir = pathProvider.getInstanceGameDirectory(instance.id).toFile()
-        assertTrue(gameDir.exists(), "Game directory must exist")
-        assertTrue(File(gameDir, "mods").exists(), "mods directory must exist")
-        assertTrue(File(gameDir, "config").exists(), "config directory must exist")
-        assertTrue(File(gameDir, "saves").exists(), "saves directory must exist")
-        assertTrue(File(gameDir, "resourcepacks").exists(), "resourcepacks directory must exist")
-        assertTrue(File(gameDir, "shaderpacks").exists(), "shaderpacks directory must exist")
-        assertTrue(File(gameDir, "logs").exists(), "logs directory must exist")
+        // Verify isolated directory structure on disk
+        val instanceDir = pathProvider.getInstanceDirectory(instance.id)
+        val mcDir = instanceDir.resolve(".minecraft")
+        assertTrue(instanceDir.toFile().exists())
+        assertTrue(mcDir.toFile().exists())
+        assertTrue(mcDir.resolve("mods").toFile().exists())
+        assertTrue(mcDir.resolve("resourcepacks").toFile().exists())
+        assertTrue(mcDir.resolve("shaderpacks").toFile().exists())
     }
 
     @Test
-    fun testDuplicateAndIsolation() = runBlocking {
-        val original = repository.createInstance(
-            name = "Original",
-            minecraftVersion = "1.20.4",
-            loaderType = LoaderType.FABRIC,
-            loaderVersion = "0.16.9",
-            minMemoryMb = 1024,
-            maxMemoryMb = 2048,
-            customJvmArgs = emptyList()
+    fun testUpdateInstance() = runBlocking {
+        val created = repository.createInstance(
+            name = "Vanilla Old",
+            minecraftVersion = "1.20.1",
+            loaderType = LoaderType.VANILLA
         )
 
-        val duplicated = repository.duplicateInstance(original.id, "Duplicated")
+        val updated = created.copy(name = "Vanilla Updated", maxMemoryMb = 8192)
+        repository.updateInstance(updated)
 
-        assertNotNull(duplicated)
-        assertTrue(duplicated.id != original.id)
-        assertEquals("Duplicated", duplicated.name)
-        assertEquals(2, databaseRows.size, "Supabase PostgreSQL must contain both original and duplicated instances")
-
-        val origDir = pathProvider.getInstanceDirectory(original.id).toFile()
-        val dupDir = pathProvider.getInstanceDirectory(duplicated.id).toFile()
-
-        assertTrue(origDir.exists())
-        assertTrue(dupDir.exists())
-        assertTrue(origDir.absolutePath != dupDir.absolutePath)
+        val fetched = repository.getInstance(created.id)
+        assertNotNull(fetched)
+        assertEquals("Vanilla Updated", fetched.name)
+        assertEquals(8192, fetched.maxMemoryMb)
     }
 
     @Test
     fun testDeleteInstanceRemovesDirectory() = runBlocking {
-        val instance = repository.createInstance(
+        val created = repository.createInstance(
             name = "To Delete",
             minecraftVersion = "1.21.1",
-            loaderType = LoaderType.VANILLA,
-            loaderVersion = null,
-            minMemoryMb = 1024,
-            maxMemoryMb = 2048,
-            customJvmArgs = emptyList()
+            loaderType = LoaderType.FABRIC
         )
 
-        val instanceDir = pathProvider.getInstanceDirectory(instance.id).toFile()
-        assertTrue(instanceDir.exists())
+        val instDir = pathProvider.getInstanceDirectory(created.id)
+        assertTrue(instDir.toFile().exists())
 
-        repository.deleteInstance(instance.id)
+        repository.deleteInstance(created.id)
+        assertEquals(0, repository.instances.value.size)
+        assertTrue(!instDir.toFile().exists())
+    }
 
-        // Verify local directory removed
-        assertTrue(!instanceDir.exists(), "Instance directory should be deleted from filesystem")
+    @Test
+    fun testDuplicateInstance() = runBlocking {
+        val original = repository.createInstance(
+            name = "Base Profile",
+            minecraftVersion = "1.21.4",
+            loaderType = LoaderType.FABRIC,
+            loaderVersion = "0.16.10",
+            maxMemoryMb = 6144
+        )
+
+        val duplicate = repository.duplicateInstance(original.id, "Base Profile (Copy)")
+        assertNotNull(duplicate)
+        assertEquals("Base Profile (Copy)", duplicate.name)
+        assertEquals("1.21.4", duplicate.minecraftVersion)
+        assertEquals(LoaderType.FABRIC, duplicate.loaderType)
+        assertEquals("0.16.10", duplicate.loaderVersion)
+        assertEquals(6144, duplicate.maxMemoryMb)
+
+        assertEquals(2, repository.instances.value.size)
     }
 }

@@ -370,8 +370,6 @@ class AppViewModel(
                 supabaseStatusMessage.value = if (connected) "Successfully connected to Supabase PostgreSQL!" else "Connection failed. Please check URL and Anon Key."
                 if (connected) {
                     loadPublicData()
-                    instanceRepository.loadAll()
-                    accountRepository.loadAll()
                 }
             } catch (e: Exception) {
                 _isSupabaseConnected.value = false
@@ -390,8 +388,6 @@ class AppViewModel(
                 _isSupabaseConnected.value = connected
                 if (connected) {
                     loadPublicData()
-                    instanceRepository.loadAll()
-                    accountRepository.loadAll()
                 }
             } catch (e: Exception) {
                 _isSupabaseConnected.value = false

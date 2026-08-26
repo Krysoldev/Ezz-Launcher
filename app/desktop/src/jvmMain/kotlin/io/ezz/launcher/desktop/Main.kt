@@ -41,9 +41,10 @@ fun main() = application {
     val supabaseConfig = io.ezz.launcher.core.storage.supabase.SupabaseConfig.fromEnvironment()
     val supabaseClient = io.ezz.launcher.core.storage.supabase.SupabaseClient(supabaseConfig, httpClient)
 
-    val instanceRepository = io.ezz.launcher.core.storage.repository.SupabaseInstanceRepository(supabaseClient, pathProvider)
-    val accountRepository = io.ezz.launcher.core.storage.repository.SupabaseAccountRepository(supabaseClient, secureVault)
-    val settingsRepository = io.ezz.launcher.core.storage.repository.SupabaseSettingsRepository(supabaseClient)
+    // Local-First Repositories (Authoritative for machine state)
+    val instanceRepository = io.ezz.launcher.core.storage.repository.LocalInstanceRepository(pathProvider)
+    val accountRepository = io.ezz.launcher.core.storage.repository.LocalMinecraftAccountRepository(secureVault)
+    val settingsRepository = io.ezz.launcher.core.storage.repository.LocalSettingsRepository(pathProvider)
     val profileRepository = io.ezz.launcher.core.storage.repository.SupabaseProfileRepository(supabaseClient)
     val modRepository = io.ezz.launcher.core.storage.repository.SupabaseModRepository(supabaseClient)
 
