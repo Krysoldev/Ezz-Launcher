@@ -58,6 +58,7 @@ import io.ezz.launcher.ui.components.EzzButtonSize
 import io.ezz.launcher.ui.components.EzzButtonVariant
 import io.ezz.launcher.ui.components.EzzCard
 import io.ezz.launcher.ui.components.EzzIconButton
+import io.ezz.launcher.ui.components.EzzLogo
 import io.ezz.launcher.ui.components.EzzSlider
 import io.ezz.launcher.ui.components.EzzTextField
 import io.ezz.launcher.ui.components.EzzToggle
@@ -372,13 +373,18 @@ private fun JavaSettingsSection(viewModel: AppViewModel) {
 private fun CloudSettingsSection(viewModel: AppViewModel) {
     val colors = EzzTheme.colors
     val isConnected by viewModel.isSupabaseConnected.collectAsState()
+    val isTesting by viewModel.isTestingSupabaseConnection.collectAsState()
+    val statusMsg by viewModel.supabaseStatusMessage.collectAsState()
+
+    var supabaseUrl by remember { mutableStateOf(viewModel.supabaseClient?.config?.supabaseUrl ?: "https://idywzmspumhahzzfsdjx.supabase.co") }
+    var anonKey by remember { mutableStateOf(viewModel.supabaseClient?.config?.anonKey ?: "") }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
     ) {
-        SectionHeader("Supabase Cloud Database", "Authoritative cloud backend for Ezz Launcher state and global public data")
+        SectionHeader("Supabase Cloud Database", "Configure Supabase PostgreSQL backend connection for cloud profiles and public data")
 
         EzzCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(20.dp)) {
@@ -392,29 +398,76 @@ private fun CloudSettingsSection(viewModel: AppViewModel) {
                             imageVector = if (isConnected == true) Icons.Default.CloudDone else Icons.Default.CloudOff,
                             contentDescription = null,
                             tint = if (isConnected == true) colors.accent else colors.warning,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(26.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text("PostgreSQL Cloud Project", color = colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                            Text("https://idywzmspumhahzzfsdjx.supabase.co", color = colors.textSecondary, fontSize = 12.sp)
+                            Text("PostgreSQL Cloud Service", color = colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = if (isConnected == true) "Connected & Synchronized" else "Offline / Local Cache Active",
+                                color = if (isConnected == true) colors.accent else colors.textSecondary,
+                                fontSize = 12.sp
+                            )
                         }
                     }
 
                     EzzBadge(
-                        text = if (isConnected == true) "CONNECTED" else "CONNECTING",
-                        variant = if (isConnected == true) EzzBadgeVariant.SUCCESS else EzzBadgeVariant.WARNING
+                        text = if (isConnected == true) "ONLINE" else "LOCAL ONLY",
+                        variant = if (isConnected == true) EzzBadgeVariant.SUCCESS else EzzBadgeVariant.NEUTRAL
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
-                Text(
-                    text = "Public tables (launcher_releases, minecraft_versions, fabric_versions, optifine_versions, launcher_announcements, launcher_config, feature_flags) are synchronized securely via public RLS policies.",
-                    color = colors.textMuted,
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp
+                EzzTextField(
+                    value = supabaseUrl,
+                    onValueChange = { supabaseUrl = it },
+                    label = "Supabase Project URL",
+                    placeholder = "https://your-project.supabase.co",
+                    modifier = Modifier.fillMaxWidth()
                 )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                EzzTextField(
+                    value = anonKey,
+                    onValueChange = { anonKey = it },
+                    label = "Supabase Anon Key (Public API Key)",
+                    placeholder = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (statusMsg != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = statusMsg ?: "",
+                        color = if (isConnected == true) colors.accent else colors.primary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    EzzButton(
+                        text = if (isTesting) "Testing Connection..." else "Save & Test Connection",
+                        onClick = { viewModel.updateSupabaseCredentials(supabaseUrl, anonKey) },
+                        variant = EzzButtonVariant.PRIMARY,
+                        size = EzzButtonSize.MEDIUM,
+                        isLoading = isTesting
+                    )
+
+                    EzzButton(
+                        text = "Sync Public Data",
+                        onClick = { viewModel.loadPublicData() },
+                        variant = EzzButtonVariant.SECONDARY,
+                        size = EzzButtonSize.MEDIUM
+                    )
+                }
             }
         }
     }
@@ -448,25 +501,20 @@ private fun DiagnosticsSettingsSection(viewModel: AppViewModel) {
                         appendLine("OS: $osName ($osArch)")
                         appendLine("JVM Version: $javaVersion")
                         appendLine("Logical CPU Cores: $cores")
-                        appendLine("JVM Max Heap: $totalRamGb GB")
-                        appendLine("Storage Root: ${viewModel.pathProvider.rootDirectory}")
+                        appendLine("Max JVM Memory: ${totalRamGb} GB")
                     }
-                    try {
-                        val selection = StringSelection(report)
-                        Toolkit.getDefaultToolkit().systemClipboard.setContents(selection, selection)
-                        ToastManager.show("Diagnostics Copied", "Scrubbed telemetry report copied to clipboard", ToastType.SUCCESS)
-                    } catch (e: Throwable) {
-                        ToastManager.show("Copy Failed", e.message, ToastType.ERROR)
-                    }
+                    viewModel.platformBridge.copyToClipboard(report)
                 },
-                variant = EzzButtonVariant.PRIMARY,
-                size = EzzButtonSize.SMALL,
-                icon = Icons.Default.ContentCopy
+                variant = EzzButtonVariant.SECONDARY,
+                size = EzzButtonSize.SMALL
             )
         }
 
         EzzCard(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
                 DiagnosticRow("Operating System", "$osName ($osArch)")
                 DiagnosticRow("Host CPU Cores", "$cores Logical Processors")
                 DiagnosticRow("Runtime Java", "Java $javaVersion")
@@ -489,13 +537,23 @@ private fun AboutSettingsSection(viewModel: AppViewModel) {
 
         EzzCard(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(24.dp)) {
-                Text("EZZ LAUNCHER", color = colors.primary, fontSize = 20.sp, fontWeight = FontWeight.Black)
-                Text("Version 1.0.0 (Windows Production Desktop)", color = colors.textSecondary, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    EzzLogo(size = 54.dp, shapeRadius = 12.dp)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("EZZ", color = colors.primary, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("LAUNCHER", color = colors.textPrimary, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                        }
+                        Text("Version 1.0.0 (Windows Production Desktop)", color = colors.textSecondary, fontSize = 13.sp)
+                    }
+                }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
                 Text(
-                    text = "Built with Kotlin Multiplatform and Jetpack Compose for Desktop. Powered by Supabase PostgreSQL for cloud sync.",
+                    text = "Built with Kotlin Multiplatform and Jetpack Compose for Desktop. Powered by Supabase PostgreSQL for cloud profile synchronization.",
                     color = colors.textMuted,
                     fontSize = 13.sp,
                     lineHeight = 18.sp

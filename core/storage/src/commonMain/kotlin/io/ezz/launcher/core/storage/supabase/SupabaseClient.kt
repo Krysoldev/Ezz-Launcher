@@ -29,7 +29,7 @@ import kotlinx.serialization.json.put
 class SupabaseException(message: String, val code: String? = null, cause: Throwable? = null) : Exception(message, cause)
 
 class SupabaseClient(
-    val config: SupabaseConfig,
+    var config: SupabaseConfig,
     @PublishedApi internal val httpClient: HttpClient,
     @PublishedApi internal val dispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
@@ -47,6 +47,10 @@ class SupabaseClient(
 
     val currentUserId: String? get() = _currentSession.value?.user?.id
 
+    fun updateConfig(newConfig: SupabaseConfig) {
+        config = newConfig
+    }
+
     fun setSession(session: SupabaseAuthSessionDto?) {
         _currentSession.value = session
     }
@@ -58,11 +62,15 @@ class SupabaseClient(
 
     suspend fun checkConnection(): Boolean = withContext(dispatcher) {
         try {
+            if (!config.isConfigured) {
+                _isConnected.value = false
+                return@withContext false
+            }
             val response = httpClient.get("${config.restUrl}/") {
                 header("apikey", config.anonKey)
                 header(HttpHeaders.Authorization, "Bearer ${getAuthToken()}")
             }
-            val connected = response.status.value in 200..499
+            val connected = response.status.isSuccess()
             _isConnected.value = connected
             connected
         } catch (e: Throwable) {

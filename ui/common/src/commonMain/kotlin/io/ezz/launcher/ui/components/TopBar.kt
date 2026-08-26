@@ -79,12 +79,9 @@ fun TopBar(
                     indication = null
                 ) { viewModel.navigateTo(NavigationScreen.HOME) }
         ) {
-            Image(
-                painter = painterResource("logo.png"),
-                contentDescription = "Ezz Launcher Mascot",
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(8.dp))
+            EzzLogo(
+                size = 34.dp,
+                shapeRadius = 8.dp
             )
             Spacer(modifier = Modifier.width(10.dp))
             Column {

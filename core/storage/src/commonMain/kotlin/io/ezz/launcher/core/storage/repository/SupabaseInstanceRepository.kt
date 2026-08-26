@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import okio.FileSystem
 import okio.Path
 import java.util.UUID
@@ -22,28 +24,86 @@ class SupabaseInstanceRepository(
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : InstanceRepository {
 
+    private val json = Json {
+        ignoreUnknownKeys = true
+        prettyPrint = true
+        isLenient = true
+    }
+
     private val _instances = MutableStateFlow<List<Instance>>(emptyList())
     override val instances: StateFlow<List<Instance>> = _instances.asStateFlow()
+
+    private val localCacheFile: Path get() = pathProvider.rootDirectory.resolve("local_instances.json")
 
     private val effectiveUserId: String
         get() = supabaseClient.currentUserId ?: "00000000-0000-0000-0000-000000000000"
 
+    private fun readLocalCache(): List<Instance> {
+        return try {
+            if (fileSystem.exists(localCacheFile)) {
+                val content = fileSystem.read(localCacheFile) { readUtf8() }
+                json.decodeFromString<List<Instance>>(content)
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun saveLocalCache(list: List<Instance>) {
+        try {
+            val parent = localCacheFile.parent
+            if (parent != null && !fileSystem.exists(parent)) {
+                fileSystem.createDirectories(parent)
+            }
+            fileSystem.write(localCacheFile) {
+                writeUtf8(json.encodeToString(list))
+            }
+        } catch (e: Exception) {
+            println("Warning: failed to write local instances cache: ${e.message}")
+        }
+    }
+
     override suspend fun loadAll(): List<Instance> = withContext(dispatcher) {
-        val dtos: List<SupabaseInstanceDto> = supabaseClient.select(
-            table = "instances",
-            params = mapOf("select" to "*", "order" to "created_at.desc")
-        )
-        val loaded = dtos.map { it.toInstance() }
-        _instances.value = loaded
-        loaded
+        try {
+            if (supabaseClient.config.isConfigured && supabaseClient.isConnected.value == true) {
+                val dtos: List<SupabaseInstanceDto> = supabaseClient.select(
+                    table = "instances",
+                    params = mapOf("select" to "*", "order" to "created_at.desc")
+                )
+                val loaded = dtos.map { it.toInstance() }
+                saveLocalCache(loaded)
+                _instances.value = loaded
+                return@withContext loaded
+            }
+        } catch (e: Exception) {
+            println("Supabase loadAll notice (falling back to local cache): ${e.message}")
+        }
+
+        // Fallback to local disk cache
+        val local = readLocalCache()
+        _instances.value = local
+        local
     }
 
     override suspend fun getInstance(id: String): Instance? = withContext(dispatcher) {
-        val dtos: List<SupabaseInstanceDto> = supabaseClient.select(
-            table = "instances",
-            params = mapOf("id" to "eq.$id", "select" to "*")
-        )
-        dtos.firstOrNull()?.toInstance()
+        val current = _instances.value.find { it.id == id }
+        if (current != null) return@withContext current
+
+        try {
+            if (supabaseClient.config.isConfigured && supabaseClient.isConnected.value == true) {
+                val dtos: List<SupabaseInstanceDto> = supabaseClient.select(
+                    table = "instances",
+                    params = mapOf("id" to "eq.$id", "select" to "*")
+                )
+                val inst = dtos.firstOrNull()?.toInstance()
+                if (inst != null) return@withContext inst
+            }
+        } catch (e: Exception) {
+            // fallback
+        }
+        readLocalCache().find { it.id == id }
     }
 
     override suspend fun createInstance(
@@ -57,27 +117,23 @@ class SupabaseInstanceRepository(
         customJvmArgs: List<String>
     ): Instance = withContext(dispatcher) {
         val newId = UUID.randomUUID().toString()
-        val dto = SupabaseInstanceDto(
+        val instance = Instance(
             id = newId,
-            userId = effectiveUserId,
             name = name,
             minecraftVersion = minecraftVersion,
-            loaderType = loaderType.name,
+            loaderType = loaderType,
             loaderVersion = loaderVersion,
             iconId = iconId,
             minMemoryMb = minMemoryMb,
             maxMemoryMb = maxMemoryMb,
-            customJvmArgs = customJvmArgs
+            customJvmArgs = customJvmArgs,
+            createdAt = System.currentTimeMillis()
         )
 
-        // Authoritative write to Supabase PostgreSQL
-        val returned: List<SupabaseInstanceDto> = supabaseClient.insert("instances", dto)
-        val created = (returned.firstOrNull() ?: dto).toInstance()
-
         // Prepare local Minecraft runtime directories
-        val instanceDir = pathProvider.getInstanceDirectory(created.id)
+        val instanceDir = pathProvider.getInstanceDirectory(instance.id)
         fileSystem.createDirectories(instanceDir)
-        val gameDir = pathProvider.getInstanceGameDirectory(created.id)
+        val gameDir = pathProvider.getInstanceGameDirectory(instance.id)
         fileSystem.createDirectories(gameDir)
         fileSystem.createDirectories(gameDir.resolve("mods"))
         fileSystem.createDirectories(gameDir.resolve("config"))
@@ -85,60 +141,98 @@ class SupabaseInstanceRepository(
         fileSystem.createDirectories(gameDir.resolve("shaderpacks"))
         fileSystem.createDirectories(gameDir.resolve("saves"))
         fileSystem.createDirectories(gameDir.resolve("logs"))
-        fileSystem.createDirectories(pathProvider.getInstanceNativesDirectory(created.id))
+        fileSystem.createDirectories(pathProvider.getInstanceNativesDirectory(instance.id))
 
-        loadAll()
-        created
+        // Save locally first
+        val currentList = readLocalCache().filter { it.id != newId } + instance
+        saveLocalCache(currentList)
+        _instances.value = currentList
+
+        // Sync to Supabase if connected
+        try {
+            if (supabaseClient.config.isConfigured) {
+                val dto = SupabaseInstanceDto.fromInstance(instance, effectiveUserId)
+                supabaseClient.insert<SupabaseInstanceDto, SupabaseInstanceDto>("instances", dto)
+            }
+        } catch (e: Exception) {
+            println("Notice: Supabase cloud sync deferred for new instance: ${e.message}")
+        }
+
+        instance
     }
 
     override suspend fun updateInstance(instance: Instance): Unit = withContext(dispatcher) {
-        val dto = SupabaseInstanceDto.fromInstance(instance, effectiveUserId)
-        supabaseClient.update<SupabaseInstanceDto, SupabaseInstanceDto>(
-            table = "instances",
-            filterParams = mapOf("id" to "eq.${instance.id}"),
-            bodyData = dto
-        )
-        loadAll()
+        val currentList = readLocalCache().map { if (it.id == instance.id) instance else it }
+        saveLocalCache(currentList)
+        _instances.value = currentList
+
+        try {
+            if (supabaseClient.config.isConfigured) {
+                val dto = SupabaseInstanceDto.fromInstance(instance, effectiveUserId)
+                supabaseClient.update<SupabaseInstanceDto, SupabaseInstanceDto>(
+                    table = "instances",
+                    filterParams = mapOf("id" to "eq.${instance.id}"),
+                    bodyData = dto
+                )
+            }
+        } catch (e: Exception) {
+            println("Notice: Supabase cloud sync deferred for instance update: ${e.message}")
+        }
     }
 
     override suspend fun deleteInstance(id: String): Unit = withContext(dispatcher) {
-        // Authoritative deletion in Supabase PostgreSQL
-        supabaseClient.delete(
-            table = "instances",
-            filterParams = mapOf("id" to "eq.$id")
-        )
+        val currentList = readLocalCache().filter { it.id != id }
+        saveLocalCache(currentList)
+        _instances.value = currentList
 
-        // Clean up local Minecraft runtime files
+        // Clean up local files
         val instanceDir = pathProvider.getInstanceDirectory(id)
         if (fileSystem.exists(instanceDir)) {
             fileSystem.deleteRecursively(instanceDir)
         }
 
-        loadAll()
+        try {
+            if (supabaseClient.config.isConfigured) {
+                supabaseClient.delete(
+                    table = "instances",
+                    filterParams = mapOf("id" to "eq.$id")
+                )
+            }
+        } catch (e: Exception) {
+            println("Notice: Supabase delete deferred: ${e.message}")
+        }
     }
 
     override suspend fun duplicateInstance(id: String, newName: String): Instance = withContext(dispatcher) {
-        val original = getInstance(id) ?: throw IllegalArgumentException("Instance $id not found in Supabase")
+        val original = getInstance(id) ?: throw IllegalArgumentException("Instance $id not found")
         val newId = UUID.randomUUID().toString()
         val duplicated = original.copy(
             id = newId,
             name = newName,
-            createdAt = 0L,
+            createdAt = System.currentTimeMillis(),
             lastPlayedAt = null,
             totalPlayTimeSeconds = 0L
         )
 
-        val dto = SupabaseInstanceDto.fromInstance(duplicated, effectiveUserId)
-        val returned: List<SupabaseInstanceDto> = supabaseClient.insert("instances", dto)
-        val created = (returned.firstOrNull() ?: dto).toInstance()
-
-        // Copy local .minecraft game files (mods, config, saves, resourcepacks)
+        // Copy local files
         val srcGameDir = pathProvider.getInstanceGameDirectory(id)
         val destGameDir = pathProvider.getInstanceGameDirectory(newId)
         copyDirectory(srcGameDir, destGameDir)
 
-        loadAll()
-        created
+        val currentList = readLocalCache().filter { it.id != newId } + duplicated
+        saveLocalCache(currentList)
+        _instances.value = currentList
+
+        try {
+            if (supabaseClient.config.isConfigured) {
+                val dto = SupabaseInstanceDto.fromInstance(duplicated, effectiveUserId)
+                supabaseClient.insert<SupabaseInstanceDto, SupabaseInstanceDto>("instances", dto)
+            }
+        } catch (e: Exception) {
+            println("Notice: Supabase duplicate sync deferred: ${e.message}")
+        }
+
+        duplicated
     }
 
     private fun copyDirectory(source: Path, target: Path) {

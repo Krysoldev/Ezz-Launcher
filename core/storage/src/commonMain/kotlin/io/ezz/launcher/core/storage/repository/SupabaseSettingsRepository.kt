@@ -22,53 +22,53 @@ class SupabaseSettingsRepository(
         get() = supabaseClient.currentUserId ?: "00000000-0000-0000-0000-000000000000"
 
     override suspend fun loadSettings(): LauncherSettings = withContext(dispatcher) {
-        val dtos: List<SupabaseUserSettingsDto> = try {
-            supabaseClient.select(
-                table = "user_settings",
-                params = mapOf("user_id" to "eq.$effectiveUserId", "select" to "*")
-            )
-        } catch (e: Exception) {
-            emptyList()
-        }
-
-        val loaded = if (dtos.isEmpty()) {
-            val defaultDto = SupabaseUserSettingsDto(userId = effectiveUserId)
+        if (supabaseClient.config.isConfigured && supabaseClient.isConnected.value == true) {
             try {
-                val inserted: List<SupabaseUserSettingsDto> = supabaseClient.insert("user_settings", defaultDto)
-                (inserted.firstOrNull() ?: defaultDto).toLauncherSettings()
+                val dtos: List<SupabaseUserSettingsDto> = supabaseClient.select(
+                    table = "user_settings",
+                    params = mapOf("user_id" to "eq.$effectiveUserId", "select" to "*")
+                )
+
+                val loaded = if (dtos.isEmpty()) {
+                    val defaultDto = SupabaseUserSettingsDto(userId = effectiveUserId)
+                    try {
+                        val inserted: List<SupabaseUserSettingsDto> = supabaseClient.insert("user_settings", defaultDto)
+                        (inserted.firstOrNull() ?: defaultDto).toLauncherSettings()
+                    } catch (e: Exception) {
+                        defaultDto.toLauncherSettings()
+                    }
+                } else {
+                    dtos.first().toLauncherSettings()
+                }
+
+                _settings.value = loaded
+                return@withContext loaded
             } catch (e: Exception) {
-                defaultDto.toLauncherSettings()
+                println("Notice: Supabase loadSettings fallback: ${e.message}")
             }
-        } else {
-            dtos.first().toLauncherSettings()
         }
 
-        _settings.value = loaded
-        loaded
+        _settings.value
     }
 
     override suspend fun updateSettings(transform: (LauncherSettings) -> LauncherSettings): LauncherSettings = withContext(dispatcher) {
         val current = _settings.value
         val updated = transform(current)
-        val dto = SupabaseUserSettingsDto.fromLauncherSettings(updated, effectiveUserId)
+        _settings.value = updated
 
-        try {
-            supabaseClient.update<SupabaseUserSettingsDto, SupabaseUserSettingsDto>(
-                table = "user_settings",
-                filterParams = mapOf("user_id" to "eq.$effectiveUserId"),
-                bodyData = dto
-            )
-        } catch (e: Exception) {
-            // Upsert if not existing
+        if (supabaseClient.config.isConfigured) {
             try {
-                supabaseClient.insert<SupabaseUserSettingsDto, SupabaseUserSettingsDto>(
+                val dto = SupabaseUserSettingsDto.fromLauncherSettings(updated, effectiveUserId)
+                supabaseClient.update<SupabaseUserSettingsDto, SupabaseUserSettingsDto>(
                     table = "user_settings",
+                    filterParams = mapOf("user_id" to "eq.$effectiveUserId"),
                     bodyData = dto
                 )
-            } catch (ignored: Exception) { }
+            } catch (e: Exception) {
+                // local state is updated
+            }
         }
 
-        _settings.value = updated
         updated
     }
 }

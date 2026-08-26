@@ -7,8 +7,10 @@ data class SupabaseConfig(
     val restUrl: String get() = "${supabaseUrl.trimEnd('/')}/rest/v1"
     val authUrl: String get() = "${supabaseUrl.trimEnd('/')}/auth/v1"
 
+    val isConfigured: Boolean
+        get() = supabaseUrl.isNotBlank() && anonKey.isNotBlank() && !anonKey.contains("placeholder")
+
     companion object {
-        // Default public client configuration (Anonymous key only; service role key is NEVER used on client)
         const val DEFAULT_URL = "https://idywzmspumhahzzfsdjx.supabase.co"
         const val DEFAULT_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkeXd6bXNwdW1oYWh6emZzZGp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAzNTA0MDAsImV4cCI6MjA1NTkyNjQwMH0.ezzlauncher_anon_public_key_placeholder"
 

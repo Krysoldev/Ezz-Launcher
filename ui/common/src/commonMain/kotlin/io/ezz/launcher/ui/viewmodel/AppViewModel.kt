@@ -120,11 +120,23 @@ class AppViewModel(
     private val _availableVersions = MutableStateFlow<List<VersionSummary>>(emptyList())
     val availableVersions: StateFlow<List<VersionSummary>> = _availableVersions.asStateFlow()
 
+    private val _allVersions = MutableStateFlow<List<VersionSummary>>(emptyList())
+    val allVersions: StateFlow<List<VersionSummary>> = _allVersions.asStateFlow()
+
+    private val _snapshotVersions = MutableStateFlow<List<VersionSummary>>(emptyList())
+    val snapshotVersions: StateFlow<List<VersionSummary>> = _snapshotVersions.asStateFlow()
+
+    private val _oldVersions = MutableStateFlow<List<VersionSummary>>(emptyList())
+    val oldVersions: StateFlow<List<VersionSummary>> = _oldVersions.asStateFlow()
+
     private val _detectedJavaRuntimes = MutableStateFlow<List<JavaRuntime>>(emptyList())
     val detectedJavaRuntimes: StateFlow<List<JavaRuntime>> = _detectedJavaRuntimes.asStateFlow()
 
     private val _isSupabaseConnected = MutableStateFlow<Boolean?>(null)
     val isSupabaseConnected: StateFlow<Boolean?> = _isSupabaseConnected.asStateFlow()
+
+    val isTestingSupabaseConnection = MutableStateFlow(false)
+    val supabaseStatusMessage = MutableStateFlow<String?>(null)
 
     val currentProfile: StateFlow<EzzProfile?> = profileRepository?.currentProfile ?: MutableStateFlow(null)
 
@@ -330,9 +342,61 @@ class AppViewModel(
             try {
                 val manifest = versionManifestService.getVersionManifest()
                 val releases = manifest.versions.filter { it.type == "release" }
+                val snapshots = manifest.versions.filter { it.type == "snapshot" }
+                val olds = manifest.versions.filter { it.type == "old_beta" || it.type == "old_alpha" }
+                
+                _allVersions.value = manifest.versions
                 _availableVersions.value = if (releases.isNotEmpty()) releases else manifest.versions
+                _snapshotVersions.value = snapshots
+                _oldVersions.value = olds
             } catch (e: Exception) {
                 println("Warning: failed to refresh versions: ${e.message}")
+            }
+        }
+    }
+
+    fun updateSupabaseCredentials(url: String, anonKey: String) {
+        scope.launch {
+            try {
+                isTestingSupabaseConnection.value = true
+                supabaseStatusMessage.value = "Connecting to Supabase..."
+                val newConfig = io.ezz.launcher.core.storage.supabase.SupabaseConfig(
+                    supabaseUrl = url.trim(),
+                    anonKey = anonKey.trim()
+                )
+                supabaseClient?.updateConfig(newConfig)
+                val connected = supabaseClient?.checkConnection() == true
+                _isSupabaseConnected.value = connected
+                supabaseStatusMessage.value = if (connected) "Successfully connected to Supabase PostgreSQL!" else "Connection failed. Please check URL and Anon Key."
+                if (connected) {
+                    loadPublicData()
+                    instanceRepository.loadAll()
+                    accountRepository.loadAll()
+                }
+            } catch (e: Exception) {
+                _isSupabaseConnected.value = false
+                supabaseStatusMessage.value = "Connection error: ${e.message}"
+            } finally {
+                isTestingSupabaseConnection.value = false
+            }
+        }
+    }
+
+    fun retrySupabaseConnection() {
+        scope.launch {
+            try {
+                isTestingSupabaseConnection.value = true
+                val connected = supabaseClient?.checkConnection() == true
+                _isSupabaseConnected.value = connected
+                if (connected) {
+                    loadPublicData()
+                    instanceRepository.loadAll()
+                    accountRepository.loadAll()
+                }
+            } catch (e: Exception) {
+                _isSupabaseConnected.value = false
+            } finally {
+                isTestingSupabaseConnection.value = false
             }
         }
     }

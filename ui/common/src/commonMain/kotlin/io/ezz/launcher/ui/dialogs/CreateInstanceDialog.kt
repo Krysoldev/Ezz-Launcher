@@ -26,7 +26,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -55,15 +54,22 @@ import io.ezz.launcher.ui.components.EzzBadgeVariant
 import io.ezz.launcher.ui.components.EzzButton
 import io.ezz.launcher.ui.components.EzzButtonSize
 import io.ezz.launcher.ui.components.EzzButtonVariant
-import io.ezz.launcher.ui.components.EzzCard
 import io.ezz.launcher.ui.components.EzzIconButton
 import io.ezz.launcher.ui.components.EzzLoaderBadge
 import io.ezz.launcher.ui.components.EzzSearchField
 import io.ezz.launcher.ui.components.EzzSlider
+import io.ezz.launcher.ui.components.EzzTabs
 import io.ezz.launcher.ui.components.EzzTextField
 import io.ezz.launcher.ui.theme.EzzTheme
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 import kotlinx.coroutines.launch
+
+private enum class VersionCategory(val title: String) {
+    RELEASES("Releases"),
+    SNAPSHOTS("Snapshots"),
+    ALL("All Versions"),
+    OLD("Beta / Alpha")
+}
 
 @Composable
 fun CreateInstanceDialog(
@@ -71,15 +77,19 @@ fun CreateInstanceDialog(
     onDismiss: () -> Unit
 ) {
     val colors = EzzTheme.colors
-    val availableVersions by viewModel.availableVersions.collectAsState()
+    val availableReleases by viewModel.availableVersions.collectAsState()
+    val allVersions by viewModel.allVersions.collectAsState()
+    val snapshotVersions by viewModel.snapshotVersions.collectAsState()
+    val oldVersions by viewModel.oldVersions.collectAsState()
     val settings by viewModel.settingsRepository.settings.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
     var currentStep by remember { mutableStateOf(1) } // 1: Version & Loader, 2: Config & RAM
+    var selectedCategory by remember { mutableStateOf(VersionCategory.RELEASES) }
 
     var name by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
-    var selectedMcVersion by remember { mutableStateOf(availableVersions.firstOrNull()?.id ?: "1.21.4") }
+    var selectedMcVersion by remember { mutableStateOf(availableReleases.firstOrNull()?.id ?: "1.21.4") }
     var selectedLoader by remember { mutableStateOf(LoaderType.VANILLA) }
     var fabricLoaders by remember { mutableStateOf<List<String>>(emptyList()) }
     var selectedFabricLoader by remember { mutableStateOf<String?>(null) }
@@ -101,14 +111,24 @@ fun CreateInstanceDialog(
         )
     }
 
-    val versionsToDisplay = remember(availableVersions, searchQuery) {
-        val list = if (availableVersions.isNotEmpty()) availableVersions else fallbackVersions
-        if (searchQuery.isBlank()) list.take(30) else list.filter { it.id.contains(searchQuery, ignoreCase = true) }
+    val sourceList = when (selectedCategory) {
+        VersionCategory.RELEASES -> if (availableReleases.isNotEmpty()) availableReleases else fallbackVersions
+        VersionCategory.SNAPSHOTS -> snapshotVersions
+        VersionCategory.ALL -> if (allVersions.isNotEmpty()) allVersions else availableReleases
+        VersionCategory.OLD -> oldVersions
     }
 
-    LaunchedEffect(availableVersions) {
-        if (availableVersions.isNotEmpty() && name.isBlank()) {
-            selectedMcVersion = availableVersions.first().id
+    val versionsToDisplay = remember(sourceList, searchQuery) {
+        if (searchQuery.isBlank()) {
+            sourceList
+        } else {
+            sourceList.filter { it.id.contains(searchQuery, ignoreCase = true) }
+        }
+    }
+
+    LaunchedEffect(availableReleases) {
+        if (availableReleases.isNotEmpty() && name.isBlank()) {
+            selectedMcVersion = availableReleases.first().id
             name = "Minecraft $selectedMcVersion"
         }
     }
@@ -128,11 +148,11 @@ fun CreateInstanceDialog(
     Dialog(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
-                .widthIn(max = 560.dp)
+                .widthIn(max = 640.dp)
                 .fillMaxWidth(0.95f)
-                .clip(RoundedCornerShape(20.dp))
+                .clip(RoundedCornerShape(16.dp))
                 .background(colors.surface)
-                .border(1.dp, colors.border, RoundedCornerShape(20.dp))
+                .border(1.dp, colors.borderLight, RoundedCornerShape(16.dp))
                 .padding(24.dp)
         ) {
             Column {
@@ -144,16 +164,15 @@ fun CreateInstanceDialog(
                 ) {
                     Column {
                         Text(
-                            text = if (currentStep == 1) "Choose Version & Loader" else "Configure Instance",
+                            text = if (currentStep == 1) "Create Instance — Version & Mod Loader" else "Create Instance — Hardware & Profile",
                             color = colors.textPrimary,
-                            fontSize = 20.sp,
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Step $currentStep of 2",
-                            color = colors.primary,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
+                            text = if (currentStep == 1) "Select any official release, snapshot, or historic version" else "Configure instance RAM allocation and display title",
+                            color = colors.textSecondary,
+                            fontSize = 12.sp
                         )
                     }
 
@@ -165,7 +184,7 @@ fun CreateInstanceDialog(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
                 AnimatedContent(
                     targetState = currentStep,
@@ -175,66 +194,97 @@ fun CreateInstanceDialog(
                     if (step == 1) {
                         // Step 1: Version & Loader Selection
                         Column {
-                            // Search Version
-                            EzzSearchField(
-                                value = searchQuery,
-                                onValueChange = { searchQuery = it },
-                                placeholder = "Search Minecraft version (e.g. 1.21)...",
+                            // Category Filter Tabs
+                            val categoryTabs = listOf("Releases", "Snapshots", "All (${if (allVersions.isNotEmpty()) allVersions.size else 900}+)", "Beta / Alpha")
+                            EzzTabs(
+                                tabs = categoryTabs,
+                                selectedIndex = selectedCategory.ordinal,
+                                onTabSelected = { selectedCategory = VersionCategory.entries[it] },
                                 modifier = Modifier.fillMaxWidth()
                             )
 
                             Spacer(modifier = Modifier.height(12.dp))
 
+                            // Search Version
+                            EzzSearchField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = "Search Minecraft version (e.g. 1.21.4, 1.20.1, 1.8.9, 24w...)",
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
                             // Version Picker List
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(160.dp)
+                                    .height(180.dp)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(colors.surfaceVariant)
+                                    .background(colors.cardBackground)
                                     .border(1.dp, colors.border, RoundedCornerShape(10.dp))
-                                    .padding(6.dp)
+                                    .padding(4.dp)
                             ) {
-                                LazyColumn {
-                                    items(versionsToDisplay) { ver ->
-                                        val isSelected = ver.id == selectedMcVersion
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(if (isSelected) colors.primary.copy(alpha = 0.15f) else Color.Transparent)
-                                                .clickable {
-                                                    selectedMcVersion = ver.id
-                                                    if (name.startsWith("Minecraft") || name.isBlank()) {
-                                                        name = "Minecraft ${ver.id}"
+                                if (versionsToDisplay.isEmpty()) {
+                                    Box(modifier = Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
+                                        Text("No versions match your search filter", color = colors.textMuted, fontSize = 13.sp)
+                                    }
+                                } else {
+                                    LazyColumn {
+                                        items(versionsToDisplay, key = { it.id }) { ver ->
+                                            val isSelected = ver.id == selectedMcVersion
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(if (isSelected) colors.primary.copy(alpha = 0.15f) else Color.Transparent)
+                                                    .border(
+                                                        if (isSelected) 1.dp else 0.dp,
+                                                        if (isSelected) colors.primary.copy(alpha = 0.5f) else Color.Transparent,
+                                                        RoundedCornerShape(6.dp)
+                                                    )
+                                                    .clickable {
+                                                        selectedMcVersion = ver.id
+                                                        if (name.startsWith("Minecraft") || name.isBlank()) {
+                                                            name = "Minecraft ${ver.id}"
+                                                        }
+                                                    }
+                                                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(
+                                                        text = ver.id,
+                                                        color = if (isSelected) colors.primary else colors.textPrimary,
+                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                        fontSize = 13.sp
+                                                    )
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    EzzBadge(
+                                                        text = ver.type.uppercase(),
+                                                        variant = when (ver.type) {
+                                                            "release" -> EzzBadgeVariant.SUCCESS
+                                                            "snapshot" -> EzzBadgeVariant.PRIMARY
+                                                            else -> EzzBadgeVariant.NEUTRAL
+                                                        }
+                                                    )
+                                                    if (isSelected) {
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                        Icon(
+                                                            imageVector = Icons.Default.Check,
+                                                            contentDescription = null,
+                                                            tint = colors.primary,
+                                                            modifier = Modifier.size(14.dp)
+                                                        )
                                                     }
                                                 }
-                                                .padding(horizontal = 10.dp, vertical = 7.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Text(
-                                                    text = ver.id,
-                                                    color = if (isSelected) colors.primary else colors.textPrimary,
-                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                    fontSize = 13.sp
+                                                    text = ver.releaseTime.take(10),
+                                                    color = colors.textMuted,
+                                                    fontSize = 11.sp
                                                 )
-                                                if (isSelected) {
-                                                    Spacer(modifier = Modifier.width(6.dp))
-                                                    Icon(
-                                                        imageVector = Icons.Default.Check,
-                                                        contentDescription = null,
-                                                        tint = colors.primary,
-                                                        modifier = Modifier.size(14.dp)
-                                                    )
-                                                }
                                             }
-                                            Text(
-                                                text = ver.releaseTime.take(10),
-                                                color = colors.textMuted,
-                                                fontSize = 11.sp
-                                            )
                                         }
                                     }
                                 }
@@ -304,7 +354,8 @@ fun CreateInstanceDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(colors.surfaceVariant)
+                                    .background(colors.cardBackground)
+                                    .border(1.dp, colors.border, RoundedCornerShape(10.dp))
                                     .padding(14.dp)
                             ) {
                                 Row(
@@ -314,7 +365,7 @@ fun CreateInstanceDialog(
                                 ) {
                                     Column {
                                         Text(text = "Target Configuration", color = colors.textMuted, fontSize = 11.sp)
-                                        Text(text = "Minecraft $selectedMcVersion", color = colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                        Text(text = "Minecraft $selectedMcVersion", color = colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                                     }
                                     EzzLoaderBadge(loaderType = selectedLoader)
                                 }
@@ -408,9 +459,9 @@ private fun LoaderPill(
     val colors = EzzTheme.colors
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (isSelected) colors.primary.copy(alpha = 0.15f) else colors.surfaceVariant)
-            .border(1.dp, if (isSelected) colors.primary else colors.border, RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (isSelected) colors.primary.copy(alpha = 0.15f) else colors.cardBackground)
+            .border(1.dp, if (isSelected) colors.primary else colors.border, RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center
