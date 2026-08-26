@@ -7,7 +7,6 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,7 +27,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -49,56 +48,64 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import io.ezz.launcher.core.minecraft.loader.optifine.OptiFineCompatibilityValidator
+import io.ezz.launcher.core.minecraft.loader.optifine.OptiFineVersionOption
+import io.ezz.launcher.core.minecraft.version.JavaCompatibility
+import io.ezz.launcher.core.minecraft.version.MinecraftVersionComparator
+import io.ezz.launcher.core.minecraft.version.VersionCategoryFilter
+import io.ezz.launcher.core.minecraft.version.VersionSortOrder
 import io.ezz.launcher.core.model.instance.LoaderType
 import io.ezz.launcher.core.model.minecraft.VersionSummary
+import io.ezz.launcher.core.model.runtime.JavaRuntime
 import io.ezz.launcher.ui.components.EzzBadge
 import io.ezz.launcher.ui.components.EzzBadgeVariant
 import io.ezz.launcher.ui.components.EzzButton
 import io.ezz.launcher.ui.components.EzzButtonSize
 import io.ezz.launcher.ui.components.EzzButtonVariant
-import io.ezz.launcher.ui.components.EzzCard
 import io.ezz.launcher.ui.components.EzzIconButton
-import io.ezz.launcher.ui.components.EzzLoaderBadge
 import io.ezz.launcher.ui.components.EzzSearchField
 import io.ezz.launcher.ui.components.EzzSlider
 import io.ezz.launcher.ui.components.EzzTextField
 import io.ezz.launcher.ui.components.EzzToggle
-import io.ezz.launcher.ui.theme.EzzTheme
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 import kotlinx.coroutines.launch
-
-private enum class VersionCategory(val title: String) {
-    RELEASES("Releases"),
-    SNAPSHOTS("Snapshots"),
-    ALL("All (900+)"),
-    OLD("Beta / Alpha")
-}
 
 @Composable
 fun CreateInstanceDialog(
     viewModel: AppViewModel,
     onDismiss: () -> Unit
 ) {
-    val availableReleases by viewModel.availableVersions.collectAsState()
     val allVersions by viewModel.allVersions.collectAsState()
+    val availableReleases by viewModel.availableVersions.collectAsState()
     val snapshotVersions by viewModel.snapshotVersions.collectAsState()
     val oldVersions by viewModel.oldVersions.collectAsState()
+    val detectedJavaRuntimes by viewModel.detectedJavaRuntimes.collectAsState()
     val settings by viewModel.settingsRepository.settings.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
-    var currentStep by remember { mutableStateOf(1) } // 1: Info & Version, 2: Loader, 3: Java & RAM, 4: Game Settings, 5: Summary
-    var selectedCategory by remember { mutableStateOf(VersionCategory.RELEASES) }
+    var currentStep by remember { mutableStateOf(1) } // 1: Version, 2: Loader, 3: Java & Memory, 4: Screen, 5: Summary
+    var selectedCategory by remember { mutableStateOf(VersionCategoryFilter.RELEASES) }
+    var sortOrder by remember { mutableStateOf(VersionSortOrder.NEWEST_FIRST) }
 
     var name by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
     var selectedMcVersion by remember { mutableStateOf(availableReleases.firstOrNull()?.id ?: "1.21.4") }
     var selectedLoader by remember { mutableStateOf(LoaderType.VANILLA) }
+
+    // Fabric Loader State
     var fabricLoaders by remember { mutableStateOf<List<String>>(emptyList()) }
     var selectedFabricLoader by remember { mutableStateOf<String?>(null) }
     var isLoadingFabricLoaders by remember { mutableStateOf(false) }
 
+    // OptiFine State
+    var optifineVersions by remember { mutableStateOf<List<OptiFineVersionOption>>(emptyList()) }
+    var selectedOptiFineVersion by remember { mutableStateOf<String?>(null) }
+
+    // Java & RAM
+    var selectedJavaPath by remember { mutableStateOf<String?>(null) }
     var maxRamMb by remember { mutableStateOf(settings.defaultMaxMemoryMb.toFloat()) }
     var jvmArgs by remember { mutableStateOf(settings.globalJvmArgs.joinToString(" ")) }
+
+    // Screen Resolution
     var windowWidth by remember { mutableStateOf(1280) }
     var windowHeight by remember { mutableStateOf(720) }
     var isFullscreen by remember { mutableStateOf(false) }
@@ -118,20 +125,23 @@ fun CreateInstanceDialog(
     }
 
     val sourceList = when (selectedCategory) {
-        VersionCategory.RELEASES -> if (availableReleases.isNotEmpty()) availableReleases else fallbackVersions
-        VersionCategory.SNAPSHOTS -> snapshotVersions
-        VersionCategory.ALL -> if (allVersions.isNotEmpty()) allVersions else availableReleases
-        VersionCategory.OLD -> oldVersions
+        VersionCategoryFilter.RELEASES -> if (availableReleases.isNotEmpty()) availableReleases else fallbackVersions
+        VersionCategoryFilter.SNAPSHOTS -> snapshotVersions
+        VersionCategoryFilter.OLD_BETA_ALPHA -> oldVersions
+        VersionCategoryFilter.ALL -> if (allVersions.isNotEmpty()) allVersions else availableReleases
     }
 
-    val versionsToDisplay = remember(sourceList, searchQuery) {
-        if (searchQuery.isBlank()) {
+    val versionsToDisplay = remember(sourceList, searchQuery, sortOrder) {
+        val filtered = if (searchQuery.isBlank()) {
             sourceList
         } else {
-            sourceList.filter { it.id.contains(searchQuery, ignoreCase = true) }
+            val q = searchQuery.trim().lowercase()
+            sourceList.filter { it.id.lowercase().contains(q) }
         }
+        MinecraftVersionComparator.sort(filtered, sortOrder)
     }
 
+    // Auto-fill instance name when version is selected
     LaunchedEffect(availableReleases) {
         if (availableReleases.isNotEmpty() && name.isBlank()) {
             selectedMcVersion = availableReleases.first().id
@@ -139,6 +149,7 @@ fun CreateInstanceDialog(
         }
     }
 
+    // Dynamic Loader Discovery
     LaunchedEffect(selectedMcVersion, selectedLoader) {
         if (selectedLoader == LoaderType.FABRIC) {
             isLoadingFabricLoaders = true
@@ -148,13 +159,36 @@ fun CreateInstanceDialog(
                 selectedFabricLoader = loaders.firstOrNull() ?: "0.16.10"
                 isLoadingFabricLoaders = false
             }
+        } else if (selectedLoader == LoaderType.OPTIFINE) {
+            val options = OptiFineCompatibilityValidator.getAvailableOptiFineVersions(selectedMcVersion)
+            optifineVersions = options
+            selectedOptiFineVersion = options.firstOrNull()?.optifineVersion
         }
+    }
+
+    // Required Java resolution
+    val requiredJavaMajor = remember(selectedMcVersion) {
+        JavaCompatibility.getRequiredJavaMajorVersion(selectedMcVersion)
+    }
+
+    // Auto-select best matching Java runtime
+    LaunchedEffect(requiredJavaMajor, detectedJavaRuntimes) {
+        val compatible = detectedJavaRuntimes.find { JavaCompatibility.isJavaVersionCompatible(it.majorVersion, requiredJavaMajor) }
+        if (compatible != null && selectedJavaPath == null) {
+            selectedJavaPath = compatible.path
+        }
+    }
+
+    val isStep2Valid = when (selectedLoader) {
+        LoaderType.VANILLA -> true
+        LoaderType.FABRIC -> fabricLoaders.isNotEmpty() || !isLoadingFabricLoaders
+        LoaderType.OPTIFINE -> OptiFineCompatibilityValidator.isVersionSupported(selectedMcVersion)
     }
 
     Dialog(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
-                .widthIn(min = 660.dp, max = 740.dp)
+                .widthIn(min = 700.dp, max = 780.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(Color(0xFF0A0A0A))
                 .border(1.dp, Color(0xFF282828), RoundedCornerShape(8.dp))
@@ -178,10 +212,10 @@ fun CreateInstanceDialog(
                         Text(
                             text = "Step $currentStep of 5 • ${
                                 when (currentStep) {
-                                    1 -> "Basic Information & Version"
-                                    2 -> "Mod Loader Selection"
+                                    1 -> "Minecraft Version Catalog"
+                                    2 -> "Mod Loader & Version"
                                     3 -> "Java Runtime & Memory"
-                                    4 -> "Game Resolution & Settings"
+                                    4 -> "Game Resolution & Display"
                                     5 -> "Overview & Confirmation"
                                     else -> ""
                                 }
@@ -201,7 +235,7 @@ fun CreateInstanceDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Step Pills Bar
+                // Step Progress Bar
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -217,7 +251,7 @@ fun CreateInstanceDialog(
                                 .background(
                                     when {
                                         isActive -> Color.White
-                                        isDone -> Color(0xFF555555)
+                                        isDone -> Color(0xFF666666)
                                         else -> Color(0xFF1E1E1E)
                                     }
                                 )
@@ -231,14 +265,16 @@ fun CreateInstanceDialog(
                 AnimatedContent(
                     targetState = currentStep,
                     transitionSpec = { fadeIn() togetherWith fadeOut() },
-                    modifier = Modifier.height(340.dp)
+                    modifier = Modifier.height(350.dp)
                 ) { step ->
                     when (step) {
-                        1 -> Step1VersionSelection(
+                        1 -> Step1VersionCatalog(
                             name = name,
                             onNameChange = { name = it },
                             selectedCategory = selectedCategory,
                             onCategoryChange = { selectedCategory = it },
+                            sortOrder = sortOrder,
+                            onSortChange = { sortOrder = it },
                             searchQuery = searchQuery,
                             onSearchChange = { searchQuery = it },
                             versions = versionsToDisplay,
@@ -250,16 +286,24 @@ fun CreateInstanceDialog(
                                 }
                             }
                         )
-                        2 -> Step2LoaderSelection(
+                        2 -> Step2LoaderCatalog(
                             selectedLoader = selectedLoader,
                             onLoaderChange = { selectedLoader = it },
                             selectedMcVersion = selectedMcVersion,
                             fabricLoaders = fabricLoaders,
                             selectedFabricLoader = selectedFabricLoader,
                             onFabricLoaderChange = { selectedFabricLoader = it },
-                            isLoadingFabric = isLoadingFabricLoaders
+                            isLoadingFabric = isLoadingFabricLoaders,
+                            optifineVersions = optifineVersions,
+                            selectedOptiFineVersion = selectedOptiFineVersion,
+                            onOptiFineVersionChange = { selectedOptiFineVersion = it }
                         )
-                        3 -> Step3JavaMemory(
+                        3 -> Step3JavaAndMemory(
+                            selectedMcVersion = selectedMcVersion,
+                            requiredJavaMajor = requiredJavaMajor,
+                            detectedJavaRuntimes = detectedJavaRuntimes,
+                            selectedJavaPath = selectedJavaPath,
+                            onSelectJavaPath = { selectedJavaPath = it },
                             maxRamMb = maxRamMb,
                             onRamChange = { maxRamMb = it },
                             jvmArgs = jvmArgs,
@@ -278,8 +322,10 @@ fun CreateInstanceDialog(
                             mcVersion = selectedMcVersion,
                             loaderType = selectedLoader,
                             fabricLoader = selectedFabricLoader,
+                            optifineVersion = selectedOptiFineVersion,
                             ramMb = maxRamMb.toInt(),
-                            resolution = "${windowWidth}x${windowHeight}"
+                            resolution = "${windowWidth}x${windowHeight}",
+                            javaPath = selectedJavaPath
                         )
                     }
                 }
@@ -311,18 +357,23 @@ fun CreateInstanceDialog(
                             onClick = { currentStep++ },
                             variant = EzzButtonVariant.PRIMARY,
                             size = EzzButtonSize.MEDIUM,
-                            enabled = name.isNotBlank() && selectedMcVersion.isNotBlank()
+                            enabled = name.isNotBlank() && selectedMcVersion.isNotBlank() && (currentStep != 2 || isStep2Valid)
                         )
                     } else {
                         EzzButton(
                             text = "Create Instance",
                             icon = Icons.Default.Check,
                             onClick = {
+                                val finalLoaderVersion = when (selectedLoader) {
+                                    LoaderType.FABRIC -> selectedFabricLoader
+                                    LoaderType.OPTIFINE -> selectedOptiFineVersion
+                                    LoaderType.VANILLA -> null
+                                }
                                 viewModel.createInstance(
                                     name = name.ifBlank { "Minecraft $selectedMcVersion" },
                                     minecraftVersion = selectedMcVersion,
                                     loaderType = selectedLoader,
-                                    loaderVersion = if (selectedLoader == LoaderType.FABRIC) selectedFabricLoader else null,
+                                    loaderVersion = finalLoaderVersion,
                                     minMemoryMb = 1024,
                                     maxMemoryMb = maxRamMb.toInt(),
                                     customJvmArgs = jvmArgs.split(" ").filter { it.isNotBlank() }
@@ -340,11 +391,13 @@ fun CreateInstanceDialog(
 }
 
 @Composable
-private fun Step1VersionSelection(
+private fun Step1VersionCatalog(
     name: String,
     onNameChange: (String) -> Unit,
-    selectedCategory: VersionCategory,
-    onCategoryChange: (VersionCategory) -> Unit,
+    selectedCategory: VersionCategoryFilter,
+    onCategoryChange: (VersionCategoryFilter) -> Unit,
+    sortOrder: VersionSortOrder,
+    onSortChange: (VersionSortOrder) -> Unit,
     searchQuery: String,
     onSearchChange: (String) -> Unit,
     versions: List<VersionSummary>,
@@ -367,7 +420,7 @@ private fun Step1VersionSelection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Category Tabs
+            // Category Filter Tabs
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
@@ -375,17 +428,17 @@ private fun Step1VersionSelection(
                     .border(1.dp, Color(0xFF242424), RoundedCornerShape(6.dp))
                     .padding(2.dp)
             ) {
-                VersionCategory.entries.forEach { cat ->
+                VersionCategoryFilter.entries.forEach { cat ->
                     val isSelected = selectedCategory == cat
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
                             .background(if (isSelected) Color(0xFF242424) else Color.Transparent)
                             .clickable { onCategoryChange(cat) }
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                            .padding(horizontal = 9.dp, vertical = 5.dp)
                     ) {
                         Text(
-                            text = cat.title,
+                            text = cat.displayName,
                             color = if (isSelected) Color.White else Color(0xFF888888),
                             fontSize = 11.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
@@ -394,58 +447,127 @@ private fun Step1VersionSelection(
                 }
             }
 
-            // Quick Search
-            Box(modifier = Modifier.width(180.dp)) {
-                EzzSearchField(
-                    value = searchQuery,
-                    onValueChange = onSearchChange,
-                    placeholder = "Filter (e.g. 1.21)..."
-                )
+            // Search & Sort Controls
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF141414))
+                        .border(1.dp, Color(0xFF242424), RoundedCornerShape(6.dp))
+                        .clickable {
+                            val next = when (sortOrder) {
+                                VersionSortOrder.NEWEST_FIRST -> VersionSortOrder.OLDEST_FIRST
+                                VersionSortOrder.OLDEST_FIRST -> VersionSortOrder.NAME_ASC
+                                else -> VersionSortOrder.NEWEST_FIRST
+                            }
+                            onSortChange(next)
+                        }
+                        .padding(horizontal = 8.dp, vertical = 7.dp)
+                ) {
+                    Text(
+                        text = when (sortOrder) {
+                            VersionSortOrder.NEWEST_FIRST -> "↓ Newest"
+                            VersionSortOrder.OLDEST_FIRST -> "↑ Oldest"
+                            else -> "A-Z"
+                        },
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Box(modifier = Modifier.width(180.dp)) {
+                    EzzSearchField(
+                        value = searchQuery,
+                        onValueChange = onSearchChange,
+                        placeholder = "Search (1.20, 1.8)..."
+                    )
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Versions List
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .clip(RoundedCornerShape(6.dp))
-                .background(Color(0xFF101010))
-                .border(1.dp, Color(0xFF202020), RoundedCornerShape(6.dp))
-                .padding(4.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            items(versions, key = { it.id }) { v ->
-                val isSelected = v.id == selectedVersion
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(if (isSelected) Color(0xFF222222) else Color.Transparent)
-                        .clickable { onSelectVersion(v.id) }
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = v.id,
-                            color = if (isSelected) Color.White else Color(0xFFD4D4D4),
-                            fontSize = 13.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                        )
-                        if (isSelected) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Box(modifier = Modifier.size(5.dp).clip(CircleShape).background(Color.White))
+        // Virtualized Minecraft Version List
+        if (versions.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFF101010))
+                    .border(1.dp, Color(0xFF202020), RoundedCornerShape(6.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "No Minecraft versions matching \"$searchQuery\"",
+                    color = Color(0xFF777777),
+                    fontSize = 12.sp
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFF101010))
+                    .border(1.dp, Color(0xFF202020), RoundedCornerShape(6.dp))
+                    .padding(4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                items(versions, key = { it.id }) { v ->
+                    val isSelected = v.id == selectedVersion
+                    val javaReq = JavaCompatibility.getRequiredJavaMajorVersion(v.id)
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(if (isSelected) Color(0xFF222222) else Color.Transparent)
+                            .clickable { onSelectVersion(v.id) }
+                            .padding(horizontal = 12.dp, vertical = 7.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = v.id,
+                                color = if (isSelected) Color.White else Color(0xFFD4D4D4),
+                                fontSize = 13.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                            if (isSelected) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Box(modifier = Modifier.size(5.dp).clip(CircleShape).background(Color.White))
+                            }
+                            if (v.releaseTime.isNotBlank()) {
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = v.releaseTime.take(10),
+                                    color = Color(0xFF666666),
+                                    fontSize = 10.5.sp
+                                )
+                            }
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            EzzBadge(
+                                text = "Java $javaReq",
+                                variant = EzzBadgeVariant.NEUTRAL
+                            )
+                            EzzBadge(
+                                text = v.type.uppercase(),
+                                variant = if (v.type == "release") EzzBadgeVariant.NEUTRAL else EzzBadgeVariant.INFO
+                            )
                         }
                     }
-
-                    EzzBadge(
-                        text = v.type.uppercase(),
-                        variant = if (v.type == "release") EzzBadgeVariant.NEUTRAL else EzzBadgeVariant.INFO
-                    )
                 }
             }
         }
@@ -453,20 +575,23 @@ private fun Step1VersionSelection(
 }
 
 @Composable
-private fun Step2LoaderSelection(
+private fun Step2LoaderCatalog(
     selectedLoader: LoaderType,
     onLoaderChange: (LoaderType) -> Unit,
     selectedMcVersion: String,
     fabricLoaders: List<String>,
     selectedFabricLoader: String?,
     onFabricLoaderChange: (String) -> Unit,
-    isLoadingFabric: Boolean
+    isLoadingFabric: Boolean,
+    optifineVersions: List<OptiFineVersionOption>,
+    selectedOptiFineVersion: String?,
+    onOptiFineVersionChange: (String) -> Unit
 ) {
     val optifineSupported = OptiFineCompatibilityValidator.isVersionSupported(selectedMcVersion)
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(
-            text = "Select Minecraft Mod Loader",
+            text = "Select Mod Loader for Minecraft $selectedMcVersion",
             color = Color.White,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold
@@ -478,7 +603,7 @@ private fun Step2LoaderSelection(
         ) {
             LoaderCard(
                 title = "Vanilla",
-                subtitle = "Official pure Mojang build",
+                subtitle = "Official pure Mojang build without mods",
                 isSelected = selectedLoader == LoaderType.VANILLA,
                 onClick = { onLoaderChange(LoaderType.VANILLA) },
                 modifier = Modifier.weight(1f)
@@ -486,7 +611,7 @@ private fun Step2LoaderSelection(
 
             LoaderCard(
                 title = "Fabric",
-                subtitle = "Fast, lightweight mod engine",
+                subtitle = "Lightweight, high-performance mod loader",
                 isSelected = selectedLoader == LoaderType.FABRIC,
                 onClick = { onLoaderChange(LoaderType.FABRIC) },
                 modifier = Modifier.weight(1f)
@@ -494,7 +619,7 @@ private fun Step2LoaderSelection(
 
             LoaderCard(
                 title = "OptiFine",
-                subtitle = if (optifineSupported) "Shaders & FPS optimizations" else "Not supported on $selectedMcVersion",
+                subtitle = if (optifineSupported) "Built-in HD shaders & FPS optimizations" else "No verified release for $selectedMcVersion",
                 isSelected = selectedLoader == LoaderType.OPTIFINE,
                 enabled = optifineSupported,
                 onClick = { onLoaderChange(LoaderType.OPTIFINE) },
@@ -502,10 +627,11 @@ private fun Step2LoaderSelection(
             )
         }
 
+        // Fabric Loader Selection Section
         if (selectedLoader == LoaderType.FABRIC) {
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Fabric Loader Version",
+                text = "Compatible Fabric Loader Version",
                 color = Color(0xFFA0A0A0),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium
@@ -515,11 +641,30 @@ private fun Step2LoaderSelection(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Fetching compatible Fabric builds...", color = Color(0xFF888888), fontSize = 12.sp)
+                    Text("Discovering compatible Fabric builds from Fabric Meta API...", color = Color(0xFF888888), fontSize = 12.sp)
+                }
+            } else if (fabricLoaders.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF1F1414))
+                        .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                        .padding(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "No compatible Fabric loader found for Minecraft $selectedMcVersion. Please select Vanilla.",
+                            color = Color(0xFFFCA5A5),
+                            fontSize = 12.sp
+                        )
+                    }
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    fabricLoaders.take(4).forEach { loaderVer ->
+                    fabricLoaders.take(5).forEachIndexed { index, loaderVer ->
                         val isSelected = loaderVer == selectedFabricLoader
                         Box(
                             modifier = Modifier
@@ -530,7 +675,60 @@ private fun Step2LoaderSelection(
                                 .padding(horizontal = 10.dp, vertical = 6.dp)
                         ) {
                             Text(
-                                text = loaderVer,
+                                text = if (index == 0) "$loaderVer (Latest)" else loaderVer,
+                                color = if (isSelected) Color.White else Color(0xFF999999),
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // OptiFine Version Selection Section
+        if (selectedLoader == LoaderType.OPTIFINE) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Verified OptiFine Edition",
+                color = Color(0xFFA0A0A0),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+
+            if (!optifineSupported || optifineVersions.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF1F1414))
+                        .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                        .padding(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "OptiFine has no verified release for Minecraft $selectedMcVersion. Please select Vanilla or Fabric.",
+                            color = Color(0xFFFCA5A5),
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    optifineVersions.forEach { opt ->
+                        val isSelected = opt.optifineVersion == selectedOptiFineVersion
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (isSelected) Color(0xFF252525) else Color(0xFF141414))
+                                .border(1.dp, if (isSelected) Color.White else Color(0xFF282828), RoundedCornerShape(4.dp))
+                                .clickable { onOptiFineVersionChange(opt.optifineVersion) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = opt.displayName,
                                 color = if (isSelected) Color.White else Color(0xFF999999),
                                 fontSize = 12.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
@@ -588,19 +786,98 @@ private fun LoaderCard(
 }
 
 @Composable
-private fun Step3JavaMemory(
+private fun Step3JavaAndMemory(
+    selectedMcVersion: String,
+    requiredJavaMajor: Int,
+    detectedJavaRuntimes: List<JavaRuntime>,
+    selectedJavaPath: String?,
+    onSelectJavaPath: (String) -> Unit,
     maxRamMb: Float,
     onRamChange: (Float) -> Unit,
     jvmArgs: String,
     onJvmArgsChange: (String) -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        // Java Requirements notice
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(6.dp))
+                .background(Color(0xFF141414))
+                .border(1.dp, Color(0xFF242424), RoundedCornerShape(6.dp))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "JAVA RUNTIME REQUIREMENT",
+                    color = Color(0xFF888888),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Minecraft $selectedMcVersion requires ${JavaCompatibility.getJavaRequirementDescription(requiredJavaMajor)}",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            EzzBadge(
+                text = "Requires Java $requiredJavaMajor",
+                variant = EzzBadgeVariant.PRIMARY
+            )
+        }
+
+        // Java Runtime selection if multiple detected
+        if (detectedJavaRuntimes.isNotEmpty()) {
+            Column {
+                Text(text = "Detected Installed Runtimes", color = Color(0xFFA0A0A0), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    detectedJavaRuntimes.take(3).forEach { rt ->
+                        val isSelected = selectedJavaPath == rt.path
+                        val isCompatible = JavaCompatibility.isJavaVersionCompatible(rt.majorVersion, requiredJavaMajor)
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (isSelected) Color(0xFF222222) else Color(0xFF101010))
+                                .border(
+                                    1.dp,
+                                    if (isSelected) Color.White else if (isCompatible) Color(0xFF282828) else Color(0xFF442020),
+                                    RoundedCornerShape(4.dp)
+                                )
+                                .clickable { onSelectJavaPath(rt.path) }
+                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Java ${rt.majorVersion}",
+                                    color = if (isCompatible) Color.White else Color(0xFFEF4444),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isCompatible) "• OK" else "• Incompatible",
+                                    color = if (isCompatible) Color(0xFF10B981) else Color(0xFFEF4444),
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         EzzSlider(
             value = maxRamMb,
             onValueChange = onRamChange,
             valueRange = 1024f..16384f,
             steps = 15,
-            label = "Maximum Memory (RAM Allocation)",
+            label = "Maximum RAM Allocation",
             valueDisplay = "${(maxRamMb / 1024).toInt()} GB"
         )
 
@@ -652,7 +929,7 @@ private fun Step4GameSettings(
             checked = isFullscreen,
             onCheckedChange = onFullscreenChange,
             label = "Launch in Fullscreen Mode",
-            description = "Automatically expand game to full desktop monitor"
+            description = "Automatically launch game expanded to fill the entire desktop"
         )
     }
 }
@@ -688,8 +965,10 @@ private fun Step5Summary(
     mcVersion: String,
     loaderType: LoaderType,
     fabricLoader: String?,
+    optifineVersion: String?,
     ramMb: Int,
-    resolution: String
+    resolution: String,
+    javaPath: String?
 ) {
     Box(
         modifier = Modifier
@@ -710,9 +989,17 @@ private fun Step5Summary(
 
             SummaryRow("Instance Name", name)
             SummaryRow("Minecraft Version", mcVersion)
-            SummaryRow("Mod Engine", if (loaderType == LoaderType.FABRIC) "Fabric ($fabricLoader)" else loaderType.name)
-            SummaryRow("Memory Allocated", "${ramMb / 1024} GB RAM")
-            SummaryRow("Initial Resolution", resolution)
+            SummaryRow(
+                "Mod Engine",
+                when (loaderType) {
+                    LoaderType.FABRIC -> "Fabric ($fabricLoader)"
+                    LoaderType.OPTIFINE -> "OptiFine ($optifineVersion)"
+                    LoaderType.VANILLA -> "Vanilla (Official)"
+                }
+            )
+            SummaryRow("RAM Allocation", "${ramMb / 1024} GB RAM")
+            SummaryRow("Java Runtime", javaPath?.substringAfterLast("\\") ?: "System Auto")
+            SummaryRow("Resolution", resolution)
         }
     }
 }

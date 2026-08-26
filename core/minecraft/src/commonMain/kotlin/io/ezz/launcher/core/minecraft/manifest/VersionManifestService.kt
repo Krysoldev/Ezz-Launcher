@@ -1,5 +1,9 @@
 package io.ezz.launcher.core.minecraft.manifest
 
+import io.ezz.launcher.core.minecraft.version.JavaCompatibility
+import io.ezz.launcher.core.minecraft.version.MinecraftVersionComparator
+import io.ezz.launcher.core.minecraft.version.VersionCategoryFilter
+import io.ezz.launcher.core.minecraft.version.VersionSortOrder
 import io.ezz.launcher.core.model.minecraft.VersionInfo
 import io.ezz.launcher.core.model.minecraft.VersionManifest
 import io.ezz.launcher.core.model.minecraft.VersionSummary
@@ -60,6 +64,14 @@ class VersionManifestService(
             manifest
         } catch (e: Exception) {
             println("Warning: failed to fetch version manifest from network: ${e.message}")
+            if (fileSystem.exists(cacheFile)) {
+                try {
+                    val content = fileSystem.read(cacheFile) { readUtf8() }
+                    val manifest = json.decodeFromString<VersionManifest>(content)
+                    cachedManifest = manifest
+                    return@withContext manifest
+                } catch (_: Exception) {}
+            }
             val fallback = VersionManifest(
                 latest = io.ezz.launcher.core.model.minecraft.LatestVersion(release = "1.21.4", snapshot = "24w46a"),
                 versions = defaultFallbackVersions
@@ -94,6 +106,29 @@ class VersionManifestService(
         VersionSummary(id = "1.7.10", type = "release", url = "https://piston-meta.mojang.com/v1/packages/1.7.10.json", time = "2014-06-26T10:00:00Z", releaseTime = "2014-06-26T10:00:00Z")
     )
 
+    suspend fun queryVersions(
+        category: VersionCategoryFilter = VersionCategoryFilter.RELEASES,
+        searchQuery: String = "",
+        sortOrder: VersionSortOrder = VersionSortOrder.NEWEST_FIRST
+    ): List<VersionSummary> {
+        val manifest = getVersionManifest()
+        val filteredByCategory = when (category) {
+            VersionCategoryFilter.RELEASES -> manifest.versions.filter { it.type == "release" }
+            VersionCategoryFilter.SNAPSHOTS -> manifest.versions.filter { it.type == "snapshot" }
+            VersionCategoryFilter.OLD_BETA_ALPHA -> manifest.versions.filter { it.type == "old_beta" || it.type == "old_alpha" }
+            VersionCategoryFilter.ALL -> manifest.versions
+        }
+
+        val filteredByQuery = if (searchQuery.isBlank()) {
+            filteredByCategory
+        } else {
+            val q = searchQuery.trim().lowercase()
+            filteredByCategory.filter { it.id.lowercase().contains(q) }
+        }
+
+        return MinecraftVersionComparator.sort(filteredByQuery, sortOrder)
+    }
+
     suspend fun getAllVersions(): List<VersionSummary> {
         val manifest = getVersionManifest()
         return manifest.versions
@@ -112,6 +147,15 @@ class VersionManifestService(
     suspend fun getOldVersions(): List<VersionSummary> {
         val manifest = getVersionManifest()
         return manifest.versions.filter { it.type == "old_beta" || it.type == "old_alpha" }
+    }
+
+    suspend fun getRequiredJavaMajorVersion(versionId: String): Int {
+        return try {
+            val info = getVersionInfo(versionId)
+            JavaCompatibility.getRequiredJavaMajorVersion(versionId, info)
+        } catch (_: Exception) {
+            JavaCompatibility.getRequiredJavaMajorVersion(versionId, null)
+        }
     }
 
     suspend fun getVersionInfo(versionId: String): VersionInfo = withContext(dispatcher) {
