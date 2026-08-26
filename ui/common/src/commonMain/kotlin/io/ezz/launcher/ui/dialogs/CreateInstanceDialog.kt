@@ -418,24 +418,14 @@ fun CreateInstanceDialog(
                                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                                             ) {
                                                 Text("Instance Name", color = Color(0xFFAAAAAA), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                                                TextField(
+                                                io.ezz.launcher.ui.components.EzzTextField(
                                                     value = name,
                                                     onValueChange = {
                                                         name = it
                                                         isUserCustomName = true
                                                     },
-                                                    placeholder = { Text("e.g. Survival 1.21, Fabric SMP", color = Color(0xFF444444), fontSize = 13.sp) },
-                                                    modifier = Modifier.fillMaxWidth().height(46.dp),
-                                                    shape = RoundedCornerShape(8.dp),
-                                                    colors = TextFieldDefaults.colors(
-                                                        focusedContainerColor = Color(0xFF141414),
-                                                        unfocusedContainerColor = Color(0xFF141414),
-                                                        focusedTextColor = Color.White,
-                                                        unfocusedTextColor = Color.White,
-                                                        focusedIndicatorColor = Color.Transparent,
-                                                        unfocusedIndicatorColor = Color.Transparent
-                                                    ),
-                                                    singleLine = true
+                                                    placeholder = "e.g. Survival 1.21, Fabric SMP",
+                                                    modifier = Modifier.fillMaxWidth()
                                                 )
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth(),
@@ -881,36 +871,18 @@ fun CreateInstanceDialog(
                                                     ) {
                                                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                                             Text("Width", color = Color(0xFF777777), fontSize = 10.sp)
-                                                            TextField(
+                                                            io.ezz.launcher.ui.components.EzzTextField(
                                                                 value = windowWidth.toString(),
                                                                 onValueChange = { windowWidth = it.toIntOrNull() ?: 1280 },
-                                                                modifier = Modifier.fillMaxWidth().height(40.dp),
-                                                                colors = TextFieldDefaults.colors(
-                                                                    focusedContainerColor = Color(0xFF161616),
-                                                                    unfocusedContainerColor = Color(0xFF161616),
-                                                                    focusedTextColor = Color.White,
-                                                                    unfocusedTextColor = Color.White,
-                                                                    focusedIndicatorColor = Color.Transparent,
-                                                                    unfocusedIndicatorColor = Color.Transparent
-                                                                ),
-                                                                singleLine = true
+                                                                modifier = Modifier.fillMaxWidth()
                                                             )
                                                         }
                                                         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                                             Text("Height", color = Color(0xFF777777), fontSize = 10.sp)
-                                                            TextField(
+                                                            io.ezz.launcher.ui.components.EzzTextField(
                                                                 value = windowHeight.toString(),
                                                                 onValueChange = { windowHeight = it.toIntOrNull() ?: 720 },
-                                                                modifier = Modifier.fillMaxWidth().height(40.dp),
-                                                                colors = TextFieldDefaults.colors(
-                                                                    focusedContainerColor = Color(0xFF161616),
-                                                                    unfocusedContainerColor = Color(0xFF161616),
-                                                                    focusedTextColor = Color.White,
-                                                                    unfocusedTextColor = Color.White,
-                                                                    focusedIndicatorColor = Color.Transparent,
-                                                                    unfocusedIndicatorColor = Color.Transparent
-                                                                ),
-                                                                singleLine = true
+                                                                modifier = Modifier.fillMaxWidth()
                                                             )
                                                         }
                                                     }
@@ -931,20 +903,11 @@ fun CreateInstanceDialog(
                                                     // Custom JVM Args
                                                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                                         Text("Custom JVM Arguments", color = Color(0xFF777777), fontSize = 10.sp)
-                                                        TextField(
+                                                        io.ezz.launcher.ui.components.EzzTextField(
                                                             value = customJvmArgs,
                                                             onValueChange = { customJvmArgs = it },
-                                                            placeholder = { Text("e.g. -XX:+UseG1GC", color = Color(0xFF444444), fontSize = 11.sp) },
-                                                            modifier = Modifier.fillMaxWidth().height(40.dp),
-                                                            colors = TextFieldDefaults.colors(
-                                                                focusedContainerColor = Color(0xFF161616),
-                                                                unfocusedContainerColor = Color(0xFF161616),
-                                                                focusedTextColor = Color.White,
-                                                                unfocusedTextColor = Color.White,
-                                                                focusedIndicatorColor = Color.Transparent,
-                                                                unfocusedIndicatorColor = Color.Transparent
-                                                            ),
-                                                            singleLine = true
+                                                            placeholder = "e.g. -XX:+UseG1GC",
+                                                            modifier = Modifier.fillMaxWidth()
                                                         )
                                                     }
                                                 }
