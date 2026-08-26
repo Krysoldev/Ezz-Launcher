@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
@@ -139,12 +138,6 @@ fun TopBar(
                 icon = Icons.Default.Extension,
                 isSelected = currentScreen == NavigationScreen.MODS,
                 onClick = { viewModel.navigateTo(NavigationScreen.MODS) }
-            )
-            TopNavTab(
-                label = "SERVERS",
-                icon = Icons.Default.Dns,
-                isSelected = currentScreen == NavigationScreen.SERVERS,
-                onClick = { viewModel.navigateTo(NavigationScreen.SERVERS) }
             )
             TopNavTab(
                 label = "SETTINGS",
