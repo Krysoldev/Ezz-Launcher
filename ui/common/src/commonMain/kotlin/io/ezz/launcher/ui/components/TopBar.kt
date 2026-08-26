@@ -54,7 +54,6 @@ fun TopBar(
     onSearchClick: () -> Unit = { viewModel.showSearchDialog.value = true }
 ) {
     val currentScreen by viewModel.currentScreen.collectAsState()
-    val isConnected by viewModel.isSupabaseConnected.collectAsState()
     val selectedAccount by viewModel.accountRepository.selectedAccount.collectAsState()
 
     Row(
@@ -167,40 +166,7 @@ fun TopBar(
                 onClick = { viewModel.navigateTo(NavigationScreen.CONSOLE) }
             )
 
-            // Supabase Cloud Status Indicator
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF141414))
-                    .border(1.dp, Color(0xFF242424), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 10.dp, vertical = 7.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(
-                                when (isConnected) {
-                                    true -> Color(0xFF10B981)
-                                    false -> Color(0xFFEF4444)
-                                    null -> Color(0xFFF59E0B)
-                                }
-                            )
-                    )
-                    Spacer(modifier = Modifier.width(7.dp))
-                    Text(
-                        text = when (isConnected) {
-                            true -> "Cloud"
-                            false -> "Offline"
-                            null -> "Syncing"
-                        },
-                        color = Color(0xFFA0A0A0),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
+
 
             // Integrated Header Account Widget
             val account = selectedAccount
