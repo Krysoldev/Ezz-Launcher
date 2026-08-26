@@ -66,6 +66,7 @@ import io.ezz.launcher.ui.components.EzzIconButton
 import io.ezz.launcher.ui.components.EzzSearchField
 import io.ezz.launcher.ui.components.EzzTextField
 import io.ezz.launcher.ui.viewmodel.AppViewModel
+import io.ezz.launcher.ui.viewmodel.NavigationScreen
 import java.awt.FileDialog
 import java.awt.Frame
 import java.io.File
@@ -102,7 +103,7 @@ fun VaultScreen(
         viewModel.vaultRepository.getActiveSkin(selectedAccount?.id)
     }
 
-    val selectedSkin = selectedSkinState ?: activeSkin ?: skins.firstOrNull()
+    val selectedSkin = selectedSkinState ?: activeSkin
 
     var searchQuery by remember { mutableStateOf("") }
     var sortOption by remember { mutableStateOf(VaultSortOption.RECENT) }
@@ -117,14 +118,14 @@ fun VaultScreen(
     var resetTrigger by remember { mutableIntStateOf(0) }
 
     // Filter and Sort Skins
-    val displayedSkins = remember(skins, searchQuery, sortOption, activeSkinId) {
+    val displayedSkins = remember(skins, searchQuery, sortOption, activeSkinId, activeSkin) {
         val filtered = skins.filter { skin ->
             searchQuery.isBlank() || skin.name.contains(searchQuery, ignoreCase = true)
         }
         when (sortOption) {
             VaultSortOption.RECENT -> filtered.sortedByDescending { it.createdAt }
             VaultSortOption.NAME -> filtered.sortedBy { it.name.lowercase() }
-            VaultSortOption.ACTIVE_FIRST -> filtered.sortedByDescending { it.id == activeSkinId }
+            VaultSortOption.ACTIVE_FIRST -> filtered.sortedByDescending { it.id == activeSkin?.id || it.id == activeSkinId }
         }
     }
 
@@ -136,449 +137,46 @@ fun VaultScreen(
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color(0xFF080808))
-            .padding(horizontal = 24.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // ==========================================
-        // 1. TOP HEADER
-        // ==========================================
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "VAULT",
-                        color = Color.White,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 0.5.sp
-                    )
-                    Text(
-                        text = "Skin Studio",
-                        color = Color(0xFF888888),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-
-            EzzButton(
-                text = "+ Import Skin",
-                onClick = {
-                    openNativeSkinPicker { file ->
-                        if (file != null && file.exists()) {
-                            try {
-                                val bytes = file.readBytes()
-                                val preferredName = file.nameWithoutExtension.replace("_", " ").replace("-", " ")
-                                viewModel.importVaultSkin(bytes, preferredName) { result ->
-                                    result.onFailure { err ->
-                                        errorMessage = err.message ?: "Failed to import skin file."
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                errorMessage = "Failed to read skin file: ${e.message}"
-                            }
-                        }
-                    }
-                },
-                variant = EzzButtonVariant.PRIMARY,
-                size = EzzButtonSize.MEDIUM
-            )
-        }
-
-        // ==========================================
-        // 2. HERO STUDIO STAGE + INFO PANEL (UPPER ~68%)
-        // ==========================================
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(0.68f),
-            horizontalArrangement = Arrangement.spacedBy(18.dp)
-        ) {
-            // LEFT: LARGE 3D CHARACTER HERO STAGE (~62%)
-            Box(
-                modifier = Modifier
-                    .weight(0.62f)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF0D0D0D))
-                    .border(1.dp, Color(0xFF1E1E1E), RoundedCornerShape(10.dp))
-            ) {
-                // 3D Canvas
-                MinecraftPlayerModel3DView(
-                    skinBytes = selectedSkinBytes,
-                    modelType = selectedSkin?.modelType ?: SkinModelType.STEVE,
-                    resetTrigger = resetTrigger,
-                    modifier = Modifier.fillMaxSize()
-                )
-
-                // Floating Top-Right 3D Camera Controls
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Reset View Button
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xCC000000))
-                            .border(1.dp, Color(0xFF333333), RoundedCornerShape(6.dp))
-                            .clickable { resetTrigger++ }
-                            .padding(horizontal = 9.dp, vertical = 5.dp)
-                    ) {
-                        Text(
-                            text = "Reset View",
-                            color = Color(0xFFAAAAAA),
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-
-                // Bottom Floating Hint
-                Text(
-                    text = "Drag to rotate  •  Scroll to zoom",
-                    color = Color(0xFF555555),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 10.dp)
-                )
-
-                // Empty State Overlay Banner (if no skins exist)
-                if (skins.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(16.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xEE121212))
-                            .border(1.dp, Color(0xFF282828), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 14.dp, vertical = 10.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Column {
-                                Text("YOUR VAULT IS EMPTY", color = Color.White, fontSize = 11.5.sp, fontWeight = FontWeight.Black)
-                                Text("Import a Minecraft skin to customize your player.", color = Color(0xFF888888), fontSize = 10.5.sp)
-                            }
-                        }
-                    }
-                }
-            }
-
-            // RIGHT: SKIN INFORMATION & ACTION PANEL (~38%)
-            Column(
-                modifier = Modifier
-                    .weight(0.38f)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF111111))
-                    .border(1.dp, Color(0xFF1E1E1E), RoundedCornerShape(10.dp))
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    // Panel Header & Active Status
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "SKIN INFORMATION",
-                            color = Color(0xFF777777),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 1.sp
-                        )
-
-                        val isCurrentlyActive = selectedSkin?.id != null && selectedSkin.id == activeSkinId
-                        if (isCurrentlyActive) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Color.White)
-                                    .padding(horizontal = 7.dp, vertical = 2.5.dp)
-                            ) {
-                                Text(
-                                    text = "● ACTIVE SKIN",
-                                    color = Color.Black,
-                                    fontSize = 9.5.sp,
-                                    fontWeight = FontWeight.Black
-                                )
-                            }
-                        } else {
-                            Text(
-                                text = "INACTIVE",
-                                color = Color(0xFF555555),
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    // Skin Name & Metadata
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = selectedSkin?.name ?: "Default Steve",
-                            color = Color.White,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Black
-                        )
-                        Text(
-                            text = if (selectedSkin != null) "Source: Local Vault • ${formatDate(selectedSkin.createdAt)}" else "Source: Default Game Asset",
-                            color = Color(0xFF777777),
-                            fontSize = 11.sp
-                        )
-                    }
-
-                    // Model Architecture Switcher
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = "MODEL ARCHITECTURE",
-                            color = Color(0xFF777777),
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xFF161616))
-                                .border(1.dp, Color(0xFF262626), RoundedCornerShape(6.dp))
-                                .padding(3.dp),
-                            horizontalArrangement = Arrangement.spacedBy(3.dp)
-                        ) {
-                            val isSteve = (selectedSkin?.modelType ?: SkinModelType.STEVE) == SkinModelType.STEVE
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(if (isSteve) Color(0xFF262626) else Color.Transparent)
-                                    .clickable {
-                                        if (selectedSkin != null) {
-                                            viewModel.updateVaultSkinModel(selectedSkin.id, SkinModelType.STEVE)
-                                        }
-                                    }
-                                    .padding(vertical = 6.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "Steve (4px Classic)",
-                                    color = if (isSteve) Color.White else Color(0xFF777777),
-                                    fontSize = 11.sp,
-                                    fontWeight = if (isSteve) FontWeight.Bold else FontWeight.Medium
-                                )
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(if (!isSteve) Color(0xFF262626) else Color.Transparent)
-                                    .clickable {
-                                        if (selectedSkin != null) {
-                                            viewModel.updateVaultSkinModel(selectedSkin.id, SkinModelType.ALEX)
-                                        }
-                                    }
-                                    .padding(vertical = 6.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "Alex (3px Slim)",
-                                    color = if (!isSteve) Color.White else Color(0xFF777777),
-                                    fontSize = 11.sp,
-                                    fontWeight = if (!isSteve) FontWeight.Bold else FontWeight.Medium
-                                )
-                            }
-                        }
-                    }
-
-                    // Action Buttons (Set Active / Rename / Delete)
-                    if (selectedSkin != null) {
-                        val isCurrentlyActive = selectedSkin.id == activeSkinId
-
-                        if (!isCurrentlyActive) {
-                            EzzButton(
-                                text = "SET AS ACTIVE SKIN",
-                                onClick = { viewModel.setActiveVaultSkin(selectedSkin.id, selectedAccount?.id) },
-                                variant = EzzButtonVariant.PRIMARY,
-                                size = EzzButtonSize.MEDIUM,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            EzzButton(
-                                text = "Rename",
-                                onClick = {
-                                    skinToRename = selectedSkin
-                                    renameInput = selectedSkin.name
-                                },
-                                variant = EzzButtonVariant.SECONDARY,
-                                size = EzzButtonSize.SMALL,
-                                modifier = Modifier.weight(1f)
-                            )
-                            EzzButton(
-                                text = "Delete",
-                                onClick = { skinToDelete = selectedSkin },
-                                variant = EzzButtonVariant.DANGER,
-                                size = EzzButtonSize.SMALL,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                }
-
-                // Offline Injection Notice
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFF141414))
-                        .border(1.dp, Color(0xFF1E1E1E), RoundedCornerShape(6.dp))
-                        .padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFF777777), modifier = Modifier.size(14.dp))
-                    Text(
-                        text = "Applied to Minecraft offline accounts on launch. Server plugins always take priority in multiplayer.",
-                        color = Color(0xFF777777),
-                        fontSize = 10.5.sp,
-                        lineHeight = 14.sp
-                    )
-                }
-            }
-        }
-
-        // ==========================================
-        // 3. BOTTOM SECTION: "MY SKINS" COLLECTION (LOWER ~32%)
-        // ==========================================
+    Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(0.32f),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .fillMaxSize()
+                .background(Color(0xFF080808))
+                .padding(horizontal = 24.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Collection Header & Compact Filter Controls
+            // ==========================================
+            // 1. TOP HEADER
+            // ==========================================
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "MY SKINS",
-                        color = Color.White,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 0.5.sp
-                    )
-                    EzzBadge(
-                        text = "${skins.size}",
-                        variant = EzzBadgeVariant.NEUTRAL
-                    )
-                }
-
-                if (skins.isNotEmpty()) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(modifier = Modifier.width(220.dp)) {
-                            EzzSearchField(
-                                value = searchQuery,
-                                onValueChange = { searchQuery = it },
-                                placeholder = "Search skins...",
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-
-                        // Compact Sort Selector
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xFF141414))
-                                .border(1.dp, Color(0xFF222222), RoundedCornerShape(6.dp))
-                                .padding(2.dp),
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            listOf(
-                                Pair(VaultSortOption.RECENT, "Recent"),
-                                Pair(VaultSortOption.NAME, "Name"),
-                                Pair(VaultSortOption.ACTIVE_FIRST, "Active")
-                            ).forEach { (opt, label) ->
-                                val isSel = sortOption == opt
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(if (isSel) Color(0xFF242424) else Color.Transparent)
-                                        .clickable { sortOption = opt }
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = label,
-                                        color = if (isSel) Color.White else Color(0xFF777777),
-                                        fontSize = 10.5.sp,
-                                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium
-                                    )
-                                }
-                            }
-                        }
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "VAULT",
+                            color = Color.White,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 0.5.sp
+                        )
+                        Text(
+                            text = "Skin Studio",
+                            color = Color(0xFF888888),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
-            }
 
-            // Visual Cards Row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Rendered Skin Cards
-                displayedSkins.forEach { skin ->
-                    val isActive = skin.id == activeSkinId
-                    val isSelected = skin.id == selectedSkin?.id
-                    val bytes = viewModel.getVaultSkinBytes(skin)
-
-                    SkinCollectionCard(
-                        skin = skin,
-                        skinBytes = bytes,
-                        isActive = isActive,
-                        isSelected = isSelected,
-                        onClick = { viewModel.selectVaultSkin(skin) }
-                    )
-                }
-
-                // Add Skin Quick Card
-                Box(
-                    modifier = Modifier
-                        .width(130.dp)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF111111))
-                        .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
-                        .clickable {
-                            openNativeSkinPicker { file ->
-                                if (file != null && file.exists()) {
+                EzzButton(
+                    text = "+ Import Skin",
+                    onClick = {
+                        openNativeSkinPicker { file ->
+                            if (file != null && file.exists()) {
+                                try {
                                     val bytes = file.readBytes()
                                     val preferredName = file.nameWithoutExtension.replace("_", " ").replace("-", " ")
                                     viewModel.importVaultSkin(bytes, preferredName) { result ->
@@ -586,170 +184,619 @@ fun VaultScreen(
                                             errorMessage = err.message ?: "Failed to import skin file."
                                         }
                                     }
+                                } catch (e: Exception) {
+                                    errorMessage = "Failed to read skin file: ${e.message}"
                                 }
                             }
-                        },
-                    contentAlignment = Alignment.Center
+                        }
+                    },
+                    variant = EzzButtonVariant.PRIMARY,
+                    size = EzzButtonSize.MEDIUM
+                )
+            }
+
+            // ==========================================
+            // 2. HERO STUDIO STAGE + INFO PANEL (UPPER ~68%)
+            // ==========================================
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(0.68f),
+                horizontalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
+                // LEFT: LARGE 3D CHARACTER HERO STAGE (~62%)
+                Box(
+                    modifier = Modifier
+                        .weight(0.62f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF0D0D0D))
+                        .border(1.dp, Color(0xFF1E1E1E), RoundedCornerShape(10.dp))
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    // 3D Canvas
+                    MinecraftPlayerModel3DView(
+                        skinBytes = selectedSkinBytes,
+                        modelType = selectedSkin?.modelType ?: SkinModelType.STEVE,
+                        resetTrigger = resetTrigger,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    // Floating Top-Right 3D Camera Controls
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // Reset View Button
                         Box(
                             modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF1E1E1E)),
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xCC000000))
+                                .border(1.dp, Color(0xFF333333), RoundedCornerShape(6.dp))
+                                .clickable { resetTrigger++ }
+                                .padding(horizontal = 9.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = "Reset View",
+                                color = Color(0xFFAAAAAA),
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    // Bottom Floating Hint
+                    Text(
+                        text = "Drag to rotate  •  Scroll to zoom",
+                        color = Color(0xFF555555),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 10.dp)
+                    )
+                }
+
+                // RIGHT: SKIN INFORMATION & ACTION PANEL (~38%)
+                Column(
+                    modifier = Modifier
+                        .weight(0.38f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF111111))
+                        .border(1.dp, Color(0xFF1E1E1E), RoundedCornerShape(10.dp))
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        // Panel Header & Active Status
+                        val currentAccount = selectedAccount
+                        val isCurrentlyActive = if (selectedSkin == null) {
+                            activeSkin == null
+                        } else {
+                            (currentAccount != null && activeSkin?.id == selectedSkin.id) || (currentAccount == null && selectedSkin.id == activeSkinId)
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "SKIN INFORMATION",
+                                color = Color(0xFF777777),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 1.sp
+                            )
+
+                            if (isCurrentlyActive) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Color.White)
+                                        .padding(horizontal = 7.dp, vertical = 2.5.dp)
+                                ) {
+                                    Text(
+                                        text = if (selectedSkin == null) "● ACTIVE (DEFAULT)" else "● ACTIVE SKIN",
+                                        color = Color.Black,
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.Black
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = "INACTIVE",
+                                    color = Color(0xFF555555),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        // Skin Name & Metadata
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = selectedSkin?.name ?: "Default Steve",
+                                color = Color.White,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                            Text(
+                                text = if (selectedSkin != null) "Source: Local Vault • ${formatDate(selectedSkin.createdAt)}" else "Source: Default Game Asset",
+                                color = Color(0xFF777777),
+                                fontSize = 11.sp
+                            )
+                        }
+
+                        // Model Architecture Switcher
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                text = "MODEL ARCHITECTURE",
+                                color = Color(0xFF777777),
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFF161616))
+                                    .border(1.dp, Color(0xFF262626), RoundedCornerShape(6.dp))
+                                    .padding(3.dp),
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                val isSteve = (selectedSkin?.modelType ?: SkinModelType.STEVE) == SkinModelType.STEVE
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(if (isSteve) Color(0xFF262626) else Color.Transparent)
+                                        .clickable {
+                                            if (selectedSkin != null) {
+                                                viewModel.updateVaultSkinModel(selectedSkin.id, SkinModelType.STEVE)
+                                            }
+                                        }
+                                        .padding(vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "Steve (4px Classic)",
+                                        color = if (isSteve) Color.White else Color(0xFF777777),
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSteve) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(if (!isSteve) Color(0xFF262626) else Color.Transparent)
+                                        .clickable {
+                                            if (selectedSkin != null) {
+                                                viewModel.updateVaultSkinModel(selectedSkin.id, SkinModelType.ALEX)
+                                            }
+                                        }
+                                        .padding(vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "Alex (3px Slim)",
+                                        color = if (!isSteve) Color.White else Color(0xFF777777),
+                                        fontSize = 11.sp,
+                                        fontWeight = if (!isSteve) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+
+                        // Action Buttons (Set Active / Rename / Delete)
+                        if (selectedSkin != null) {
+                            if (currentAccount == null) {
+                                EzzButton(
+                                    text = "Select an Account to Apply",
+                                    onClick = { viewModel.navigateTo(NavigationScreen.ACCOUNTS) },
+                                    variant = EzzButtonVariant.SECONDARY,
+                                    size = EzzButtonSize.MEDIUM,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            } else if (!isCurrentlyActive) {
+                                EzzButton(
+                                    text = "SET AS ACTIVE FOR ${currentAccount.username.uppercase()}",
+                                    onClick = { viewModel.setActiveVaultSkin(selectedSkin.id, currentAccount.id) },
+                                    variant = EzzButtonVariant.PRIMARY,
+                                    size = EzzButtonSize.MEDIUM,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                EzzButton(
+                                    text = "Rename",
+                                    onClick = {
+                                        skinToRename = selectedSkin
+                                        renameInput = selectedSkin.name
+                                    },
+                                    variant = EzzButtonVariant.SECONDARY,
+                                    size = EzzButtonSize.SMALL,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                EzzButton(
+                                    text = "Delete",
+                                    onClick = { skinToDelete = selectedSkin },
+                                    variant = EzzButtonVariant.DANGER,
+                                    size = EzzButtonSize.SMALL,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+
+                    // Offline Injection Notice
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF141414))
+                            .border(1.dp, Color(0xFF1E1E1E), RoundedCornerShape(6.dp))
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.Info, contentDescription = null, tint = Color(0xFF777777), modifier = Modifier.size(14.dp))
+                        Text(
+                            text = "Applied to Minecraft offline accounts on launch. Server plugins always take priority in multiplayer.",
+                            color = Color(0xFF777777),
+                            fontSize = 10.5.sp,
+                            lineHeight = 14.sp
+                        )
+                    }
+                }
+            }
+
+            // ==========================================
+            // 3. BOTTOM SECTION: "MY SKINS" COLLECTION (LOWER ~32%)
+            // ==========================================
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(0.32f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Collection Header & Compact Filter Controls
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "MY SKINS",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 0.5.sp
+                        )
+                        EzzBadge(
+                            text = "${skins.size}",
+                            variant = EzzBadgeVariant.NEUTRAL
+                        )
+                    }
+
+                    if (skins.isNotEmpty()) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(modifier = Modifier.width(220.dp)) {
+                                EzzSearchField(
+                                    value = searchQuery,
+                                    onValueChange = { searchQuery = it },
+                                    placeholder = "Search skins...",
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            // Compact Sort Selector
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFF141414))
+                                    .border(1.dp, Color(0xFF222222), RoundedCornerShape(6.dp))
+                                    .padding(2.dp),
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                listOf(
+                                    Pair(VaultSortOption.RECENT, "Recent"),
+                                    Pair(VaultSortOption.NAME, "Name"),
+                                    Pair(VaultSortOption.ACTIVE_FIRST, "Active")
+                                ).forEach { (opt, label) ->
+                                    val isSel = sortOption == opt
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(if (isSel) Color(0xFF242424) else Color.Transparent)
+                                            .clickable { sortOption = opt }
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = label,
+                                            color = if (isSel) Color.White else Color(0xFF777777),
+                                            fontSize = 10.5.sp,
+                                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Empty state OR Visual Cards Row
+                if (skins.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF111111))
+                            .border(1.dp, Color(0xFF1E1E1E), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 24.dp, vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(20.dp)
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(
+                                    text = "YOUR VAULT IS EMPTY",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Import a Minecraft skin to customize your player.",
+                                    color = Color(0xFF888888),
+                                    fontSize = 11.5.sp
+                                )
+                            }
+                            EzzButton(
+                                text = "+ Import Skin",
+                                onClick = {
+                                    openNativeSkinPicker { file ->
+                                        if (file != null && file.exists()) {
+                                            val bytes = file.readBytes()
+                                            val preferredName = file.nameWithoutExtension.replace("_", " ").replace("-", " ")
+                                            viewModel.importVaultSkin(bytes, preferredName) { result ->
+                                                result.onFailure { err ->
+                                                    errorMessage = err.message ?: "Failed to import skin file."
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                variant = EzzButtonVariant.PRIMARY,
+                                size = EzzButtonSize.SMALL
+                            )
+                        }
+                    }
+                } else {
+                    // Visual Cards Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val currentAccount = selectedAccount
+                        // Rendered Skin Cards
+                        displayedSkins.forEach { skin ->
+                            val isActive = (currentAccount != null && activeSkin?.id == skin.id) || (currentAccount == null && skin.id == activeSkinId)
+                            val isSelected = skin.id == selectedSkin?.id
+                            val bytes = viewModel.getVaultSkinBytes(skin)
+
+                            SkinCollectionCard(
+                                skin = skin,
+                                skinBytes = bytes,
+                                isActive = isActive,
+                                isSelected = isSelected,
+                                onClick = { viewModel.selectVaultSkin(skin) }
+                            )
+                        }
+
+                        // Add Skin Quick Card
+                        Box(
+                            modifier = Modifier
+                                .width(130.dp)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF111111))
+                                .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
+                            .clickable {
+                                openNativeSkinPicker { file ->
+                                    if (file != null && file.exists()) {
+                                        val bytes = file.readBytes()
+                                        val preferredName = file.nameWithoutExtension.replace("_", " ").replace("-", " ")
+                                        viewModel.importVaultSkin(bytes, preferredName) { result ->
+                                            result.onFailure { err ->
+                                                errorMessage = err.message ?: "Failed to import skin file."
+                                            }
+                                        }
+                                    }
+                                }
+                            },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = "Import", tint = Color.White, modifier = Modifier.size(16.dp))
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF1E1E1E)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = "Import", tint = Color.White, modifier = Modifier.size(16.dp))
+                                }
+                                Text("+ Import Skin", color = Color(0xFFAAAAAA), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
-                        Text("+ Import Skin", color = Color(0xFFAAAAAA), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
         }
-    }
 
-    // ==========================================
-    // MODALS & DIALOGS
-    // ==========================================
+        // ==========================================
+        // MODALS & DIALOGS
+        // ==========================================
 
-    // Rename Dialog
-    if (skinToRename != null) {
-        val target = skinToRename!!
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xCC000000))
-                .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {},
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
+        // Rename Dialog
+        if (skinToRename != null) {
+            val target = skinToRename!!
+            Box(
                 modifier = Modifier
-                    .width(360.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF141414))
-                    .border(1.dp, Color(0xFF282828), RoundedCornerShape(10.dp))
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                    .fillMaxSize()
+                    .background(Color(0xCC000000))
+                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {},
+                contentAlignment = Alignment.Center
             ) {
-                Text("Rename Skin", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                EzzTextField(
-                    value = renameInput,
-                    onValueChange = { renameInput = it },
-                    placeholder = "Skin name",
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier
+                        .width(360.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF141414))
+                        .border(1.dp, Color(0xFF282828), RoundedCornerShape(10.dp))
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    EzzButton(
-                        text = "Cancel",
-                        onClick = { skinToRename = null },
-                        variant = EzzButtonVariant.SECONDARY,
-                        size = EzzButtonSize.SMALL
+                    Text("Rename Skin", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    EzzTextField(
+                        value = renameInput,
+                        onValueChange = { renameInput = it },
+                        placeholder = "Skin name",
+                        modifier = Modifier.fillMaxWidth()
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    EzzButton(
-                        text = "Save",
-                        onClick = {
-                            viewModel.renameVaultSkin(target.id, renameInput) {
-                                skinToRename = null
-                            }
-                        },
-                        variant = EzzButtonVariant.PRIMARY,
-                        size = EzzButtonSize.SMALL,
-                        enabled = renameInput.isNotBlank()
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        EzzButton(
+                            text = "Cancel",
+                            onClick = { skinToRename = null },
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.SMALL
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        EzzButton(
+                            text = "Save",
+                            onClick = {
+                                viewModel.renameVaultSkin(target.id, renameInput) {
+                                    skinToRename = null
+                                }
+                            },
+                            variant = EzzButtonVariant.PRIMARY,
+                            size = EzzButtonSize.SMALL,
+                            enabled = renameInput.isNotBlank()
+                        )
+                    }
                 }
             }
         }
-    }
 
-    // Delete Confirmation Dialog
-    if (skinToDelete != null) {
-        val target = skinToDelete!!
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xCC000000))
-                .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {},
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
+        // Delete Confirmation Dialog
+        if (skinToDelete != null) {
+            val target = skinToDelete!!
+            Box(
                 modifier = Modifier
-                    .width(360.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF141414))
-                    .border(1.dp, Color(0xFF282828), RoundedCornerShape(10.dp))
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                    .fillMaxSize()
+                    .background(Color(0xCC000000))
+                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {},
+                contentAlignment = Alignment.Center
             ) {
-                Text("Delete Skin", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    text = "Are you sure you want to delete \"${target.name}\" from Vault? This cannot be undone.",
-                    color = Color(0xFFAAAAAA),
-                    fontSize = 12.5.sp
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier
+                        .width(360.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF141414))
+                        .border(1.dp, Color(0xFF282828), RoundedCornerShape(10.dp))
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    EzzButton(
-                        text = "Cancel",
-                        onClick = { skinToDelete = null },
-                        variant = EzzButtonVariant.SECONDARY,
-                        size = EzzButtonSize.SMALL
+                    Text("Delete Skin", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "Are you sure you want to delete \"${target.name}\" from Vault? This cannot be undone.",
+                        color = Color(0xFFAAAAAA),
+                        fontSize = 12.5.sp
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    EzzButton(
-                        text = "Delete",
-                        onClick = {
-                            viewModel.deleteVaultSkin(target.id)
-                            skinToDelete = null
-                        },
-                        variant = EzzButtonVariant.DANGER,
-                        size = EzzButtonSize.SMALL
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        EzzButton(
+                            text = "Cancel",
+                            onClick = { skinToDelete = null },
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.SMALL
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        EzzButton(
+                            text = "Delete",
+                            onClick = {
+                                viewModel.deleteVaultSkin(target.id)
+                                skinToDelete = null
+                            },
+                            variant = EzzButtonVariant.DANGER,
+                            size = EzzButtonSize.SMALL
+                        )
+                    }
                 }
             }
         }
-    }
 
-    // Error Dialog
-    if (errorMessage != null) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xCC000000))
-                .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {},
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
+        // Error Dialog
+        if (errorMessage != null) {
+            Box(
                 modifier = Modifier
-                    .width(380.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF161111))
-                    .border(1.dp, Color(0xFF442222), RoundedCornerShape(10.dp))
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .fillMaxSize()
+                    .background(Color(0xCC000000))
+                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {},
+                contentAlignment = Alignment.Center
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFEF5350), modifier = Modifier.size(18.dp))
-                    Text("Skin Import Notice", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                }
-                Text(errorMessage ?: "", color = Color(0xFFE0E0E0), fontSize = 12.5.sp)
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                    EzzButton(
-                        text = "Dismiss",
-                        onClick = { errorMessage = null },
-                        variant = EzzButtonVariant.SECONDARY,
-                        size = EzzButtonSize.SMALL
-                    )
+                Column(
+                    modifier = Modifier
+                        .width(380.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF161111))
+                        .border(1.dp, Color(0xFF442222), RoundedCornerShape(10.dp))
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFEF5350), modifier = Modifier.size(18.dp))
+                        Text("Skin Import Notice", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Text(errorMessage ?: "", color = Color(0xFFE0E0E0), fontSize = 12.5.sp)
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                        EzzButton(
+                            text = "Dismiss",
+                            onClick = { errorMessage = null },
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.SMALL
+                        )
+                    }
                 }
             }
         }

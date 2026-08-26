@@ -880,37 +880,5 @@ private fun addCuboidTriangles(
 }
 
 fun generateDefaultSteveSkin(): BufferedImage {
-    val img = BufferedImage(64, 64, BufferedImage.TYPE_INT_ARGB)
-    val g = img.createGraphics()
-
-    // Base skin tones
-    g.color = java.awt.Color(0x9E, 0x6E, 0x48) // Head & skin
-    g.fillRect(0, 0, 64, 64)
-
-    // Cyan shirt (torso & sleeves)
-    g.color = java.awt.Color(0x00, 0x8C, 0x8C)
-    g.fillRect(16, 16, 24, 16) // Torso
-    g.fillRect(40, 16, 16, 16) // Right arm
-    g.fillRect(32, 48, 16, 16) // Left arm
-
-    // Blue pants (legs)
-    g.color = java.awt.Color(0x2B, 0x2D, 0x7E)
-    g.fillRect(0, 16, 16, 16)  // Right leg
-    g.fillRect(16, 48, 16, 16) // Left leg
-
-    // Face features
-    g.color = java.awt.Color(0x4A, 0x32, 0x1E) // Hair & beard
-    g.fillRect(8, 8, 8, 2)
-    g.fillRect(10, 13, 4, 1)
-
-    // Eyes
-    g.color = java.awt.Color.WHITE
-    g.fillRect(9, 11, 2, 1)
-    g.fillRect(13, 11, 2, 1)
-    g.color = java.awt.Color(0x3B, 0x47, 0xA8) // Indigo eyes
-    g.fillRect(10, 11, 1, 1)
-    g.fillRect(13, 11, 1, 1)
-
-    g.dispose()
-    return img
+    return io.ezz.launcher.core.minecraft.skin.DefaultMinecraftSkin.getSteveSkinBufferedImage()
 }

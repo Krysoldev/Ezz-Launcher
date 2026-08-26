@@ -102,4 +102,39 @@ class MinecraftSkinManagerTest {
         assertTrue(headBytes.isNotEmpty())
         assertEquals(0x89.toByte(), headBytes[0])
     }
+
+    @Test
+    fun testResolveEffectiveSkinReturnsDefaultSteveWhenAccountIsNull() {
+        val skinBytes = skinManager.resolveEffectiveSkinBytes(null)
+        assertNotNull(skinBytes)
+        assertTrue(skinBytes.isNotEmpty())
+        assertEquals(DefaultMinecraftSkin.steveSkinBytes.size, skinBytes.size)
+    }
+
+    @Test
+    fun testResolveEffectiveSkinReturnsDefaultSteveWhenOfflineAccountHasNoVaultSkin() {
+        val account = OfflineAccount(
+            id = "acc-no-skin",
+            username = "PlayerNoSkin",
+            uuid = "uuid-no-skin"
+        )
+        val skinBytes = skinManager.resolveEffectiveSkinBytes(account)
+        assertNotNull(skinBytes)
+        assertTrue(skinBytes.isNotEmpty())
+        assertEquals(DefaultMinecraftSkin.steveSkinBytes.size, skinBytes.size)
+    }
+
+    @Test
+    fun testDefaultMinecraftSkinHasValidCanonicalDimensionsAndPngHeaders() {
+        val steve = DefaultMinecraftSkin.getSteveSkinBufferedImage()
+        assertEquals(64, steve.width)
+        assertEquals(64, steve.height)
+
+        val headBytes = DefaultMinecraftSkin.steveHeadBytes
+        assertTrue(headBytes.size > 8)
+        assertEquals(0x89.toByte(), headBytes[0])
+        assertEquals('P'.code.toByte(), headBytes[1])
+        assertEquals('N'.code.toByte(), headBytes[2])
+        assertEquals('G'.code.toByte(), headBytes[3])
+    }
 }

@@ -111,14 +111,13 @@ class LocalVaultSkinRepository(
 
     override fun getActiveSkin(accountId: String?): VaultSkin? {
         val currentManifest = _manifest.value
-        val targetId = if (accountId != null && currentManifest.accountSkinMappings.containsKey(accountId)) {
+        val targetId = if (accountId != null) {
             currentManifest.accountSkinMappings[accountId]
         } else {
             currentManifest.activeSkinId
         }
 
         return targetId?.let { id -> currentManifest.skins.firstOrNull { it.id == id } }
-            ?: currentManifest.skins.firstOrNull()
     }
 
     override fun getSkin(skinId: String): VaultSkin? {

@@ -46,11 +46,53 @@ class MinecraftSkinManager(
     val skinHeads: StateFlow<Map<String, ByteArray>> = _skinHeads.asStateFlow()
 
     private val defaultSteveHeadBytes: ByteArray by lazy {
-        generateSteveHeadPng()
+        DefaultMinecraftSkin.steveHeadBytes
     }
 
     init {
         pathProvider.initializeDirectories(fileSystem)
+    }
+
+    /**
+     * Resolves the effective full skin PNG bytes for an account.
+     * IF account == null -> Default Steve
+     * IF account.type == OFFLINE -> Vault Skin if assigned, else Default Steve
+     * IF account.type == ONLINE -> Official Skin, else Default Steve
+     */
+    fun resolveEffectiveSkinBytes(account: Account?): ByteArray {
+        if (account == null) {
+            return DefaultMinecraftSkin.steveSkinBytes
+        }
+        return when (account.type) {
+            AccountType.OFFLINE -> {
+                val vaultSkin = vaultSkinRepository?.getActiveSkin(account.id)
+                if (vaultSkin != null) {
+                    vaultSkinRepository?.getSkinBytes(vaultSkin) ?: DefaultMinecraftSkin.steveSkinBytes
+                } else {
+                    DefaultMinecraftSkin.steveSkinBytes
+                }
+            }
+            AccountType.MICROSOFT -> {
+                val hash = getEffectiveSkinHash(account)
+                val diskSkinFile = pathProvider.skinsDirectory.resolve("$hash.png")
+                if (fileSystem.exists(diskSkinFile)) {
+                    try {
+                        fileSystem.read(diskSkinFile) { readByteArray() }
+                    } catch (e: Exception) {
+                        DefaultMinecraftSkin.steveSkinBytes
+                    }
+                } else {
+                    DefaultMinecraftSkin.steveSkinBytes
+                }
+            }
+        }
+    }
+
+    /**
+     * Returns canonical standard Minecraft Steve skin bytes.
+     */
+    fun getDefaultSkinBytes(): ByteArray {
+        return DefaultMinecraftSkin.steveSkinBytes
     }
 
     /**
@@ -274,29 +316,7 @@ class MinecraftSkinManager(
     }
 
     fun generateSteveHeadPng(): ByteArray {
-        val steveFacePixels = intArrayOf(
-            0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(),
-            0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(),
-            0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFFB6896C.toInt(), 0xFFB6896C.toInt(), 0xFFB6896C.toInt(), 0xFFB6896C.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(),
-            0xFFB6896C.toInt(), 0xFFB6896C.toInt(), 0xFFB6896C.toInt(), 0xFFB6896C.toInt(), 0xFFB6896C.toInt(), 0xFFB6896C.toInt(), 0xFFB6896C.toInt(), 0xFFB6896C.toInt(),
-            0xFFFFFFFF.toInt(), 0xFF3C44AA.toInt(), 0xFFB6896C.toInt(), 0xFF875A3C.toInt(), 0xFF875A3C.toInt(), 0xFFB6896C.toInt(), 0xFF3C44AA.toInt(), 0xFFFFFFFF.toInt(),
-            0xFFB6896C.toInt(), 0xFFB6896C.toInt(), 0xFF875A3C.toInt(), 0xFF875A3C.toInt(), 0xFF875A3C.toInt(), 0xFF875A3C.toInt(), 0xFFB6896C.toInt(), 0xFFB6896C.toInt(),
-            0xFFB6896C.toInt(), 0xFF4A3222.toInt(), 0xFF4A3222.toInt(), 0xFF4A3222.toInt(), 0xFF4A3222.toInt(), 0xFF4A3222.toInt(), 0xFF4A3222.toInt(), 0xFFB6896C.toInt(),
-            0xFFB6896C.toInt(), 0xFFB6896C.toInt(), 0xFF4A3222.toInt(), 0xFF4A3222.toInt(), 0xFF4A3222.toInt(), 0xFF4A3222.toInt(), 0xFFB6896C.toInt(), 0xFFB6896C.toInt()
-        )
-
-        val steve8 = BufferedImage(8, 8, BufferedImage.TYPE_INT_ARGB)
-        steve8.setRGB(0, 0, 8, 8, steveFacePixels, 0, 8)
-
-        val scaled = BufferedImage(64, 64, BufferedImage.TYPE_INT_ARGB)
-        val gs = scaled.createGraphics()
-        gs.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR)
-        gs.drawImage(steve8, 0, 0, 64, 64, null)
-        gs.dispose()
-
-        val baos = ByteArrayOutputStream()
-        ImageIO.write(scaled, "PNG", baos)
-        return baos.toByteArray()
+        return DefaultMinecraftSkin.steveHeadBytes
     }
 
     private fun computeSha256(bytes: ByteArray): String {

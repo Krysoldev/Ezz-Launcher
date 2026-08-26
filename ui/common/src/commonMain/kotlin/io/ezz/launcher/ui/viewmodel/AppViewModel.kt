@@ -382,6 +382,20 @@ class AppViewModel(
                 println("Error collecting accounts for skins: ${e.message}")
             }
         }
+
+        scope.launch {
+            try {
+                accountRepository.selectedAccount.collect { selAcc ->
+                    // Reset ephemeral preview selection when switching accounts
+                    _selectedVaultSkin.value = null
+                    if (selAcc != null) {
+                        skinService.loadOrRefreshSkin(selAcc)
+                    }
+                }
+            } catch (e: Throwable) {
+                println("Error collecting selectedAccount: ${e.message}")
+            }
+        }
     }
 
     fun isInstanceRunning(instanceId: String): Boolean {
