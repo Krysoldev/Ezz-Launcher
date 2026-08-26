@@ -107,10 +107,6 @@ fun CreateInstanceDialog(
 ) {
     val existingInstances by viewModel.instances.collectAsState()
     val availableReleases by viewModel.availableVersions.collectAsState()
-    val snapshotVersions by viewModel.snapshotVersions.collectAsState()
-    val betaVersions by viewModel.betaVersions.collectAsState()
-    val alphaVersions by viewModel.alphaVersions.collectAsState()
-    val allVersions by viewModel.allVersions.collectAsState()
     val isManifestLoading by viewModel.isVersionManifestLoading.collectAsState()
     val manifestError by viewModel.versionManifestError.collectAsState()
     val latestReleaseId by viewModel.latestReleaseVersion.collectAsState()
@@ -123,23 +119,12 @@ fun CreateInstanceDialog(
     var isUserCustomName by remember { mutableStateOf(false) }
     var customIconFile by remember { mutableStateOf<File?>(null) }
 
-    // 2. Minecraft Version Catalog
-    var versionCategoryTab by remember { mutableStateOf("RELEASES") } // "RELEASES", "SNAPSHOTS", "LEGACY", "ALL"
+    // 2. Minecraft Version Catalog (Official Release Versions Only)
     var versionSearchQuery by remember { mutableStateOf("") }
 
-    val activeVersionList = remember(versionCategoryTab, availableReleases, snapshotVersions, betaVersions, alphaVersions, allVersions) {
-        when (versionCategoryTab) {
-            "RELEASES" -> availableReleases
-            "SNAPSHOTS" -> snapshotVersions
-            "LEGACY" -> betaVersions + alphaVersions
-            "ALL" -> allVersions
-            else -> availableReleases
-        }
-    }
-
-    val filteredVersions = remember(activeVersionList, versionSearchQuery) {
+    val filteredVersions = remember(availableReleases, versionSearchQuery) {
         val q = versionSearchQuery.trim().lowercase()
-        val list = if (q.isBlank()) activeVersionList else activeVersionList.filter { it.id.lowercase().contains(q) }
+        val list = if (q.isBlank()) availableReleases else availableReleases.filter { it.id.lowercase().contains(q) }
         MinecraftVersionComparator.sort(list, VersionSortOrder.NEWEST_FIRST)
     }
 
@@ -566,79 +551,56 @@ fun CreateInstanceDialog(
                                         }
                                     }
 
-                                    // 3. MINECRAFT VERSION CATALOG
-                                    StudioCard(title = "MINECRAFT VERSION (OFFICIAL MOJANG)") {
+                                    // 3. MINECRAFT VERSION CATALOG (RELEASES ONLY)
+                                    StudioCard(title = "MINECRAFT RELEASE VERSION") {
                                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                            // Tab Bar & Instant Search
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
+                                            // Search Input
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(34.dp)
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(Color(0xFF141414))
+                                                    .border(1.dp, Color(0xFF242424), RoundedCornerShape(6.dp))
+                                                    .padding(horizontal = 10.dp),
+                                                contentAlignment = Alignment.CenterStart
                                             ) {
-                                                // Category Tabs
                                                 Row(
-                                                    modifier = Modifier
-                                                        .clip(RoundedCornerShape(6.dp))
-                                                        .background(Color(0xFF141414))
-                                                        .padding(2.dp),
-                                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                    modifier = Modifier.fillMaxWidth()
                                                 ) {
-                                                    listOf("RELEASES", "SNAPSHOTS", "LEGACY", "ALL").forEach { tab ->
-                                                        val isSelected = versionCategoryTab == tab
-                                                        Box(
+                                                    Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF666666), modifier = Modifier.size(14.dp))
+                                                    TextField(
+                                                        value = versionSearchQuery,
+                                                        onValueChange = { versionSearchQuery = it },
+                                                        placeholder = { Text("Search release versions (e.g. 1.21, 1.20, 1.12, 1.8)...", color = Color(0xFF444444), fontSize = 11.5.sp) },
+                                                        colors = TextFieldDefaults.colors(
+                                                            focusedContainerColor = Color.Transparent,
+                                                            unfocusedContainerColor = Color.Transparent,
+                                                            focusedTextColor = Color.White,
+                                                            unfocusedTextColor = Color.White,
+                                                            focusedIndicatorColor = Color.Transparent,
+                                                            unfocusedIndicatorColor = Color.Transparent
+                                                        ),
+                                                        singleLine = true,
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                    if (versionSearchQuery.isNotBlank()) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Close,
+                                                            contentDescription = "Clear",
+                                                            tint = Color(0xFF888888),
                                                             modifier = Modifier
-                                                                .clip(RoundedCornerShape(4.dp))
-                                                                .background(if (isSelected) Color(0xFF262626) else Color.Transparent)
-                                                                .clickable { versionCategoryTab = tab }
-                                                                .padding(horizontal = 10.dp, vertical = 4.dp)
-                                                        ) {
-                                                            Text(
-                                                                text = tab,
-                                                                color = if (isSelected) Color.White else Color(0xFF777777),
-                                                                fontSize = 10.sp,
-                                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                                            )
-                                                        }
-                                                    }
-                                                }
-
-                                                // Search Input
-                                                Box(
-                                                    modifier = Modifier
-                                                        .width(160.dp)
-                                                        .height(28.dp)
-                                                        .clip(RoundedCornerShape(6.dp))
-                                                        .background(Color(0xFF141414))
-                                                        .border(1.dp, Color(0xFF242424), RoundedCornerShape(6.dp))
-                                                        .padding(horizontal = 8.dp),
-                                                    contentAlignment = Alignment.CenterStart
-                                                ) {
-                                                    Row(
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                                    ) {
-                                                        Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF555555), modifier = Modifier.size(12.dp))
-                                                        TextField(
-                                                            value = versionSearchQuery,
-                                                            onValueChange = { versionSearchQuery = it },
-                                                            placeholder = { Text("Search...", color = Color(0xFF444444), fontSize = 11.sp) },
-                                                            colors = TextFieldDefaults.colors(
-                                                                focusedContainerColor = Color.Transparent,
-                                                                unfocusedContainerColor = Color.Transparent,
-                                                                focusedTextColor = Color.White,
-                                                                unfocusedTextColor = Color.White,
-                                                                focusedIndicatorColor = Color.Transparent,
-                                                                unfocusedIndicatorColor = Color.Transparent
-                                                            ),
-                                                            singleLine = true,
-                                                            modifier = Modifier.fillMaxWidth()
+                                                                .size(14.dp)
+                                                                .clickable { versionSearchQuery = "" }
                                                         )
                                                     }
                                                 }
                                             }
 
                                             // Latest Release Quick Pick Banner
-                                            if (latestReleaseId.isNotBlank() && versionCategoryTab == "RELEASES" && versionSearchQuery.isBlank()) {
+                                            if (latestReleaseId.isNotBlank() && versionSearchQuery.isBlank()) {
                                                 Row(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
