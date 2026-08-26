@@ -43,7 +43,7 @@ fun main() = application {
 
     // Local-First Repositories (Authoritative for machine state)
     val instanceRepository = io.ezz.launcher.core.storage.repository.LocalInstanceRepository(pathProvider)
-    val accountRepository = io.ezz.launcher.core.storage.repository.LocalMinecraftAccountRepository(secureVault)
+    val accountRepository = io.ezz.launcher.core.storage.repository.LocalMinecraftAccountRepository(pathProvider, secureVault)
     val settingsRepository = io.ezz.launcher.core.storage.repository.LocalSettingsRepository(pathProvider)
     val profileRepository = io.ezz.launcher.core.storage.repository.SupabaseProfileRepository(supabaseClient)
     val modRepository = io.ezz.launcher.core.storage.repository.SupabaseModRepository(supabaseClient)
@@ -105,6 +105,7 @@ fun main() = application {
     )
 
     val localModScanner = io.ezz.launcher.core.minecraft.mods.LocalModScanner(pathProvider)
+    val skinManager = io.ezz.launcher.core.minecraft.skin.MinecraftSkinManager(pathProvider, httpClient)
 
     val viewModel = AppViewModel(
         instanceRepository = instanceRepository,
@@ -126,6 +127,7 @@ fun main() = application {
         launcherConfigRepository = launcherConfigRepository,
         featureFlagRepository = featureFlagRepository,
         localModScanner = localModScanner,
+        skinManager = skinManager,
         platformBridge = platformBridge
     )
 

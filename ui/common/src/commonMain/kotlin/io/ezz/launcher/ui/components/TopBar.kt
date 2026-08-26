@@ -167,34 +167,29 @@ fun TopBar(
                     .background(Color(0xFF141414))
                     .border(1.dp, Color(0xFF2A2A2A), RoundedCornerShape(8.dp))
                     .clickable { viewModel.navigateTo(NavigationScreen.ACCOUNTS) }
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFF222222)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AccountCircle,
-                        contentDescription = "Avatar",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(9.dp))
+                MinecraftSkinHead(
+                    account = account,
+                    skinManager = viewModel.skinService,
+                    size = 32.dp
+                )
+                Spacer(modifier = Modifier.width(10.dp))
                 Column {
                     Text(
-                        text = account?.username ?: "Offline Player",
+                        text = account?.username ?: "No Account",
                         color = Color.White,
-                        fontSize = 12.sp,
+                        fontSize = 12.5.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1
                     )
                     Text(
-                        text = if (account?.type == AccountType.MICROSOFT) "Microsoft" else "Offline Profile",
+                        text = when (account?.type) {
+                            AccountType.MICROSOFT -> "Microsoft Account"
+                            AccountType.OFFLINE -> "Offline Account"
+                            null -> "Select an account"
+                        },
                         color = Color(0xFF888888),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Medium

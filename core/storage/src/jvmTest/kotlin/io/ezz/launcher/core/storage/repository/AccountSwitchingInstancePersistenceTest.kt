@@ -32,7 +32,7 @@ class AccountSwitchingInstancePersistenceTest {
         secureVault = EncryptedFileVault(pathProvider.rootDirectory.resolve("vault.dat"))
 
         instanceRepository = LocalInstanceRepository(pathProvider)
-        accountRepository = LocalMinecraftAccountRepository(secureVault)
+        accountRepository = LocalMinecraftAccountRepository(pathProvider, secureVault)
     }
 
     @AfterTest
@@ -103,7 +103,7 @@ class AccountSwitchingInstancePersistenceTest {
 
         // 6. Simulate Launcher Restart (re-instantiating repositories from disk)
         val freshInstanceRepo = LocalInstanceRepository(pathProvider)
-        val freshAccountRepo = LocalMinecraftAccountRepository(secureVault)
+        val freshAccountRepo = LocalMinecraftAccountRepository(pathProvider, secureVault)
 
         freshInstanceRepo.loadAll()
         freshAccountRepo.loadAll()

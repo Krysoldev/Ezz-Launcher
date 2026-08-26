@@ -97,10 +97,17 @@ class AppViewModel(
     val launcherConfigRepository: LauncherConfigRepository? = null,
     val featureFlagRepository: FeatureFlagRepository? = null,
     val localModScanner: io.ezz.launcher.core.minecraft.mods.LocalModScanner? = null,
+    val skinManager: io.ezz.launcher.core.minecraft.skin.MinecraftSkinManager? = null,
     val platformBridge: PlatformBridge = DefaultPlatformBridge(),
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main)
 ) {
     val currentLauncherVersion = "1.0.0"
+
+    val skinService: io.ezz.launcher.core.minecraft.skin.MinecraftSkinManager =
+        skinManager ?: io.ezz.launcher.core.minecraft.skin.MinecraftSkinManager(
+            pathProvider = pathProvider,
+            httpClient = io.ezz.launcher.core.network.client.HttpClientFactory.create()
+        )
 
     private val _currentScreen = MutableStateFlow(NavigationScreen.HOME)
     val currentScreen: StateFlow<NavigationScreen> = _currentScreen.asStateFlow()

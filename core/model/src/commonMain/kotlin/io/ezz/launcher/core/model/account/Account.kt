@@ -15,7 +15,10 @@ sealed interface Account {
     val uuid: String
     val type: AccountType
     val createdAt: Long
+    val lastUsedAt: Long?
     val avatarUrl: String?
+    val skinUrl: String?
+    val skinModel: String?
 }
 
 @Serializable
@@ -24,7 +27,10 @@ data class OfflineAccount(
     override val username: String,
     override val uuid: String,
     override val createdAt: Long = 0L,
-    override val avatarUrl: String? = null
+    override val lastUsedAt: Long? = null,
+    override val avatarUrl: String? = null,
+    override val skinUrl: String? = null,
+    override val skinModel: String? = null
 ) : Account {
     override val type: AccountType = AccountType.OFFLINE
 }
@@ -38,7 +44,10 @@ data class MicrosoftAccount(
     val mcAccessToken: String,
     val expiresAt: Long,
     override val avatarUrl: String? = null,
-    override val createdAt: Long = 0L
+    override val skinUrl: String? = null,
+    override val skinModel: String? = null,
+    override val createdAt: Long = 0L,
+    override val lastUsedAt: Long? = null
 ) : Account {
     override val type: AccountType = AccountType.MICROSOFT
 }

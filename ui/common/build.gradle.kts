@@ -10,11 +10,13 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(project(":core:model"))
+            implementation(project(":core:network"))
             implementation(project(":core:auth"))
             implementation(project(":core:minecraft"))
             implementation(project(":core:runtime"))
             implementation(project(":core:storage"))
             implementation("com.squareup.okio:okio:3.9.0")
+            implementation("io.ktor:ktor-client-core:2.3.11")
             
             implementation(compose.runtime)
             implementation(compose.foundation)

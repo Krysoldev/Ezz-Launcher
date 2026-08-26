@@ -142,6 +142,7 @@ fun AccountsScreen(
                     AccountItemCard(
                         account = account,
                         isSelected = isSelected,
+                        skinManager = viewModel.skinService,
                         onSelect = { viewModel.selectAccount(account) },
                         onDelete = { viewModel.deleteAccount(account.id) }
                     )
@@ -155,6 +156,7 @@ fun AccountsScreen(
 private fun AccountItemCard(
     account: Account,
     isSelected: Boolean,
+    skinManager: io.ezz.launcher.core.minecraft.skin.MinecraftSkinManager,
     onSelect: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -193,21 +195,12 @@ private fun AccountItemCard(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f)
             ) {
-                // Avatar Head
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (isSelected) Color(0xFF242424) else Color(0xFF161616)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (account.type == AccountType.MICROSOFT) Icons.Default.Security else Icons.Default.Person,
-                        contentDescription = null,
-                        tint = if (isSelected) Color.White else Color(0xFF888888),
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
+                // Minecraft Skin Avatar Head
+                io.ezz.launcher.ui.components.MinecraftSkinHead(
+                    account = account,
+                    skinManager = skinManager,
+                    size = 42.dp
+                )
 
                 Spacer(modifier = Modifier.width(14.dp))
 

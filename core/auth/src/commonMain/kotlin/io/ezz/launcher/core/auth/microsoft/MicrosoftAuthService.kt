@@ -83,6 +83,7 @@ class MicrosoftAuthService(
 
             emit(MicrosoftLoginProgress.Authenticating("Fetching Minecraft profile..."))
             val profile = fetchMinecraftProfile(mcLogin.accessToken)
+            val activeSkin = profile.skins.find { it.state.equals("ACTIVE", ignoreCase = true) } ?: profile.skins.firstOrNull()
 
             val expiresAt = System.currentTimeMillis() + (mcLogin.expiresIn * 1000L)
             val account = MicrosoftAccount(
@@ -93,6 +94,8 @@ class MicrosoftAuthService(
                 mcAccessToken = mcLogin.accessToken,
                 expiresAt = expiresAt,
                 avatarUrl = "https://minotar.net/avatar/${profile.name}/128.png",
+                skinUrl = activeSkin?.url,
+                skinModel = activeSkin?.variant ?: "classic",
                 createdAt = System.currentTimeMillis()
             )
 
@@ -126,6 +129,7 @@ class MicrosoftAuthService(
         val xstsToken = authenticateXsts(xboxToken)
         val mcLogin = loginWithXbox(userHash, xstsToken)
         val profile = fetchMinecraftProfile(mcLogin.accessToken)
+        val activeSkin = profile.skins.find { it.state.equals("ACTIVE", ignoreCase = true) } ?: profile.skins.firstOrNull()
 
         val expiresAt = System.currentTimeMillis() + (mcLogin.expiresIn * 1000L)
         return account.copy(
@@ -133,7 +137,9 @@ class MicrosoftAuthService(
             uuid = profile.id,
             msaRefreshToken = msaToken.refreshToken ?: account.msaRefreshToken,
             mcAccessToken = mcLogin.accessToken,
-            expiresAt = expiresAt
+            expiresAt = expiresAt,
+            skinUrl = activeSkin?.url ?: account.skinUrl,
+            skinModel = activeSkin?.variant ?: account.skinModel
         )
     }
 
@@ -303,7 +309,16 @@ private data class MinecraftLoginResponse(
 )
 
 @Serializable
+private data class MinecraftSkinDto(
+    val id: String? = null,
+    val state: String? = null,
+    val url: String? = null,
+    val variant: String? = null
+)
+
+@Serializable
 private data class MinecraftProfileResponse(
     val id: String,
-    val name: String
+    val name: String,
+    val skins: List<MinecraftSkinDto> = emptyList()
 )
