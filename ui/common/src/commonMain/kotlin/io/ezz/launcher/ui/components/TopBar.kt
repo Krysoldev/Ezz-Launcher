@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Icon
@@ -50,8 +49,7 @@ import io.ezz.launcher.ui.viewmodel.NavigationScreen
 @Composable
 fun TopBar(
     viewModel: AppViewModel,
-    modifier: Modifier = Modifier,
-    onSearchClick: () -> Unit = { viewModel.showSearchDialog.value = true }
+    modifier: Modifier = Modifier
 ) {
     val currentScreen by viewModel.currentScreen.collectAsState()
     val selectedAccount by viewModel.accountRepository.selectedAccount.collectAsState()
@@ -151,13 +149,6 @@ fun TopBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Quick Search Action
-            TopBarIconAction(
-                icon = Icons.Default.Search,
-                contentDescription = "Quick Search (Ctrl+K)",
-                onClick = onSearchClick
-            )
-
             // Console Shortcut Action
             TopBarIconAction(
                 icon = Icons.Default.Terminal,
