@@ -213,14 +213,13 @@ fun VaultScreen(
                     .border(1.dp, Color(0xFF1E1E1E), RoundedCornerShape(10.dp))
             ) {
                 // 3D Canvas
-                key(resetTrigger, selectedSkin?.id) {
-                    MinecraftPlayerModel3DView(
-                        skinBytes = selectedSkinBytes,
-                        modelType = selectedSkin?.modelType ?: SkinModelType.STEVE,
-                        autoRotate = autoRotate,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
+                MinecraftPlayerModel3DView(
+                    skinBytes = selectedSkinBytes,
+                    modelType = selectedSkin?.modelType ?: SkinModelType.STEVE,
+                    autoRotate = autoRotate,
+                    resetTrigger = resetTrigger,
+                    modifier = Modifier.fillMaxSize()
+                )
 
                 // Floating Top-Right 3D Camera Controls
                 Row(
