@@ -7,27 +7,37 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.ezz.launcher.core.model.skin.SkinModelType
 import java.awt.image.BufferedImage
@@ -38,11 +48,12 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * High-performance 3D Minecraft Player Model Renderer.
- * - Dual-layer support (Head, Torso, Arms, Legs + Hat, Jacket, Sleeves, Pants overlays).
+ * High-performance, Studio-grade 3D Minecraft Player Model Renderer.
+ * - Dual-layer UV texture projection (Head, Torso, Arms, Legs + Hat, Jacket, Sleeves, Pants overlays).
  * - Steve (4px) & Alex (3px) arm geometry.
- * - 3D Camera with Yaw, Pitch, Zoom, and Smooth Auto-Rotation.
- * - Nearest-neighbor pixel shading with directional lighting.
+ * - Studio lighting, radial vignette, and soft ground contact shadow.
+ * - 360° interactive camera with Yaw, Pitch, Zoom, and drag-aware auto-rotation.
+ * - Subtle harmonic idle breathing & limb resting angles.
  */
 @Composable
 fun MinecraftPlayerModel3DView(
@@ -50,7 +61,7 @@ fun MinecraftPlayerModel3DView(
     modelType: SkinModelType = SkinModelType.STEVE,
     autoRotate: Boolean = true,
     yawState: Float = -25f,
-    pitchState: Float = 10f,
+    pitchState: Float = 8f,
     zoomState: Float = 1.0f,
     onYawChange: ((Float) -> Unit)? = null,
     onPitchChange: ((Float) -> Unit)? = null,
@@ -60,6 +71,7 @@ fun MinecraftPlayerModel3DView(
     var yaw by remember(yawState) { mutableFloatStateOf(yawState) }
     var pitch by remember(pitchState) { mutableFloatStateOf(pitchState) }
     var zoom by remember(zoomState) { mutableFloatStateOf(zoomState) }
+    var lastInteractionTime by remember { mutableLongStateOf(0L) }
 
     // Parse skin texture bitmap
     val skinImage = remember(skinBytes) {
@@ -83,32 +95,49 @@ fun MinecraftPlayerModel3DView(
         initialValue = 0f,
         targetValue = (2 * PI).toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 3600, easing = LinearEasing),
+            animation = tween(durationMillis = 3800, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "animTime"
     )
 
-    // Auto-rotate tick
+    // Drag-aware Auto-rotate tick
     LaunchedEffect(autoRotate) {
         while (autoRotate) {
             withFrameNanos {
-                yaw = (yaw + 0.35f) % 360f
-                onYawChange?.invoke(yaw)
+                val now = System.currentTimeMillis()
+                // Pause rotation for 2.5s after user finishes dragging
+                if (now - lastInteractionTime > 2500L) {
+                    yaw = (yaw + 0.28f) % 360f
+                    onYawChange?.invoke(yaw)
+                }
             }
         }
     }
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF0D0D0D))
-            .border(1.dp, Color(0xFF1E1E1E), RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .background(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFF1E1E1E),
+                        Color(0xFF111111),
+                        Color(0xFF070707)
+                    )
+                )
+            )
+            .border(1.dp, Color(0xFF222222), RoundedCornerShape(10.dp))
             .pointerInput(Unit) {
-                detectDragGestures { change, dragAmount ->
+                detectDragGestures(
+                    onDragStart = { lastInteractionTime = System.currentTimeMillis() },
+                    onDragEnd = { lastInteractionTime = System.currentTimeMillis() },
+                    onDragCancel = { lastInteractionTime = System.currentTimeMillis() }
+                ) { change, dragAmount ->
                     change.consume()
+                    lastInteractionTime = System.currentTimeMillis()
                     yaw = (yaw - dragAmount.x * 0.55f) % 360f
-                    pitch = (pitch + dragAmount.y * 0.45f).coerceIn(-75f, 75f)
+                    pitch = (pitch + dragAmount.y * 0.45f).coerceIn(-65f, 65f)
                     onYawChange?.invoke(yaw)
                     onPitchChange?.invoke(pitch)
                 }
@@ -120,7 +149,8 @@ fun MinecraftPlayerModel3DView(
                         if (event.type == PointerEventType.Scroll) {
                             val delta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
                             if (delta != 0f) {
-                                zoom = (zoom - delta * 0.08f).coerceIn(0.5f, 2.2f)
+                                lastInteractionTime = System.currentTimeMillis()
+                                zoom = (zoom - delta * 0.08f).coerceIn(0.6f, 2.0f)
                                 onZoomChange?.invoke(zoom)
                             }
                         }
@@ -133,13 +163,26 @@ fun MinecraftPlayerModel3DView(
             val canvasH = size.height
             if (canvasW <= 0f || canvasH <= 0f) return@Canvas
 
-            // Scale to fit canvas nicely (player is 32 units tall)
-            val baseScale = (canvasH.coerceAtMost(canvasW) / 36f) * zoom
+            // Hero scale: Fill ~75% of stage height nicely (character is 32 units tall)
+            val baseScale = ((canvasH * 0.76f) / 32f) * zoom
             val centerX = canvasW / 2f
-            val centerY = canvasH * 0.58f
+            val centerY = canvasH * 0.86f // Position feet close to base
 
             val yawRad = (yaw * PI / 180.0).toFloat()
             val pitchRad = (pitch * PI / 180.0).toFloat()
+
+            // 1. Draw subtle soft elliptical ground contact shadow beneath player
+            val shadowRadiusX = 14f * baseScale
+            val shadowRadiusY = 4.5f * baseScale
+            drawOval(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color(0x99000000), Color(0x40000000), Color.Transparent),
+                    center = Offset(centerX, centerY - 2f * baseScale),
+                    radius = shadowRadiusX
+                ),
+                topLeft = Offset(centerX - shadowRadiusX, centerY - 2f * baseScale - shadowRadiusY),
+                size = Size(shadowRadiusX * 2f, shadowRadiusY * 2f)
+            )
 
             val armW = if (modelType == SkinModelType.ALEX) 3 else 4
 
@@ -147,8 +190,8 @@ fun MinecraftPlayerModel3DView(
             val quads = mutableListOf<RenderQuad>()
 
             // Idle animation angles
-            val breathOffset = sin(animTime.toDouble()).toFloat() * 0.3f
-            val armSwing = sin(animTime.toDouble()).toFloat() * 2.5f
+            val breathOffset = sin(animTime.toDouble()).toFloat() * 0.25f
+            val armSwing = sin(animTime.toDouble()).toFloat() * 2.2f
 
             // 1. HEAD (8x8x8)
             buildCubeQuads(
@@ -337,6 +380,97 @@ fun MinecraftPlayerModel3DView(
             }
         }
     }
+}
+
+/**
+ * High-performance 2-Layer Avatar Head Thumbnail for Skin Collection Cards.
+ */
+@Composable
+fun SkinAvatarHeadThumbnail(
+    skinBytes: ByteArray?,
+    size: Dp = 48.dp,
+    modifier: Modifier = Modifier
+) {
+    val bitmap = remember(skinBytes) {
+        try {
+            val img = if (skinBytes != null && skinBytes.isNotEmpty()) {
+                ImageIO.read(ByteArrayInputStream(skinBytes))
+            } else {
+                generateDefaultSteveSkin()
+            }
+            createHeadBitmap(img)
+        } catch (e: Exception) {
+            createHeadBitmap(generateDefaultSteveSkin())
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xFF141414))
+            .border(1.dp, Color(0xFF282828), RoundedCornerShape(6.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap,
+                contentDescription = "Skin Head",
+                modifier = Modifier.size(size - 4.dp)
+            )
+        }
+    }
+}
+
+private fun createHeadBitmap(skin: BufferedImage): ImageBitmap? {
+    val headSize = 8
+    val scale = 8
+    val outSize = headSize * scale
+
+    val outImage = BufferedImage(outSize, outSize, BufferedImage.TYPE_INT_ARGB)
+
+    for (y in 0 until headSize) {
+        for (x in 0 until headSize) {
+            // Base layer: UV (8+x, 8+y)
+            val baseArgb = skin.getRGB(8 + x, 8 + y)
+            val baseA = (baseArgb ushr 24) and 0xFF
+            val baseR = (baseArgb ushr 16) and 0xFF
+            val baseG = (baseArgb ushr 8) and 0xFF
+            val baseB = baseArgb and 0xFF
+
+            // Overlay/Hat layer: UV (40+x, 8+y)
+            val hatArgb = if (skin.width >= 64 && skin.height >= 16) skin.getRGB(40 + x, 8 + y) else 0
+            val hatA = (hatArgb ushr 24) and 0xFF
+
+            val finalR: Int
+            val finalG: Int
+            val finalB: Int
+            val finalA: Int
+
+            if (hatA > 20) {
+                val alphaF = hatA / 255f
+                finalR = (((hatArgb ushr 16) and 0xFF) * alphaF + baseR * (1f - alphaF)).toInt().coerceIn(0, 255)
+                finalG = (((hatArgb ushr 8) and 0xFF) * alphaF + baseG * (1f - alphaF)).toInt().coerceIn(0, 255)
+                finalB = ((hatArgb and 0xFF) * alphaF + baseB * (1f - alphaF)).toInt().coerceIn(0, 255)
+                finalA = 255
+            } else {
+                finalR = baseR
+                finalG = baseG
+                finalB = baseB
+                finalA = if (baseA > 20) 255 else 0
+            }
+
+            val argb = (finalA shl 24) or (finalR shl 16) or (finalG shl 8) or finalB
+
+            for (dy in 0 until scale) {
+                for (dx in 0 until scale) {
+                    outImage.setRGB(x * scale + dx, y * scale + dy, argb)
+                }
+            }
+        }
+    }
+
+    return outImage.toComposeImageBitmap()
 }
 
 private data class Vec3(val x: Float, val y: Float, val z: Float)
