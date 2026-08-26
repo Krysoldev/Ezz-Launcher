@@ -93,6 +93,102 @@ fun HomeScreen(
             }
         }
 
+        // 1. Maintenance Mode Banner
+        val isMaintenanceMode by viewModel.isMaintenanceMode.collectAsState()
+        val maintenanceMessage by viewModel.maintenanceMessage.collectAsState()
+        if (isMaintenanceMode) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFFEF4444).copy(alpha = 0.15f))
+                    .border(1.dp, Color(0xFFEF4444), RoundedCornerShape(12.dp))
+                    .padding(16.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "⚠️ MAINTENANCE MODE: $maintenanceMessage",
+                        color = Color(0xFFEF4444),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // 2. Launcher Update Available Banner
+        val updateCheckResult by viewModel.updateCheckResult.collectAsState()
+        if (updateCheckResult?.hasUpdate == true && updateCheckResult?.latestRelease != null) {
+            val latest = updateCheckResult!!.latestRelease!!
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF3B82F6).copy(alpha = 0.15f))
+                    .border(1.dp, Color(0xFF3B82F6), RoundedCornerShape(12.dp))
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = if (updateCheckResult!!.isRequired) "🚨 Mandatory Update Required (v${latest.version})" else "🚀 New Update Available: v${latest.version}",
+                            color = Color(0xFF60A5FA),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        val releaseNotes = latest.releaseNotes
+                        if (!releaseNotes.isNullOrBlank()) {
+                            Text(
+                                text = releaseNotes,
+                                color = EzzColors.TextSecondary,
+                                fontSize = 12.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                    val downloadUrl = latest.downloadUrl
+                    if (!downloadUrl.isNullOrBlank()) {
+                        Button(
+                            onClick = { viewModel.platformBridge.openUrl(downloadUrl) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Download Update", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // 3. Announcements Feed
+        val announcements by viewModel.announcements.collectAsState()
+        if (announcements.isNotEmpty()) {
+            val topAnnouncement = announcements.first()
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(EzzColors.SurfaceLight)
+                    .border(1.dp, EzzColors.Border, RoundedCornerShape(12.dp))
+                    .padding(14.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "📢 ${topAnnouncement.title}: ${topAnnouncement.message}",
+                        color = EzzColors.TextPrimary,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
         // Hero Instance Card
         if (selectedInstance != null) {
             val inst = selectedInstance!!

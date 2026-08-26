@@ -222,26 +222,87 @@ data class SupabaseErrorDto(
 data class SupabaseLauncherReleaseDto(
     val id: String = "",
     val version: String,
-    @SerialName("release_title") val releaseTitle: String,
+    val platform: String = "windows",
+    @SerialName("download_url") val downloadUrl: String? = null,
     @SerialName("release_notes") val releaseNotes: String? = null,
-    @SerialName("download_url_exe") val downloadUrlExe: String? = null,
-    @SerialName("download_url_msi") val downloadUrlMsi: String? = null,
-    @SerialName("download_url_apk") val downloadUrlApk: String? = null,
     @SerialName("is_latest") val isLatest: Boolean = true,
-    @SerialName("is_mandatory") val isMandatory: Boolean = false,
-    @SerialName("min_supported_version") val minSupportedVersion: String? = null,
-    @SerialName("released_at") val releasedAt: String? = null
+    @SerialName("is_required") val isRequired: Boolean = false,
+    @SerialName("is_active") val isActive: Boolean = true,
+    @SerialName("published_at") val publishedAt: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("updated_at") val updatedAt: String? = null
 )
 
 @Serializable
-data class SupabaseLauncherNewsDto(
+data class SupabaseMinecraftVersionDto(
+    val id: String = "",
+    val version: String,
+    @SerialName("version_type") val versionType: String = "release",
+    @SerialName("release_date") val releaseDate: String? = null,
+    @SerialName("is_supported") val isSupported: Boolean = true,
+    @SerialName("is_available") val isAvailable: Boolean = true,
+    @SerialName("metadata_url") val metadataUrl: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("updated_at") val updatedAt: String? = null
+)
+
+@Serializable
+data class SupabaseFabricVersionDto(
+    val id: String = "",
+    @SerialName("minecraft_version") val minecraftVersion: String,
+    @SerialName("loader_version") val loaderVersion: String,
+    @SerialName("installer_version") val installerVersion: String = "1.0.1",
+    @SerialName("is_supported") val isSupported: Boolean = true,
+    @SerialName("is_active") val isActive: Boolean = true,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("updated_at") val updatedAt: String? = null
+)
+
+@Serializable
+data class SupabaseOptiFineVersionDto(
+    val id: String = "",
+    @SerialName("minecraft_version") val minecraftVersion: String,
+    @SerialName("optifine_version") val optifineVersion: String,
+    @SerialName("download_url") val downloadUrl: String? = null,
+    @SerialName("is_supported") val isSupported: Boolean = true,
+    @SerialName("is_active") val isActive: Boolean = true,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("updated_at") val updatedAt: String? = null
+)
+
+@Serializable
+data class SupabaseAnnouncementDto(
     val id: String = "",
     val title: String,
-    val summary: String,
-    val content: String? = null,
-    @SerialName("image_url") val imageUrl: String? = null,
-    @SerialName("link_url") val linkUrl: String? = null,
-    val author: String = "Ezz Launcher Team",
-    @SerialName("published_at") val publishedAt: String? = null
+    val message: String,
+    val type: String = "info",
+    @SerialName("is_active") val isActive: Boolean = true,
+    val priority: Int = 0,
+    @SerialName("published_at") val publishedAt: String? = null,
+    @SerialName("expires_at") val expiresAt: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("updated_at") val updatedAt: String? = null
 )
+
+@Serializable
+data class SupabaseLauncherConfigDto(
+    val key: String,
+    val value: String,
+    val description: String? = null,
+    @SerialName("is_active") val isActive: Boolean = true,
+    @SerialName("updated_at") val updatedAt: String? = null
+)
+
+@Serializable
+data class SupabaseFeatureFlagDto(
+    val id: String = "",
+    @SerialName("feature_key") val featureKey: String,
+    val enabled: Boolean = true,
+    val platform: String = "windows",
+    @SerialName("minimum_launcher_version") val minimumLauncherVersion: String = "1.0.0",
+    val description: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("updated_at") val updatedAt: String? = null
+)
+
 

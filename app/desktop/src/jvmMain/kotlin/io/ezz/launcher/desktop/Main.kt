@@ -47,6 +47,15 @@ fun main() = application {
     val profileRepository = io.ezz.launcher.core.storage.repository.SupabaseProfileRepository(supabaseClient)
     val modRepository = io.ezz.launcher.core.storage.repository.SupabaseModRepository(supabaseClient)
 
+    // Public / Global Repositories
+    val releaseRepository = io.ezz.launcher.core.storage.repository.SupabaseLauncherReleaseRepository(supabaseClient)
+    val minecraftVersionRepository = io.ezz.launcher.core.storage.repository.SupabaseMinecraftVersionRepository(supabaseClient)
+    val fabricVersionRepository = io.ezz.launcher.core.storage.repository.SupabaseFabricVersionRepository(supabaseClient)
+    val optifineVersionRepository = io.ezz.launcher.core.storage.repository.SupabaseOptiFineVersionRepository(supabaseClient)
+    val announcementRepository = io.ezz.launcher.core.storage.repository.SupabaseAnnouncementRepository(supabaseClient)
+    val launcherConfigRepository = io.ezz.launcher.core.storage.repository.SupabaseLauncherConfigRepository(supabaseClient)
+    val featureFlagRepository = io.ezz.launcher.core.storage.repository.SupabaseFeatureFlagRepository(supabaseClient)
+
     val versionManifestService = VersionManifestService(httpClient, pathProvider)
     val libraryResolver = LibraryResolver(pathProvider)
     val assetResolver = AssetResolver(httpClient, pathProvider)
@@ -106,6 +115,13 @@ fun main() = application {
         supabaseClient = supabaseClient,
         profileRepository = profileRepository,
         modRepository = modRepository,
+        releaseRepository = releaseRepository,
+        minecraftVersionRepository = minecraftVersionRepository,
+        fabricVersionRepository = fabricVersionRepository,
+        optifineVersionRepository = optifineVersionRepository,
+        announcementRepository = announcementRepository,
+        launcherConfigRepository = launcherConfigRepository,
+        featureFlagRepository = featureFlagRepository,
         platformBridge = platformBridge
     )
 

@@ -18,12 +18,22 @@ import io.ezz.launcher.core.runtime.LaunchEvent
 import io.ezz.launcher.core.runtime.detector.JavaRuntimeDetector
 import io.ezz.launcher.core.storage.path.PathProvider
 import io.ezz.launcher.core.storage.repository.AccountRepository
+import io.ezz.launcher.core.storage.repository.AnnouncementRepository
 import io.ezz.launcher.core.storage.repository.EzzProfile
+import io.ezz.launcher.core.storage.repository.FabricVersionRepository
+import io.ezz.launcher.core.storage.repository.FeatureFlagRepository
 import io.ezz.launcher.core.storage.repository.InstanceRepository
+import io.ezz.launcher.core.storage.repository.LauncherConfigRepository
+import io.ezz.launcher.core.storage.repository.LauncherReleaseRepository
+import io.ezz.launcher.core.storage.repository.MinecraftVersionRepository
 import io.ezz.launcher.core.storage.repository.ModRepository
+import io.ezz.launcher.core.storage.repository.OptiFineVersionRepository
 import io.ezz.launcher.core.storage.repository.ProfileRepository
 import io.ezz.launcher.core.storage.repository.SettingsRepository
+import io.ezz.launcher.core.storage.repository.UpdateCheckResult
+import io.ezz.launcher.core.storage.supabase.SupabaseAnnouncementDto
 import io.ezz.launcher.core.storage.supabase.SupabaseClient
+import io.ezz.launcher.core.storage.supabase.SupabaseMinecraftVersionDto
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,9 +69,18 @@ class AppViewModel(
     val supabaseClient: SupabaseClient? = null,
     val profileRepository: ProfileRepository? = null,
     val modRepository: ModRepository? = null,
+    val releaseRepository: LauncherReleaseRepository? = null,
+    val minecraftVersionRepository: MinecraftVersionRepository? = null,
+    val fabricVersionRepository: FabricVersionRepository? = null,
+    val optifineVersionRepository: OptiFineVersionRepository? = null,
+    val announcementRepository: AnnouncementRepository? = null,
+    val launcherConfigRepository: LauncherConfigRepository? = null,
+    val featureFlagRepository: FeatureFlagRepository? = null,
     val platformBridge: PlatformBridge = DefaultPlatformBridge(),
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main)
 ) {
+    val currentLauncherVersion = "1.0.0"
+
     private val _currentScreen = MutableStateFlow(NavigationScreen.HOME)
     val currentScreen: StateFlow<NavigationScreen> = _currentScreen.asStateFlow()
 
@@ -84,6 +103,20 @@ class AppViewModel(
     val isSupabaseConnected: StateFlow<Boolean?> = _isSupabaseConnected.asStateFlow()
 
     val currentProfile: StateFlow<EzzProfile?> = profileRepository?.currentProfile ?: MutableStateFlow(null)
+
+    // Public Supabase Data Flows
+    val announcements: StateFlow<List<SupabaseAnnouncementDto>> = announcementRepository?.announcements ?: MutableStateFlow(emptyList())
+    
+    private val _isMaintenanceMode = MutableStateFlow(false)
+    val isMaintenanceMode: StateFlow<Boolean> = _isMaintenanceMode.asStateFlow()
+
+    private val _maintenanceMessage = MutableStateFlow("")
+    val maintenanceMessage: StateFlow<String> = _maintenanceMessage.asStateFlow()
+
+    private val _updateCheckResult = MutableStateFlow<UpdateCheckResult?>(null)
+    val updateCheckResult: StateFlow<UpdateCheckResult?> = _updateCheckResult.asStateFlow()
+
+    val featureFlags: StateFlow<Map<String, Boolean>> = featureFlagRepository?.flags ?: MutableStateFlow(emptyMap())
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
@@ -109,6 +142,9 @@ class AppViewModel(
                 settingsRepository.loadSettings()
                 refreshAvailableVersions()
                 refreshJavaRuntimes()
+
+                // Load Public Supabase Tables
+                loadPublicData()
 
                 // If no accounts exist on first start, create a default offline account
                 if (loadedAccounts.isEmpty()) {
@@ -162,6 +198,44 @@ class AppViewModel(
                 _availableVersions.value = if (releases.isNotEmpty()) releases else manifest.versions
             } catch (e: Exception) {
                 println("Warning: failed to refresh versions: ${e.message}")
+            }
+        }
+    }
+
+    fun loadPublicData() {
+        scope.launch {
+            try {
+                // 1. Announcements
+                announcementRepository?.getActiveAnnouncements()
+
+                // 2. Maintenance Mode & Config
+                launcherConfigRepository?.let {
+                    val (maintenance, message) = it.isMaintenanceMode()
+                    _isMaintenanceMode.value = maintenance
+                    _maintenanceMessage.value = message
+                }
+
+                // 3. Update Check
+                releaseRepository?.let {
+                    val updateResult = it.checkForUpdates(currentLauncherVersion, platform = "windows")
+                    _updateCheckResult.value = updateResult
+                }
+
+                // 4. Feature Flags
+                featureFlagRepository?.loadFlags(platform = "windows")
+
+                // 5. Supported Minecraft Versions from Supabase
+                minecraftVersionRepository?.getSupportedVersions()
+            } catch (e: Throwable) {
+                println("Note: Public table sync completed with notice: ${e.message}")
+            }
+        }
+    }
+
+    fun checkForUpdates() {
+        scope.launch {
+            releaseRepository?.let {
+                _updateCheckResult.value = it.checkForUpdates(currentLauncherVersion, platform = "windows")
             }
         }
     }
