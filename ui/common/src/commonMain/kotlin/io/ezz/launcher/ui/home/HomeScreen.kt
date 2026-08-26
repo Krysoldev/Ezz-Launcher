@@ -307,6 +307,8 @@ private fun HeroBannerSection(
                 verticalArrangement = Arrangement.Center
             ) {
                 if (instance != null) {
+                    val javaReq = io.ezz.launcher.core.minecraft.version.JavaCompatibility.getRequiredJavaMajorVersion(instance.minecraftVersion)
+
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
@@ -316,7 +318,7 @@ private fun HeroBannerSection(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "READY TO PLAY • $accountName",
+                            text = "RUNTIME: JAVA $javaReq • $accountName",
                             color = Color(0xFFA0A0A0),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -343,6 +345,10 @@ private fun HeroBannerSection(
                         EzzLoaderBadge(loaderType = instance.loaderType)
                         EzzBadge(
                             text = "Minecraft ${instance.minecraftVersion}",
+                            variant = EzzBadgeVariant.NEUTRAL
+                        )
+                        EzzBadge(
+                            text = "Java $javaReq Runtime",
                             variant = EzzBadgeVariant.NEUTRAL
                         )
                         EzzBadge(
@@ -454,7 +460,7 @@ private fun HeroBannerSection(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "PLAYING NOW",
+                                    text = "RUNNING",
                                     color = Color.White,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Black,
@@ -463,13 +469,13 @@ private fun HeroBannerSection(
                             } else {
                                 Icon(
                                     imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = "Play",
+                                    contentDescription = "Launch",
                                     tint = Color(0xFF050505),
                                     modifier = Modifier.size(22.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "PLAY",
+                                    text = "LAUNCH",
                                     color = Color(0xFF050505),
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Black,
@@ -528,6 +534,8 @@ private fun InstanceCompactCard(
         targetValue = if (isHovered) 1.01f else 1.0f,
         animationSpec = tween(120)
     )
+
+    val javaReq = io.ezz.launcher.core.minecraft.version.JavaCompatibility.getRequiredJavaMajorVersion(instance.minecraftVersion)
 
     Box(
         modifier = Modifier
@@ -608,6 +616,12 @@ private fun InstanceCompactCard(
                         )
                         Text(text = "•", color = Color(0xFF555555), fontSize = 11.sp)
                         Text(
+                            text = "Java $javaReq",
+                            color = Color(0xFFA0A0A0),
+                            fontSize = 11.sp
+                        )
+                        Text(text = "•", color = Color(0xFF555555), fontSize = 11.sp)
+                        Text(
                             text = "${instance.maxMemoryMb / 1024} GB",
                             color = Color(0xFF777777),
                             fontSize = 11.sp
@@ -634,7 +648,7 @@ private fun InstanceCompactCard(
                     variant = EzzButtonVariant.GHOST
                 )
                 EzzButton(
-                    text = if (isRunning) "Running" else "Play",
+                    text = if (isRunning) "Running" else "Launch",
                     icon = Icons.Default.PlayArrow,
                     onClick = onPlay,
                     variant = if (isSelected) EzzButtonVariant.PRIMARY else EzzButtonVariant.SECONDARY,
@@ -652,6 +666,8 @@ private fun QuickInfoPanel(
     accountName: String,
     onViewSettings: () -> Unit
 ) {
+    val javaReq = instance?.let { io.ezz.launcher.core.minecraft.version.JavaCompatibility.getRequiredJavaMajorVersion(it.minecraftVersion) } ?: 21
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -686,7 +702,7 @@ private fun QuickInfoPanel(
             Spacer(modifier = Modifier.height(12.dp))
 
             SpecRow(label = "Account", value = accountName)
-            SpecRow(label = "Java", value = instance?.javaPath?.substringAfterLast("\\") ?: "System Auto")
+            SpecRow(label = "Runtime", value = "Java $javaReq (System Auto)")
             SpecRow(label = "RAM", value = "${(instance?.maxMemoryMb ?: 4096) / 1024} GB")
             SpecRow(label = "Resolution", value = "${instance?.windowWidth ?: 1280}x${instance?.windowHeight ?: 720}")
             SpecRow(label = "Platform", value = "Windows x64")

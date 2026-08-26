@@ -253,7 +253,7 @@ fun BottomPlayBar(
                         }
                         is ProcessState.Failed -> {
                             EzzButton(
-                                text = "RETRY PLAY",
+                                text = "RETRY LAUNCH",
                                 onClick = { viewModel.launchInstance() },
                                 variant = EzzButtonVariant.DANGER,
                                 size = EzzButtonSize.LARGE,
@@ -263,7 +263,7 @@ fun BottomPlayBar(
                         }
                         is ProcessState.Exited -> {
                             EzzButton(
-                                text = "PLAY AGAIN",
+                                text = "LAUNCH AGAIN",
                                 onClick = { viewModel.launchInstance() },
                                 variant = EzzButtonVariant.PRIMARY,
                                 size = EzzButtonSize.LARGE,
@@ -274,7 +274,7 @@ fun BottomPlayBar(
                         }
                         ProcessState.Idle -> {
                             EzzButton(
-                                text = "PLAY",
+                                text = "LAUNCH",
                                 onClick = { viewModel.launchInstance() },
                                 variant = EzzButtonVariant.PRIMARY,
                                 size = EzzButtonSize.LARGE,

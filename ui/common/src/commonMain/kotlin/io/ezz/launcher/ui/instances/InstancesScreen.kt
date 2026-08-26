@@ -362,7 +362,7 @@ private fun InstanceGridCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     EzzButton(
-                        text = "Play",
+                        text = "Launch",
                         icon = Icons.Default.PlayArrow,
                         onClick = onPlay,
                         variant = if (isSelected) EzzButtonVariant.PRIMARY else EzzButtonVariant.SECONDARY,
