@@ -51,7 +51,6 @@ import io.ezz.launcher.core.minecraft.loader.optifine.OptiFineCompatibilityValid
 import io.ezz.launcher.core.minecraft.loader.optifine.OptiFineVersionOption
 import io.ezz.launcher.core.minecraft.version.JavaCompatibility
 import io.ezz.launcher.core.minecraft.version.MinecraftVersionComparator
-import io.ezz.launcher.core.minecraft.version.VersionCategoryFilter
 import io.ezz.launcher.core.minecraft.version.VersionSortOrder
 import io.ezz.launcher.core.model.instance.LoaderType
 import io.ezz.launcher.core.model.minecraft.VersionSummary
@@ -76,15 +75,11 @@ fun CreateInstanceDialog(
 ) {
     val allVersions by viewModel.allVersions.collectAsState()
     val availableReleases by viewModel.availableVersions.collectAsState()
-    val snapshotVersions by viewModel.snapshotVersions.collectAsState()
-    val oldVersions by viewModel.oldVersions.collectAsState()
     val detectedJavaRuntimes by viewModel.detectedJavaRuntimes.collectAsState()
     val settings by viewModel.settingsRepository.settings.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
     var currentStep by remember { mutableStateOf(1) } // 1: Version, 2: Loader, 3: Java & Memory, 4: Screen, 5: Summary
-    var selectedCategory by remember { mutableStateOf(VersionCategoryFilter.RELEASES) }
-    var sortOrder by remember { mutableStateOf(VersionSortOrder.NEWEST_FIRST) }
 
     var name by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
@@ -124,21 +119,21 @@ fun CreateInstanceDialog(
         )
     }
 
-    val sourceList = when (selectedCategory) {
-        VersionCategoryFilter.RELEASES -> if (availableReleases.isNotEmpty()) availableReleases else fallbackVersions
-        VersionCategoryFilter.SNAPSHOTS -> snapshotVersions
-        VersionCategoryFilter.OLD_BETA_ALPHA -> oldVersions
-        VersionCategoryFilter.ALL -> if (allVersions.isNotEmpty()) allVersions else availableReleases
+    val sourceList = remember(allVersions, availableReleases) {
+        if (allVersions.isNotEmpty()) allVersions
+        else if (availableReleases.isNotEmpty()) availableReleases
+        else fallbackVersions
     }
 
-    val versionsToDisplay = remember(sourceList, searchQuery, sortOrder) {
+    val versionsToDisplay = remember(sourceList, searchQuery) {
         val filtered = if (searchQuery.isBlank()) {
             sourceList
         } else {
             val q = searchQuery.trim().lowercase()
             sourceList.filter { it.id.lowercase().contains(q) }
         }
-        MinecraftVersionComparator.sort(filtered, sortOrder)
+        // Always sorted Newest to Oldest
+        MinecraftVersionComparator.sort(filtered, VersionSortOrder.NEWEST_FIRST)
     }
 
     // Auto-fill instance name when version is selected
@@ -271,10 +266,6 @@ fun CreateInstanceDialog(
                         1 -> Step1VersionCatalog(
                             name = name,
                             onNameChange = { name = it },
-                            selectedCategory = selectedCategory,
-                            onCategoryChange = { selectedCategory = it },
-                            sortOrder = sortOrder,
-                            onSortChange = { sortOrder = it },
                             searchQuery = searchQuery,
                             onSearchChange = { searchQuery = it },
                             versions = versionsToDisplay,
@@ -394,10 +385,6 @@ fun CreateInstanceDialog(
 private fun Step1VersionCatalog(
     name: String,
     onNameChange: (String) -> Unit,
-    selectedCategory: VersionCategoryFilter,
-    onCategoryChange: (VersionCategoryFilter) -> Unit,
-    sortOrder: VersionSortOrder,
-    onSortChange: (VersionSortOrder) -> Unit,
     searchQuery: String,
     onSearchChange: (String) -> Unit,
     versions: List<VersionSummary>,
@@ -415,83 +402,17 @@ private fun Step1VersionCatalog(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Category Filter Tabs
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFF141414))
-                    .border(1.dp, Color(0xFF242424), RoundedCornerShape(6.dp))
-                    .padding(2.dp)
-            ) {
-                VersionCategoryFilter.entries.forEach { cat ->
-                    val isSelected = selectedCategory == cat
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(if (isSelected) Color(0xFF242424) else Color.Transparent)
-                            .clickable { onCategoryChange(cat) }
-                            .padding(horizontal = 9.dp, vertical = 5.dp)
-                    ) {
-                        Text(
-                            text = cat.displayName,
-                            color = if (isSelected) Color.White else Color(0xFF888888),
-                            fontSize = 11.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                        )
-                    }
-                }
-            }
-
-            // Search & Sort Controls
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFF141414))
-                        .border(1.dp, Color(0xFF242424), RoundedCornerShape(6.dp))
-                        .clickable {
-                            val next = when (sortOrder) {
-                                VersionSortOrder.NEWEST_FIRST -> VersionSortOrder.OLDEST_FIRST
-                                VersionSortOrder.OLDEST_FIRST -> VersionSortOrder.NAME_ASC
-                                else -> VersionSortOrder.NEWEST_FIRST
-                            }
-                            onSortChange(next)
-                        }
-                        .padding(horizontal = 8.dp, vertical = 7.dp)
-                ) {
-                    Text(
-                        text = when (sortOrder) {
-                            VersionSortOrder.NEWEST_FIRST -> "↓ Newest"
-                            VersionSortOrder.OLDEST_FIRST -> "↑ Oldest"
-                            else -> "A-Z"
-                        },
-                        color = Color.White,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Box(modifier = Modifier.width(180.dp)) {
-                    EzzSearchField(
-                        value = searchQuery,
-                        onValueChange = onSearchChange,
-                        placeholder = "Search (1.20, 1.8)..."
-                    )
-                }
-            }
-        }
+        // Full-width Clean Search Bar
+        EzzSearchField(
+            value = searchQuery,
+            onValueChange = onSearchChange,
+            placeholder = "Search Minecraft version (e.g. 1.21.4, 1.20.1, 1.8.9)...",
+            modifier = Modifier.fillMaxWidth()
+        )
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Virtualized Minecraft Version List
+        // Virtualized Minecraft Version List (Sorted Newest to Oldest)
         if (versions.isEmpty()) {
             Box(
                 modifier = Modifier
