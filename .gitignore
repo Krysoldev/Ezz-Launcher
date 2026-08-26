@@ -1,0 +1,40 @@
+# Gradle and build artifacts
+.gradle/
+build/
+*/build/
+*/*/build/
+*.class
+
+# IDE and Editor files
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.fleet/
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Android
+.cxx/
+*.apk
+*.aab
+captures/
+local.properties
+
+# Compose Multiplatform Desktop packaging outputs
+app/desktop/build/
+
+# Native binaries, crash logs, heaps
+*.log
+hs_err_pid*
+replay_pid*
+MojangTricks*
+
+# Temporary test & runtime files
+*.tmp
+*.bak
+scratch/
