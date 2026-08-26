@@ -1,8 +1,12 @@
 package io.ezz.launcher.ui.accounts
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,10 +23,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
@@ -31,9 +31,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,7 +47,6 @@ import io.ezz.launcher.ui.components.EzzBadgeVariant
 import io.ezz.launcher.ui.components.EzzButton
 import io.ezz.launcher.ui.components.EzzButtonSize
 import io.ezz.launcher.ui.components.EzzButtonVariant
-import io.ezz.launcher.ui.components.EzzCard
 import io.ezz.launcher.ui.components.EzzEmptyState
 import io.ezz.launcher.ui.components.EzzIconButton
 import io.ezz.launcher.ui.theme.EzzTheme
@@ -56,15 +57,14 @@ fun AccountsScreen(
     viewModel: AppViewModel,
     modifier: Modifier = Modifier
 ) {
-    val colors = EzzTheme.colors
     val accounts by viewModel.accountRepository.accounts.collectAsState()
     val selectedAccount by viewModel.accountRepository.selectedAccount.collectAsState()
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(colors.background)
-            .padding(32.dp)
+            .background(Color(0xFF050505))
+            .padding(26.dp)
     ) {
         // Header
         Row(
@@ -73,20 +73,28 @@ fun AccountsScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "ACCOUNTS",
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 0.5.sp
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    EzzBadge(
+                        text = "${accounts.size}",
+                        variant = EzzBadgeVariant.NEUTRAL
+                    )
+                }
                 Text(
-                    text = "Account Manager",
-                    color = colors.textPrimary,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Manage your Microsoft Online and Offline player profiles (${accounts.size} active)",
-                    color = colors.textSecondary,
-                    fontSize = 14.sp
+                    text = "Manage Microsoft OAuth credentials and offline local player profiles",
+                    color = Color(0xFF888888),
+                    fontSize = 12.sp
                 )
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 EzzButton(
                     text = "Add Offline Account",
                     onClick = { viewModel.showAddOfflineAccountDialog.value = true },
@@ -94,8 +102,6 @@ fun AccountsScreen(
                     size = EzzButtonSize.MEDIUM,
                     icon = Icons.Default.Person
                 )
-
-                Spacer(modifier = Modifier.width(12.dp))
 
                 EzzButton(
                     text = "Microsoft Login",
@@ -107,18 +113,28 @@ fun AccountsScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         if (accounts.isEmpty()) {
-            EzzEmptyState(
-                title = "No Accounts Configured",
-                description = "Add an offline player account or sign in with Microsoft to launch Minecraft.",
-                actionButtonText = "Add Offline Account",
-                onActionClick = { viewModel.showAddOfflineAccountDialog.value = true }
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(280.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF0F0F0F))
+                    .border(1.dp, Color(0xFF202020), RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                EzzEmptyState(
+                    title = "No Accounts Added Yet",
+                    description = "Add an offline player profile or sign in with Microsoft to launch Minecraft.",
+                    actionLabel = "Add Offline Account",
+                    onAction = { viewModel.showAddOfflineAccountDialog.value = true }
+                )
+            }
         } else {
             LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(accounts, key = { it.id }) { account ->
@@ -142,18 +158,34 @@ private fun AccountItemCard(
     onSelect: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val colors = EzzTheme.colors
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
 
-    EzzCard(
-        modifier = Modifier.fillMaxWidth(),
-        borderColor = if (isSelected) colors.primary else colors.border,
-        backgroundColor = if (isSelected) colors.surfaceVariant else colors.cardBackground,
-        onClick = onSelect
+    val scale by animateFloatAsState(
+        targetValue = if (isHovered) 1.01f else 1.0f,
+        animationSpec = tween(120)
+    )
+
+    Box(
+        modifier = Modifier
+            .scale(scale)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (isSelected) Color(0xFF181818) else Color(0xFF101010))
+            .border(
+                1.dp,
+                if (isSelected) Color.White else if (isHovered) Color(0xFF383838) else Color(0xFF222222),
+                RoundedCornerShape(6.dp)
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onSelect
+            )
+            .padding(18.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -164,54 +196,53 @@ private fun AccountItemCard(
                 // Avatar Head
                 Box(
                     modifier = Modifier
-                        .size(46.dp)
-                        .clip(CircleShape)
-                        .background(if (isSelected) colors.primaryGlow else colors.surface)
-                        .border(1.dp, if (isSelected) colors.primary else colors.border, CircleShape),
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (isSelected) Color(0xFF242424) else Color(0xFF161616)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = if (account.type == AccountType.MICROSOFT) Icons.Default.Security else Icons.Default.Person,
                         contentDescription = null,
-                        tint = if (isSelected) colors.primary else colors.textSecondary,
-                        modifier = Modifier.size(24.dp)
+                        tint = if (isSelected) Color.White else Color(0xFF888888),
+                        modifier = Modifier.size(22.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(14.dp))
 
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = account.username,
-                            color = colors.textPrimary,
-                            fontSize = 16.sp,
+                            color = Color.White,
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         EzzBadge(
                             text = if (account.type == AccountType.MICROSOFT) "MICROSOFT" else "OFFLINE",
-                            variant = if (account.type == AccountType.MICROSOFT) EzzBadgeVariant.SUCCESS else EzzBadgeVariant.NEUTRAL
+                            variant = if (account.type == AccountType.MICROSOFT) EzzBadgeVariant.PRIMARY else EzzBadgeVariant.NEUTRAL
                         )
                         if (isSelected) {
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             EzzBadge(
                                 text = "ACTIVE",
-                                variant = EzzBadgeVariant.PRIMARY
+                                variant = EzzBadgeVariant.SUCCESS
                             )
                         }
                     }
 
                     Text(
                         text = "UUID: ${account.uuid.take(18)}...",
-                        color = colors.textMuted,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(top = 3.dp)
+                        color = Color(0xFF777777),
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 2.dp)
                     )
                 }
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!isSelected) {
                     EzzButton(
                         text = "Select",
@@ -219,14 +250,14 @@ private fun AccountItemCard(
                         variant = EzzButtonVariant.SECONDARY,
                         size = EzzButtonSize.SMALL
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
                 }
 
                 EzzIconButton(
                     icon = Icons.Default.Delete,
                     onClick = onDelete,
                     contentDescription = "Delete Account",
-                    tint = colors.danger
+                    size = EzzButtonSize.SMALL,
+                    variant = EzzButtonVariant.DANGER
                 )
             }
         }

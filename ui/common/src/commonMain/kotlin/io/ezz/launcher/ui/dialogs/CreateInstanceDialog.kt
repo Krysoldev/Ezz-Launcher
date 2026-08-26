@@ -7,6 +7,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -54,12 +56,13 @@ import io.ezz.launcher.ui.components.EzzBadgeVariant
 import io.ezz.launcher.ui.components.EzzButton
 import io.ezz.launcher.ui.components.EzzButtonSize
 import io.ezz.launcher.ui.components.EzzButtonVariant
+import io.ezz.launcher.ui.components.EzzCard
 import io.ezz.launcher.ui.components.EzzIconButton
 import io.ezz.launcher.ui.components.EzzLoaderBadge
 import io.ezz.launcher.ui.components.EzzSearchField
 import io.ezz.launcher.ui.components.EzzSlider
-import io.ezz.launcher.ui.components.EzzTabs
 import io.ezz.launcher.ui.components.EzzTextField
+import io.ezz.launcher.ui.components.EzzToggle
 import io.ezz.launcher.ui.theme.EzzTheme
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 import kotlinx.coroutines.launch
@@ -67,7 +70,7 @@ import kotlinx.coroutines.launch
 private enum class VersionCategory(val title: String) {
     RELEASES("Releases"),
     SNAPSHOTS("Snapshots"),
-    ALL("All Versions"),
+    ALL("All (900+)"),
     OLD("Beta / Alpha")
 }
 
@@ -76,7 +79,6 @@ fun CreateInstanceDialog(
     viewModel: AppViewModel,
     onDismiss: () -> Unit
 ) {
-    val colors = EzzTheme.colors
     val availableReleases by viewModel.availableVersions.collectAsState()
     val allVersions by viewModel.allVersions.collectAsState()
     val snapshotVersions by viewModel.snapshotVersions.collectAsState()
@@ -84,7 +86,7 @@ fun CreateInstanceDialog(
     val settings by viewModel.settingsRepository.settings.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
-    var currentStep by remember { mutableStateOf(1) } // 1: Version & Loader, 2: Config & RAM
+    var currentStep by remember { mutableStateOf(1) } // 1: Info & Version, 2: Loader, 3: Java & RAM, 4: Game Settings, 5: Summary
     var selectedCategory by remember { mutableStateOf(VersionCategory.RELEASES) }
 
     var name by remember { mutableStateOf("") }
@@ -96,6 +98,10 @@ fun CreateInstanceDialog(
     var isLoadingFabricLoaders by remember { mutableStateOf(false) }
 
     var maxRamMb by remember { mutableStateOf(settings.defaultMaxMemoryMb.toFloat()) }
+    var jvmArgs by remember { mutableStateOf(settings.globalJvmArgs.joinToString(" ")) }
+    var windowWidth by remember { mutableStateOf(1280) }
+    var windowHeight by remember { mutableStateOf(720) }
+    var isFullscreen by remember { mutableStateOf(false) }
 
     val fallbackVersions = remember {
         listOf(
@@ -148,15 +154,14 @@ fun CreateInstanceDialog(
     Dialog(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
-                .widthIn(max = 640.dp)
-                .fillMaxWidth(0.95f)
-                .clip(RoundedCornerShape(16.dp))
-                .background(colors.surface)
-                .border(1.dp, colors.borderLight, RoundedCornerShape(16.dp))
+                .widthIn(min = 660.dp, max = 740.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF0A0A0A))
+                .border(1.dp, Color(0xFF282828), RoundedCornerShape(8.dp))
                 .padding(24.dp)
         ) {
             Column {
-                // Header Row with Step Indicator
+                // Header & Close
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -164,14 +169,24 @@ fun CreateInstanceDialog(
                 ) {
                     Column {
                         Text(
-                            text = if (currentStep == 1) "Create Instance — Version & Mod Loader" else "Create Instance — Hardware & Profile",
-                            color = colors.textPrimary,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
+                            text = "CREATE MINECRAFT INSTANCE",
+                            color = Color.White,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 0.5.sp
                         )
                         Text(
-                            text = if (currentStep == 1) "Select any official release, snapshot, or historic version" else "Configure instance RAM allocation and display title",
-                            color = colors.textSecondary,
+                            text = "Step $currentStep of 5 • ${
+                                when (currentStep) {
+                                    1 -> "Basic Information & Version"
+                                    2 -> "Mod Loader Selection"
+                                    3 -> "Java Runtime & Memory"
+                                    4 -> "Game Resolution & Settings"
+                                    5 -> "Overview & Confirmation"
+                                    else -> ""
+                                }
+                            }",
+                            color = Color(0xFF888888),
                             fontSize = 12.sp
                         )
                     }
@@ -179,216 +194,99 @@ fun CreateInstanceDialog(
                     EzzIconButton(
                         icon = Icons.Default.Close,
                         onClick = onDismiss,
-                        contentDescription = "Close",
-                        tint = colors.textMuted
+                        size = EzzButtonSize.SMALL,
+                        variant = EzzButtonVariant.GHOST
                     )
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                AnimatedContent(
-                    targetState = currentStep,
-                    transitionSpec = { fadeIn() togetherWith fadeOut() },
-                    label = "CreateWizardStep"
-                ) { step ->
-                    if (step == 1) {
-                        // Step 1: Version & Loader Selection
-                        Column {
-                            // Category Filter Tabs
-                            val categoryTabs = listOf("Releases", "Snapshots", "All (${if (allVersions.isNotEmpty()) allVersions.size else 900}+)", "Beta / Alpha")
-                            EzzTabs(
-                                tabs = categoryTabs,
-                                selectedIndex = selectedCategory.ordinal,
-                                onTabSelected = { selectedCategory = VersionCategory.entries[it] },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Search Version
-                            EzzSearchField(
-                                value = searchQuery,
-                                onValueChange = { searchQuery = it },
-                                placeholder = "Search Minecraft version (e.g. 1.21.4, 1.20.1, 1.8.9, 24w...)",
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            // Version Picker List
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(180.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(colors.cardBackground)
-                                    .border(1.dp, colors.border, RoundedCornerShape(10.dp))
-                                    .padding(4.dp)
-                            ) {
-                                if (versionsToDisplay.isEmpty()) {
-                                    Box(modifier = Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
-                                        Text("No versions match your search filter", color = colors.textMuted, fontSize = 13.sp)
+                // Step Pills Bar
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    (1..5).forEach { stepNum ->
+                        val isActive = stepNum == currentStep
+                        val isDone = stepNum < currentStep
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(
+                                    when {
+                                        isActive -> Color.White
+                                        isDone -> Color(0xFF555555)
+                                        else -> Color(0xFF1E1E1E)
                                     }
-                                } else {
-                                    LazyColumn {
-                                        items(versionsToDisplay, key = { it.id }) { ver ->
-                                            val isSelected = ver.id == selectedMcVersion
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clip(RoundedCornerShape(6.dp))
-                                                    .background(if (isSelected) colors.primary.copy(alpha = 0.15f) else Color.Transparent)
-                                                    .border(
-                                                        if (isSelected) 1.dp else 0.dp,
-                                                        if (isSelected) colors.primary.copy(alpha = 0.5f) else Color.Transparent,
-                                                        RoundedCornerShape(6.dp)
-                                                    )
-                                                    .clickable {
-                                                        selectedMcVersion = ver.id
-                                                        if (name.startsWith("Minecraft") || name.isBlank()) {
-                                                            name = "Minecraft ${ver.id}"
-                                                        }
-                                                    }
-                                                    .padding(horizontal = 12.dp, vertical = 7.dp),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Text(
-                                                        text = ver.id,
-                                                        color = if (isSelected) colors.primary else colors.textPrimary,
-                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                        fontSize = 13.sp
-                                                    )
-                                                    Spacer(modifier = Modifier.width(8.dp))
-                                                    EzzBadge(
-                                                        text = ver.type.uppercase(),
-                                                        variant = when (ver.type) {
-                                                            "release" -> EzzBadgeVariant.SUCCESS
-                                                            "snapshot" -> EzzBadgeVariant.PRIMARY
-                                                            else -> EzzBadgeVariant.NEUTRAL
-                                                        }
-                                                    )
-                                                    if (isSelected) {
-                                                        Spacer(modifier = Modifier.width(6.dp))
-                                                        Icon(
-                                                            imageVector = Icons.Default.Check,
-                                                            contentDescription = null,
-                                                            tint = colors.primary,
-                                                            modifier = Modifier.size(14.dp)
-                                                        )
-                                                    }
-                                                }
-                                                Text(
-                                                    text = ver.releaseTime.take(10),
-                                                    color = colors.textMuted,
-                                                    fontSize = 11.sp
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            // Loader Selector Tabs
-                            Text("Mod Loader", color = colors.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                LoaderPill(
-                                    name = "Vanilla",
-                                    isSelected = selectedLoader == LoaderType.VANILLA,
-                                    onClick = { selectedLoader = LoaderType.VANILLA },
-                                    modifier = Modifier.weight(1f)
                                 )
-                                LoaderPill(
-                                    name = "Fabric",
-                                    isSelected = selectedLoader == LoaderType.FABRIC,
-                                    onClick = { selectedLoader = LoaderType.FABRIC },
-                                    modifier = Modifier.weight(1f)
-                                )
-                                LoaderPill(
-                                    name = "OptiFine",
-                                    isSelected = selectedLoader == LoaderType.OPTIFINE,
-                                    onClick = { selectedLoader = LoaderType.OPTIFINE },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-
-                            if (selectedLoader == LoaderType.FABRIC) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                if (isLoadingFabricLoaders) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        CircularProgressIndicator(modifier = Modifier.size(14.dp), color = colors.primary, strokeWidth = 2.dp)
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Fetching Fabric loaders...", color = colors.textSecondary, fontSize = 11.sp)
-                                    }
-                                } else {
-                                    Text("Fabric Loader: ${selectedFabricLoader ?: "Latest"}", color = colors.primary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                }
-                            } else if (selectedLoader == LoaderType.OPTIFINE) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                val optiVer = OptiFineCompatibilityValidator.getSuggestedOptiFineVersion(selectedMcVersion)
-                                Text("OptiFine Profile: $optiVer", color = colors.warning, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                    } else {
-                        // Step 2: Instance Name & Performance
-                        Column {
-                            EzzTextField(
-                                value = name,
-                                onValueChange = { name = it },
-                                label = "Instance Name",
-                                placeholder = "e.g. Survival 1.21.4",
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            // Summary Preview Box
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(colors.cardBackground)
-                                    .border(1.dp, colors.border, RoundedCornerShape(10.dp))
-                                    .padding(14.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column {
-                                        Text(text = "Target Configuration", color = colors.textMuted, fontSize = 11.sp)
-                                        Text(text = "Minecraft $selectedMcVersion", color = colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                    EzzLoaderBadge(loaderType = selectedLoader)
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            // RAM Allocation Slider
-                            EzzSlider(
-                                value = maxRamMb,
-                                onValueChange = { maxRamMb = it },
-                                valueRange = 1024f..16384f,
-                                steps = 15,
-                                label = "Memory Allocation (RAM)",
-                                valueDisplay = "${(maxRamMb / 1024).toInt()} GB"
-                            )
-                        }
+                        )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-                // Footer Buttons
+                // Multi-step Content
+                AnimatedContent(
+                    targetState = currentStep,
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    modifier = Modifier.height(340.dp)
+                ) { step ->
+                    when (step) {
+                        1 -> Step1VersionSelection(
+                            name = name,
+                            onNameChange = { name = it },
+                            selectedCategory = selectedCategory,
+                            onCategoryChange = { selectedCategory = it },
+                            searchQuery = searchQuery,
+                            onSearchChange = { searchQuery = it },
+                            versions = versionsToDisplay,
+                            selectedVersion = selectedMcVersion,
+                            onSelectVersion = { v ->
+                                selectedMcVersion = v
+                                if (name.isBlank() || name.startsWith("Minecraft ")) {
+                                    name = "Minecraft $v"
+                                }
+                            }
+                        )
+                        2 -> Step2LoaderSelection(
+                            selectedLoader = selectedLoader,
+                            onLoaderChange = { selectedLoader = it },
+                            selectedMcVersion = selectedMcVersion,
+                            fabricLoaders = fabricLoaders,
+                            selectedFabricLoader = selectedFabricLoader,
+                            onFabricLoaderChange = { selectedFabricLoader = it },
+                            isLoadingFabric = isLoadingFabricLoaders
+                        )
+                        3 -> Step3JavaMemory(
+                            maxRamMb = maxRamMb,
+                            onRamChange = { maxRamMb = it },
+                            jvmArgs = jvmArgs,
+                            onJvmArgsChange = { jvmArgs = it }
+                        )
+                        4 -> Step4GameSettings(
+                            windowWidth = windowWidth,
+                            onWidthChange = { windowWidth = it },
+                            windowHeight = windowHeight,
+                            onHeightChange = { windowHeight = it },
+                            isFullscreen = isFullscreen,
+                            onFullscreenChange = { isFullscreen = it }
+                        )
+                        5 -> Step5Summary(
+                            name = name,
+                            mcVersion = selectedMcVersion,
+                            loaderType = selectedLoader,
+                            fabricLoader = selectedFabricLoader,
+                            ramMb = maxRamMb.toInt(),
+                            resolution = "${windowWidth}x${windowHeight}"
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Footer Navigation Controls
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -397,50 +295,42 @@ fun CreateInstanceDialog(
                     if (currentStep > 1) {
                         EzzButton(
                             text = "Back",
-                            onClick = { currentStep -= 1 },
+                            icon = Icons.AutoMirrored.Filled.ArrowBack,
+                            onClick = { currentStep-- },
                             variant = EzzButtonVariant.SECONDARY,
-                            size = EzzButtonSize.MEDIUM,
-                            icon = Icons.AutoMirrored.Filled.ArrowBack
-                        )
-                    } else {
-                        EzzButton(
-                            text = "Cancel",
-                            onClick = onDismiss,
-                            variant = EzzButtonVariant.GHOST,
                             size = EzzButtonSize.MEDIUM
                         )
+                    } else {
+                        Spacer(modifier = Modifier.width(10.dp))
                     }
 
-                    if (currentStep == 1) {
+                    if (currentStep < 5) {
                         EzzButton(
                             text = "Next",
-                            onClick = { currentStep = 2 },
+                            trailingIcon = Icons.AutoMirrored.Filled.ArrowForward,
+                            onClick = { currentStep++ },
                             variant = EzzButtonVariant.PRIMARY,
                             size = EzzButtonSize.MEDIUM,
-                            trailingIcon = Icons.AutoMirrored.Filled.ArrowForward
+                            enabled = name.isNotBlank() && selectedMcVersion.isNotBlank()
                         )
                     } else {
                         EzzButton(
                             text = "Create Instance",
+                            icon = Icons.Default.Check,
                             onClick = {
-                                val finalLoaderVersion = when (selectedLoader) {
-                                    LoaderType.FABRIC -> selectedFabricLoader ?: "0.16.10"
-                                    LoaderType.OPTIFINE -> OptiFineCompatibilityValidator.getSuggestedOptiFineVersion(selectedMcVersion)
-                                    LoaderType.VANILLA -> null
-                                }
                                 viewModel.createInstance(
                                     name = name.ifBlank { "Minecraft $selectedMcVersion" },
                                     minecraftVersion = selectedMcVersion,
                                     loaderType = selectedLoader,
-                                    loaderVersion = finalLoaderVersion,
+                                    loaderVersion = if (selectedLoader == LoaderType.FABRIC) selectedFabricLoader else null,
                                     minMemoryMb = 1024,
                                     maxMemoryMb = maxRamMb.toInt(),
-                                    customJvmArgs = emptyList()
+                                    customJvmArgs = jvmArgs.split(" ").filter { it.isNotBlank() }
                                 )
+                                onDismiss()
                             },
                             variant = EzzButtonVariant.PRIMARY,
-                            size = EzzButtonSize.MEDIUM,
-                            icon = Icons.Default.Check
+                            size = EzzButtonSize.MEDIUM
                         )
                     }
                 }
@@ -450,27 +340,391 @@ fun CreateInstanceDialog(
 }
 
 @Composable
-private fun LoaderPill(
+private fun Step1VersionSelection(
     name: String,
+    onNameChange: (String) -> Unit,
+    selectedCategory: VersionCategory,
+    onCategoryChange: (VersionCategory) -> Unit,
+    searchQuery: String,
+    onSearchChange: (String) -> Unit,
+    versions: List<VersionSummary>,
+    selectedVersion: String,
+    onSelectVersion: (String) -> Unit
+) {
+    Column {
+        EzzTextField(
+            value = name,
+            onValueChange = onNameChange,
+            label = "Instance Name",
+            placeholder = "e.g. Survival 1.21",
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Category Tabs
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFF141414))
+                    .border(1.dp, Color(0xFF242424), RoundedCornerShape(6.dp))
+                    .padding(2.dp)
+            ) {
+                VersionCategory.entries.forEach { cat ->
+                    val isSelected = selectedCategory == cat
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(if (isSelected) Color(0xFF242424) else Color.Transparent)
+                            .clickable { onCategoryChange(cat) }
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Text(
+                            text = cat.title,
+                            color = if (isSelected) Color.White else Color(0xFF888888),
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
+            // Quick Search
+            Box(modifier = Modifier.width(180.dp)) {
+                EzzSearchField(
+                    value = searchQuery,
+                    onValueChange = onSearchChange,
+                    placeholder = "Filter (e.g. 1.21)..."
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Versions List
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .clip(RoundedCornerShape(6.dp))
+                .background(Color(0xFF101010))
+                .border(1.dp, Color(0xFF202020), RoundedCornerShape(6.dp))
+                .padding(4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            items(versions, key = { it.id }) { v ->
+                val isSelected = v.id == selectedVersion
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(if (isSelected) Color(0xFF222222) else Color.Transparent)
+                        .clickable { onSelectVersion(v.id) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = v.id,
+                            color = if (isSelected) Color.White else Color(0xFFD4D4D4),
+                            fontSize = 13.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                        if (isSelected) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Box(modifier = Modifier.size(5.dp).clip(CircleShape).background(Color.White))
+                        }
+                    }
+
+                    EzzBadge(
+                        text = v.type.uppercase(),
+                        variant = if (v.type == "release") EzzBadgeVariant.NEUTRAL else EzzBadgeVariant.INFO
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Step2LoaderSelection(
+    selectedLoader: LoaderType,
+    onLoaderChange: (LoaderType) -> Unit,
+    selectedMcVersion: String,
+    fabricLoaders: List<String>,
+    selectedFabricLoader: String?,
+    onFabricLoaderChange: (String) -> Unit,
+    isLoadingFabric: Boolean
+) {
+    val optifineSupported = OptiFineCompatibilityValidator.isVersionSupported(selectedMcVersion)
+
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text(
+            text = "Select Minecraft Mod Loader",
+            color = Color.White,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            LoaderCard(
+                title = "Vanilla",
+                subtitle = "Official pure Mojang build",
+                isSelected = selectedLoader == LoaderType.VANILLA,
+                onClick = { onLoaderChange(LoaderType.VANILLA) },
+                modifier = Modifier.weight(1f)
+            )
+
+            LoaderCard(
+                title = "Fabric",
+                subtitle = "Fast, lightweight mod engine",
+                isSelected = selectedLoader == LoaderType.FABRIC,
+                onClick = { onLoaderChange(LoaderType.FABRIC) },
+                modifier = Modifier.weight(1f)
+            )
+
+            LoaderCard(
+                title = "OptiFine",
+                subtitle = if (optifineSupported) "Shaders & FPS optimizations" else "Not supported on $selectedMcVersion",
+                isSelected = selectedLoader == LoaderType.OPTIFINE,
+                enabled = optifineSupported,
+                onClick = { onLoaderChange(LoaderType.OPTIFINE) },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        if (selectedLoader == LoaderType.FABRIC) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Fabric Loader Version",
+                color = Color(0xFFA0A0A0),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+
+            if (isLoadingFabric) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Fetching compatible Fabric builds...", color = Color(0xFF888888), fontSize = 12.sp)
+                }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    fabricLoaders.take(4).forEach { loaderVer ->
+                        val isSelected = loaderVer == selectedFabricLoader
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (isSelected) Color(0xFF252525) else Color(0xFF141414))
+                                .border(1.dp, if (isSelected) Color.White else Color(0xFF282828), RoundedCornerShape(4.dp))
+                                .clickable { onFabricLoaderChange(loaderVer) }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = loaderVer,
+                                color = if (isSelected) Color.White else Color(0xFF999999),
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LoaderCard(
+    title: String,
+    subtitle: String,
+    isSelected: Boolean,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (isSelected) Color(0xFF1C1C1C) else Color(0xFF101010))
+            .border(1.dp, if (isSelected) Color.White else Color(0xFF262626), RoundedCornerShape(6.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(14.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    color = if (enabled) Color.White else Color(0xFF555555),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                if (isSelected) {
+                    Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color.White))
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = subtitle,
+                color = if (enabled) Color(0xFF888888) else Color(0xFF444444),
+                fontSize = 11.sp,
+                lineHeight = 14.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun Step3JavaMemory(
+    maxRamMb: Float,
+    onRamChange: (Float) -> Unit,
+    jvmArgs: String,
+    onJvmArgsChange: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        EzzSlider(
+            value = maxRamMb,
+            onValueChange = onRamChange,
+            valueRange = 1024f..16384f,
+            steps = 15,
+            label = "Maximum Memory (RAM Allocation)",
+            valueDisplay = "${(maxRamMb / 1024).toInt()} GB"
+        )
+
+        EzzTextField(
+            value = jvmArgs,
+            onValueChange = onJvmArgsChange,
+            label = "Custom JVM Arguments",
+            placeholder = "-XX:+UseG1GC -XX:+UnlockExperimentalVMOptions",
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+@Composable
+private fun Step4GameSettings(
+    windowWidth: Int,
+    onWidthChange: (Int) -> Unit,
+    windowHeight: Int,
+    onHeightChange: (Int) -> Unit,
+    isFullscreen: Boolean,
+    onFullscreenChange: (Boolean) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Text(
+            text = "Game Window Resolution",
+            color = Color.White,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ResolutionPreset(
+                label = "1280 x 720 (HD)",
+                isSelected = windowWidth == 1280 && windowHeight == 720,
+                onClick = { onWidthChange(1280); onHeightChange(720) },
+                modifier = Modifier.weight(1f)
+            )
+            ResolutionPreset(
+                label = "1920 x 1080 (FHD)",
+                isSelected = windowWidth == 1920 && windowHeight == 1080,
+                onClick = { onWidthChange(1920); onHeightChange(1080) },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        EzzToggle(
+            checked = isFullscreen,
+            onCheckedChange = onFullscreenChange,
+            label = "Launch in Fullscreen Mode",
+            description = "Automatically expand game to full desktop monitor"
+        )
+    }
+}
+
+@Composable
+private fun ResolutionPreset(
+    label: String,
     isSelected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colors = EzzTheme.colors
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (isSelected) colors.primary.copy(alpha = 0.15f) else colors.cardBackground)
-            .border(1.dp, if (isSelected) colors.primary else colors.border, RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (isSelected) Color(0xFF1E1E1E) else Color(0xFF101010))
+            .border(1.dp, if (isSelected) Color.White else Color(0xFF242424), RoundedCornerShape(6.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = name,
-            color = if (isSelected) colors.primary else colors.textSecondary,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            fontSize = 13.sp
+            text = label,
+            color = if (isSelected) Color.White else Color(0xFF888888),
+            fontSize = 12.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
         )
+    }
+}
+
+@Composable
+private fun Step5Summary(
+    name: String,
+    mcVersion: String,
+    loaderType: LoaderType,
+    fabricLoader: String?,
+    ramMb: Int,
+    resolution: String
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xFF121212))
+            .border(1.dp, Color(0xFF282828), RoundedCornerShape(6.dp))
+            .padding(18.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                text = "INSTANCE CONFIGURATION OVERVIEW",
+                color = Color(0xFF888888),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.8.sp
+            )
+
+            SummaryRow("Instance Name", name)
+            SummaryRow("Minecraft Version", mcVersion)
+            SummaryRow("Mod Engine", if (loaderType == LoaderType.FABRIC) "Fabric ($fabricLoader)" else loaderType.name)
+            SummaryRow("Memory Allocated", "${ramMb / 1024} GB RAM")
+            SummaryRow("Initial Resolution", resolution)
+        }
+    }
+}
+
+@Composable
+private fun SummaryRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = label, color = Color(0xFF888888), fontSize = 12.sp)
+        Text(text = value, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
     }
 }

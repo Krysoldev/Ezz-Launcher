@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -38,17 +39,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import io.ezz.launcher.core.model.instance.Instance
+import io.ezz.launcher.core.model.instance.LoaderType
 import io.ezz.launcher.ui.components.EzzBadge
 import io.ezz.launcher.ui.components.EzzBadgeVariant
 import io.ezz.launcher.ui.components.EzzButton
 import io.ezz.launcher.ui.components.EzzButtonSize
 import io.ezz.launcher.ui.components.EzzButtonVariant
+import io.ezz.launcher.ui.components.EzzCard
 import io.ezz.launcher.ui.components.EzzIconButton
 import io.ezz.launcher.ui.components.EzzLoaderBadge
 import io.ezz.launcher.ui.components.EzzSlider
@@ -70,7 +74,6 @@ fun EditInstanceDialog(
     viewModel: AppViewModel,
     onDismiss: () -> Unit
 ) {
-    val colors = EzzTheme.colors
     var activeSection by remember { mutableStateOf(InstanceSettingSection.GENERAL) }
 
     var name by remember { mutableStateOf(instance.name) }
@@ -86,11 +89,11 @@ fun EditInstanceDialog(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
                 .height(520.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .border(1.dp, colors.borderLight, RoundedCornerShape(12.dp)),
-            colors = CardDefaults.cardColors(containerColor = colors.cardBackground)
+                .clip(RoundedCornerShape(8.dp))
+                .border(1.dp, Color(0xFF2E2E2E), RoundedCornerShape(8.dp)),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0A0A0A))
         ) {
-            Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(22.dp)) {
                 // Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -101,9 +104,10 @@ fun EditInstanceDialog(
                         Column {
                             Text(
                                 text = "Configure ${instance.name}",
-                                color = colors.textPrimary,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold
+                                color = Color.White,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 0.3.sp
                             )
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
                                 EzzLoaderBadge(loaderType = instance.loaderType)
@@ -115,32 +119,39 @@ fun EditInstanceDialog(
 
                     EzzIconButton(
                         icon = Icons.Default.Close,
-                        onClick = onDismiss
+                        onClick = onDismiss,
+                        size = EzzButtonSize.SMALL,
+                        variant = EzzButtonVariant.GHOST
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
-                // Split Layout: Nav Tabs on left, Settings panel on right
-                Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                    // Left Navigation Tabs
+                // Sidebar + Detail Container
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Category Navigation
                     Column(
                         modifier = Modifier
-                            .width(160.dp)
+                            .width(180.dp)
                             .fillMaxHeight()
-                            .background(colors.surfaceVariant)
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF101010))
+                            .border(1.dp, Color(0xFF202020), RoundedCornerShape(6.dp))
                             .padding(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        InstanceSettingSection.values().forEach { section ->
+                        InstanceSettingSection.entries.forEach { section ->
                             val isSelected = activeSection == section
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(if (isSelected) colors.primary.copy(alpha = 0.15f) else colors.surfaceVariant)
-                                    .border(1.dp, if (isSelected) colors.primary else colors.border, RoundedCornerShape(6.dp))
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(if (isSelected) Color(0xFF222222) else Color.Transparent)
                                     .clickable { activeSection = section }
                                     .padding(horizontal = 10.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -148,13 +159,13 @@ fun EditInstanceDialog(
                                 Icon(
                                     imageVector = section.icon,
                                     contentDescription = null,
-                                    tint = if (isSelected) colors.primary else colors.textSecondary,
+                                    tint = if (isSelected) Color.White else Color(0xFF888888),
                                     modifier = Modifier.size(16.dp)
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Spacer(modifier = Modifier.width(10.dp))
                                 Text(
                                     text = section.title,
-                                    color = if (isSelected) colors.textPrimary else colors.textSecondary,
+                                    color = if (isSelected) Color.White else Color(0xFF888888),
                                     fontSize = 12.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                                 )
@@ -162,113 +173,112 @@ fun EditInstanceDialog(
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    // Right Content Area
-                    Column(
+                    // Content Area
+                    Box(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .background(colors.surface)
-                            .clip(RoundedCornerShape(8.dp))
-                            .border(1.dp, colors.border, RoundedCornerShape(8.dp))
-                            .padding(16.dp)
-                            .verticalScroll(rememberScrollState())
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF121212))
+                            .border(1.dp, Color(0xFF222222), RoundedCornerShape(6.dp))
+                            .padding(18.dp)
                     ) {
-                        when (activeSection) {
-                            InstanceSettingSection.GENERAL -> {
-                                Text(text = "GENERAL SETTINGS", color = colors.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                                Spacer(modifier = Modifier.height(12.dp))
-                                EzzTextField(
-                                    value = name,
-                                    onValueChange = { name = it },
-                                    label = "Instance Display Name",
-                                    placeholder = "Survival SMP"
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(text = "Minecraft Version: ${instance.minecraftVersion}", color = colors.textSecondary, fontSize = 13.sp)
-                                Text(text = "Mod Loader: ${instance.loaderType.name}", color = colors.primary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                            }
-
-                            InstanceSettingSection.JAVA -> {
-                                Text(text = "JAVA RUNTIME & RAM", color = colors.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                                Spacer(modifier = Modifier.height(12.dp))
-                                EzzSlider(
-                                    value = maxRamMb,
-                                    onValueChange = { maxRamMb = it },
-                                    valueRange = 1024f..16384f,
-                                    steps = 15,
-                                    label = "RAM Allocation",
-                                    valueDisplay = "${(maxRamMb / 1024).toInt()} GB"
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                EzzTextField(
-                                    value = javaPath,
-                                    onValueChange = { javaPath = it },
-                                    label = "Custom Java Path",
-                                    placeholder = "Auto-detect system Java"
-                                )
-                            }
-
-                            InstanceSettingSection.GAME -> {
-                                Text(text = "GAME DIRECTORY & DISPLAY", color = colors.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            when (activeSection) {
+                                InstanceSettingSection.GENERAL -> {
                                     EzzTextField(
-                                        value = windowWidth,
-                                        onValueChange = { windowWidth = it },
-                                        label = "Window Width",
-                                        placeholder = "1280",
-                                        modifier = Modifier.weight(1f)
+                                        value = name,
+                                        onValueChange = { name = it },
+                                        label = "Instance Name",
+                                        modifier = Modifier.fillMaxWidth()
                                     )
-                                    EzzTextField(
-                                        value = windowHeight,
-                                        onValueChange = { windowHeight = it },
-                                        label = "Window Height",
-                                        placeholder = "720",
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(12.dp))
-                                EzzButton(
-                                    text = "Open Game Directory",
-                                    icon = Icons.Default.FolderOpen,
-                                    onClick = { viewModel.openInstanceFolder(instance.id) },
-                                    variant = EzzButtonVariant.SECONDARY,
-                                    size = EzzButtonSize.SMALL
-                                )
-                            }
 
-                            InstanceSettingSection.MODS -> {
-                                Text(text = "INSTALLED MODS (${installedMods.size})", color = colors.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                                Spacer(modifier = Modifier.height(12.dp))
-                                if (installedMods.isEmpty()) {
-                                    Text(text = "No mods installed in this instance.", color = colors.textSecondary, fontSize = 13.sp)
-                                } else {
-                                    installedMods.forEach { mod ->
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 4.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(text = mod.name, color = colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                                            Text(text = if (mod.enabled) "Active" else "Disabled", color = if (mod.enabled) colors.accent else colors.textMuted, fontSize = 11.sp)
+                                    EzzCard(modifier = Modifier.fillMaxWidth()) {
+                                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Text("Metadata & Location", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            Text("Game Version: Minecraft ${instance.minecraftVersion}", color = Color(0xFFA0A0A0), fontSize = 11.sp)
+                                            Text("Mod Loader: ${instance.loaderType.name}", color = Color(0xFFA0A0A0), fontSize = 11.sp)
+                                            Text("Root: ${viewModel.pathProvider.getInstanceDirectory(instance.id)}", color = Color(0xFF777777), fontSize = 10.sp)
                                         }
                                     }
                                 }
-                            }
+                                InstanceSettingSection.JAVA -> {
+                                    EzzSlider(
+                                        value = maxRamMb,
+                                        onValueChange = { maxRamMb = it },
+                                        valueRange = 1024f..16384f,
+                                        steps = 15,
+                                        label = "RAM Allocation",
+                                        valueDisplay = "${(maxRamMb / 1024).toInt()} GB"
+                                    )
 
-                            InstanceSettingSection.ADVANCED -> {
-                                Text(text = "ADVANCED JVM FLAGS", color = colors.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                                Spacer(modifier = Modifier.height(12.dp))
-                                EzzTextField(
-                                    value = customJvmArgs,
-                                    onValueChange = { customJvmArgs = it },
-                                    label = "Custom JVM Arguments",
-                                    placeholder = "-XX:+UseG1GC -XX:MaxGCPauseMillis=50"
-                                )
+                                    EzzTextField(
+                                        value = javaPath,
+                                        onValueChange = { javaPath = it },
+                                        label = "Custom Java Binary Path (leave blank for Auto)",
+                                        placeholder = "C:\\Program Files\\Java\\jdk-21\\bin\\javaw.exe",
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                                InstanceSettingSection.GAME -> {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        EzzTextField(
+                                            value = windowWidth,
+                                            onValueChange = { windowWidth = it },
+                                            label = "Window Width (px)",
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        EzzTextField(
+                                            value = windowHeight,
+                                            onValueChange = { windowHeight = it },
+                                            label = "Window Height (px)",
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                                InstanceSettingSection.MODS -> {
+                                    Text("Installed Mods (${installedMods.size})", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    if (installedMods.isEmpty()) {
+                                        Text(
+                                            text = "No mods found in this instance. Use the Mods tab or drag .jar files into the mods folder.",
+                                            color = Color(0xFF777777),
+                                            fontSize = 12.sp
+                                        )
+                                    } else {
+                                        installedMods.forEach { mod ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(4.dp))
+                                                    .background(Color(0xFF181818))
+                                                    .border(1.dp, Color(0xFF242424), RoundedCornerShape(4.dp))
+                                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(mod.name, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                                Text(mod.version, color = Color(0xFF888888), fontSize = 11.sp)
+                                            }
+                                        }
+                                    }
+                                }
+                                InstanceSettingSection.ADVANCED -> {
+                                    EzzTextField(
+                                        value = customJvmArgs,
+                                        onValueChange = { customJvmArgs = it },
+                                        label = "Custom JVM Arguments",
+                                        placeholder = "-XX:+UseG1GC -XX:+UnlockExperimentalVMOptions",
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
                             }
                         }
                     }
@@ -276,35 +286,45 @@ fun EditInstanceDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Footer Actions
+                // Footer Save Actions
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     EzzButton(
-                        text = "Cancel",
-                        onClick = onDismiss,
-                        variant = EzzButtonVariant.GHOST,
+                        text = "Open Folder",
+                        icon = Icons.Default.FolderOpen,
+                        onClick = { viewModel.openInstanceFolder(instance.id) },
+                        variant = EzzButtonVariant.SECONDARY,
                         size = EzzButtonSize.MEDIUM
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    EzzButton(
-                        text = "Save Settings",
-                        onClick = {
-                            val updated = instance.copy(
-                                name = name.ifBlank { instance.name },
-                                maxMemoryMb = maxRamMb.toInt(),
-                                javaPath = javaPath.ifBlank { null },
-                                windowWidth = windowWidth.toIntOrNull() ?: 1280,
-                                windowHeight = windowHeight.toIntOrNull() ?: 720,
-                                customJvmArgs = if (customJvmArgs.isBlank()) emptyList() else customJvmArgs.split(" ")
-                            )
-                            viewModel.updateInstance(updated)
-                            onDismiss()
-                        },
-                        variant = EzzButtonVariant.PRIMARY,
-                        size = EzzButtonSize.MEDIUM
-                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        EzzButton(
+                            text = "Cancel",
+                            onClick = onDismiss,
+                            variant = EzzButtonVariant.GHOST,
+                            size = EzzButtonSize.MEDIUM
+                        )
+                        EzzButton(
+                            text = "Save Changes",
+                            onClick = {
+                                val updated = instance.copy(
+                                    name = name.ifBlank { instance.name },
+                                    maxMemoryMb = maxRamMb.toInt(),
+                                    javaPath = javaPath.ifBlank { null },
+                                    windowWidth = windowWidth.toIntOrNull() ?: instance.windowWidth,
+                                    windowHeight = windowHeight.toIntOrNull() ?: instance.windowHeight,
+                                    customJvmArgs = customJvmArgs.split(" ").filter { it.isNotBlank() }
+                                )
+                                viewModel.updateInstance(updated)
+                                onDismiss()
+                            },
+                            variant = EzzButtonVariant.PRIMARY,
+                            size = EzzButtonSize.MEDIUM
+                        )
+                    }
                 }
             }
         }

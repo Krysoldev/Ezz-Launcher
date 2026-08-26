@@ -52,7 +52,6 @@ fun ConsoleScreen(
     viewModel: AppViewModel,
     modifier: Modifier = Modifier
 ) {
-    val colors = EzzTheme.colors
     val logs by viewModel.logs.collectAsState()
     val listState = rememberLazyListState()
 
@@ -66,8 +65,8 @@ fun ConsoleScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(colors.background)
-            .padding(32.dp)
+            .background(Color(0xFF050505))
+            .padding(26.dp)
     ) {
         // Header
         Row(
@@ -77,29 +76,27 @@ fun ConsoleScreen(
         ) {
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Default.Terminal, contentDescription = null, tint = colors.primary, modifier = Modifier.size(28.dp))
-                    Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "Game Console",
-                        color = colors.textPrimary,
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold
+                        text = "CONSOLE",
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 0.5.sp
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     EzzBadge(
                         text = "${logs.size} LINES",
                         variant = EzzBadgeVariant.NEUTRAL
                     )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Live STDOUT and STDERR stream from Minecraft process",
-                    color = colors.textSecondary,
-                    fontSize = 14.sp
+                    text = "Live STDOUT and STDERR stream from Minecraft process execution",
+                    color = Color(0xFF888888),
+                    fontSize = 12.sp
                 )
             }
 
-            Row {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 EzzButton(
                     text = "Copy Logs",
                     onClick = {
@@ -117,8 +114,6 @@ fun ConsoleScreen(
                     icon = Icons.Default.ContentCopy
                 )
 
-                Spacer(modifier = Modifier.width(12.dp))
-
                 EzzButton(
                     text = "Clear",
                     onClick = { viewModel.clearLogs() },
@@ -129,23 +124,23 @@ fun ConsoleScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(18.dp))
 
         // Console Terminal Box
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFF06090F))
-                .border(1.dp, colors.border, RoundedCornerShape(16.dp))
-                .padding(16.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF080808))
+                .border(1.dp, Color(0xFF202020), RoundedCornerShape(8.dp))
+                .padding(14.dp)
         ) {
             if (logs.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        text = "No logs yet. Launch an instance to view live output.",
-                        color = colors.textMuted,
-                        fontSize = 14.sp
+                        text = "No logs yet. Launch an instance to view live output stream.",
+                        color = Color(0xFF555555),
+                        fontSize = 12.sp
                     )
                 }
             } else {
@@ -155,16 +150,16 @@ fun ConsoleScreen(
                 ) {
                     items(logs) { log ->
                         val logColor = when {
-                            log.isError -> colors.danger
-                            log.message.startsWith("===") -> colors.primary
-                            log.message.contains("WARN", ignoreCase = true) -> colors.warning
-                            else -> colors.textSecondary
+                            log.isError -> Color(0xFFEF4444)
+                            log.message.startsWith("===") -> Color.White
+                            log.message.contains("WARN", ignoreCase = true) -> Color(0xFFF59E0B)
+                            else -> Color(0xFFB0B0B0)
                         }
                         Text(
                             text = log.message,
                             color = logColor,
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 12.sp,
+                            fontSize = 11.5.sp,
                             modifier = Modifier.padding(vertical = 1.dp)
                         )
                     }

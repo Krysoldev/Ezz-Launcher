@@ -1,13 +1,13 @@
 package io.ezz.launcher.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -32,32 +32,32 @@ enum class EzzCardVariant {
 fun EzzCard(
     modifier: Modifier = Modifier,
     variant: EzzCardVariant = EzzCardVariant.SURFACE,
-    cornerRadius: Dp = EzzTheme.state.cardCornerRadius,
+    cornerRadius: Dp = 8.dp,
     onClick: (() -> Unit)? = null,
     borderColor: Color? = null,
     backgroundColor: Color? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val colors = EzzTheme.colors
     val state = EzzTheme.state
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
 
     val scale by animateFloatAsState(
-        targetValue = if (state.enableAnimations && onClick != null && isHovered) 1.01f else 1.0f
+        targetValue = if (state.enableAnimations && onClick != null && isHovered) 1.01f else 1.0f,
+        animationSpec = tween(durationMillis = 150)
     )
 
     val baseBg = backgroundColor ?: when (variant) {
-        EzzCardVariant.SURFACE -> colors.cardBackground
-        EzzCardVariant.ELEVATED -> colors.surfaceVariant
-        EzzCardVariant.OUTLINED -> colors.surface
-        EzzCardVariant.GLASS -> colors.surface.copy(alpha = 0.6f)
+        EzzCardVariant.SURFACE -> Color(0xFF151515)
+        EzzCardVariant.ELEVATED -> Color(0xFF1A1A1A)
+        EzzCardVariant.OUTLINED -> Color(0xFF0A0A0A)
+        EzzCardVariant.GLASS -> Color(0xFF101010)
     }
 
     val baseBorder = borderColor ?: when {
-        isHovered && onClick != null -> colors.primary.copy(alpha = 0.6f)
-        variant == EzzCardVariant.OUTLINED -> colors.border
-        else -> colors.border.copy(alpha = 0.6f)
+        isHovered && onClick != null -> Color(0xFF444444)
+        variant == EzzCardVariant.OUTLINED -> Color(0xFF303030)
+        else -> Color(0xFF242424)
     }
 
     val clickableModifier = if (onClick != null) {
@@ -76,7 +76,7 @@ fun EzzCard(
             .clip(RoundedCornerShape(cornerRadius))
             .then(clickableModifier),
         shape = RoundedCornerShape(cornerRadius),
-        color = if (isHovered && onClick != null) baseBg.copy(alpha = 0.9f) else baseBg,
+        color = if (isHovered && onClick != null) Color(0xFF1C1C1C) else baseBg,
         border = BorderStroke(1.dp, baseBorder)
     ) {
         Box {

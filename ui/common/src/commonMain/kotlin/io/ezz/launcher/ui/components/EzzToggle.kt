@@ -1,6 +1,7 @@
 package io.ezz.launcher.ui.components
 
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -45,7 +46,8 @@ fun EzzToggle(
     val interactionSource = remember { MutableInteractionSource() }
 
     val thumbOffset by animateDpAsState(
-        targetValue = if (checked) 20.dp else 2.dp
+        targetValue = if (checked) 18.dp else 2.dp,
+        animationSpec = tween(durationMillis = 150)
     )
 
     Row(
@@ -57,22 +59,23 @@ fun EzzToggle(
                 enabled = enabled,
                 onClick = { onCheckedChange(!checked) }
             )
-            .padding(vertical = 6.dp),
+            .padding(vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (label != null) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = label,
-                    color = if (enabled) colors.textPrimary else colors.textMuted,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
+                    color = if (enabled) Color.White else colors.textDisabled,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
                 if (description != null) {
                     Text(
                         text = description,
                         color = colors.textSecondary,
-                        fontSize = 12.sp
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
                     )
                 }
             }
@@ -81,19 +84,19 @@ fun EzzToggle(
 
         Box(
             modifier = Modifier
-                .width(44.dp)
-                .height(24.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(if (checked) colors.primary else colors.surfaceVariant)
-                .border(1.dp, if (checked) colors.primary else colors.border, RoundedCornerShape(12.dp)),
+                .width(40.dp)
+                .height(22.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(if (checked) Color.White else Color(0xFF171717))
+                .border(1.dp, if (checked) Color.White else Color(0xFF2E2E2E), RoundedCornerShape(11.dp)),
             contentAlignment = Alignment.CenterStart
         ) {
             Box(
                 modifier = Modifier
                     .offset(x = thumbOffset)
-                    .size(20.dp)
+                    .size(16.dp)
                     .clip(CircleShape)
-                    .background(if (checked) (if (colors.isDark) Color(0xFF0B0F19) else Color.White) else colors.textSecondary)
+                    .background(if (checked) Color(0xFF050505) else Color(0xFF777777))
             )
         }
     }
@@ -110,8 +113,6 @@ fun EzzSlider(
     steps: Int = 0,
     enabled: Boolean = true
 ) {
-    val colors = EzzTheme.colors
-
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -120,19 +121,19 @@ fun EzzSlider(
             if (label != null) {
                 Text(
                     text = label,
-                    color = colors.textPrimary,
-                    fontSize = 14.sp,
+                    color = Color.White,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.weight(1f)
                 )
             }
-            Text(
+            EzzBadge(
                 text = valueDisplay,
-                color = colors.primary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
+                variant = EzzBadgeVariant.PRIMARY
             )
         }
+
+        Spacer(modifier = Modifier.height(4.dp))
 
         Slider(
             value = value,
@@ -141,9 +142,9 @@ fun EzzSlider(
             steps = steps,
             enabled = enabled,
             colors = SliderDefaults.colors(
-                thumbColor = colors.primary,
-                activeTrackColor = colors.primary,
-                inactiveTrackColor = colors.surfaceVariant
+                thumbColor = Color.White,
+                activeTrackColor = Color.White,
+                inactiveTrackColor = Color(0xFF242424)
             )
         )
     }

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
@@ -56,7 +56,7 @@ fun EzzTextField(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
-    cornerRadius: Dp = 10.dp
+    cornerRadius: Dp = 6.dp
 ) {
     val colors = EzzTheme.colors
     val interactionSource = remember { MutableInteractionSource() }
@@ -67,15 +67,15 @@ fun EzzTextField(
             Text(
                 text = label,
                 color = colors.textSecondary,
-                fontSize = 13.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(bottom = 6.dp)
+                modifier = Modifier.padding(bottom = 5.dp)
             )
         }
 
         val borderColor = when {
             error != null -> colors.danger
-            isFocused -> colors.primary
+            isFocused -> Color.White
             else -> colors.border
         }
 
@@ -83,9 +83,9 @@ fun EzzTextField(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(cornerRadius))
-                .background(colors.surface)
+                .background(Color(0xFF171717))
                 .border(1.dp, borderColor, RoundedCornerShape(cornerRadius))
-                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .padding(horizontal = 12.dp, vertical = 9.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -95,10 +95,10 @@ fun EzzTextField(
                     Icon(
                         imageVector = leadingIcon,
                         contentDescription = null,
-                        tint = if (isFocused) colors.primary else colors.textMuted,
-                        modifier = Modifier.size(18.dp)
+                        tint = if (isFocused) Color.White else colors.textMuted,
+                        modifier = Modifier.size(16.dp)
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                 }
 
                 Box(modifier = Modifier.weight(1f)) {
@@ -106,7 +106,7 @@ fun EzzTextField(
                         Text(
                             text = placeholder,
                             color = colors.textMuted,
-                            fontSize = 14.sp
+                            fontSize = 13.sp
                         )
                     }
 
@@ -116,10 +116,10 @@ fun EzzTextField(
                         modifier = Modifier.fillMaxWidth(),
                         textStyle = TextStyle(
                             color = colors.textPrimary,
-                            fontSize = 14.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Normal
                         ),
-                        cursorBrush = SolidColor(colors.primary),
+                        cursorBrush = SolidColor(Color.White),
                         interactionSource = interactionSource,
                         enabled = enabled,
                         readOnly = readOnly,
@@ -137,7 +137,7 @@ fun EzzTextField(
                         contentDescription = null,
                         tint = colors.textMuted,
                         modifier = Modifier
-                            .size(18.dp)
+                            .size(16.dp)
                             .then(
                                 if (onTrailingIconClick != null) Modifier.clickable(onClick = onTrailingIconClick) else Modifier
                             )
@@ -150,8 +150,8 @@ fun EzzTextField(
             Text(
                 text = error,
                 color = colors.danger,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(top = 4.dp, start = 4.dp)
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 4.dp, start = 2.dp)
             )
         }
     }
@@ -162,7 +162,7 @@ fun EzzSearchField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "Search instances, mods, versions...",
+    placeholder: String = "Search instances, versions, mods...",
     onClear: () -> Unit = { onValueChange("") }
 ) {
     EzzTextField(
@@ -173,6 +173,6 @@ fun EzzSearchField(
         leadingIcon = Icons.Default.Search,
         trailingIcon = if (value.isNotEmpty()) Icons.Default.Close else null,
         onTrailingIconClick = onClear,
-        cornerRadius = 10.dp
+        cornerRadius = 6.dp
     )
 }

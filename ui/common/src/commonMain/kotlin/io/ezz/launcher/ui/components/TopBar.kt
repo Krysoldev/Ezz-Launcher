@@ -1,11 +1,12 @@
 package io.ezz.launcher.ui.components
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.Image
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,8 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Home
@@ -40,7 +39,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,7 +53,6 @@ fun TopBar(
     modifier: Modifier = Modifier,
     onSearchClick: () -> Unit = { viewModel.showSearchDialog.value = true }
 ) {
-    val colors = EzzTheme.colors
     val currentScreen by viewModel.currentScreen.collectAsState()
     val isConnected by viewModel.isSupabaseConnected.collectAsState()
     val selectedAccount by viewModel.accountRepository.selectedAccount.collectAsState()
@@ -63,10 +60,10 @@ fun TopBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(56.dp)
-            .background(colors.surface)
-            .border(androidx.compose.foundation.BorderStroke(1.dp, colors.border.copy(alpha = 0.6f)))
-            .padding(horizontal = 16.dp),
+            .height(58.dp)
+            .background(Color(0xFF0A0A0A))
+            .border(androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF242424)))
+            .padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -79,16 +76,13 @@ fun TopBar(
                     indication = null
                 ) { viewModel.navigateTo(NavigationScreen.HOME) }
         ) {
-            EzzLogo(
-                size = 34.dp,
-                shapeRadius = 8.dp
-            )
+            EzzLogo(size = 30.dp)
             Spacer(modifier = Modifier.width(10.dp))
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "EZZ",
-                        color = colors.primary,
+                        color = Color.White,
                         fontWeight = FontWeight.Black,
                         fontSize = 15.sp,
                         letterSpacing = 1.sp
@@ -96,7 +90,7 @@ fun TopBar(
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "LAUNCHER",
-                        color = colors.textPrimary,
+                        color = Color(0xFFD4D4D4),
                         fontWeight = FontWeight.Black,
                         fontSize = 15.sp,
                         letterSpacing = 1.sp
@@ -104,126 +98,110 @@ fun TopBar(
                 }
                 Text(
                     text = "Minecraft Java Edition",
-                    color = colors.textMuted,
+                    color = Color(0xFF777777),
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Medium
                 )
             }
         }
 
-        // Center: Primary Navigation Tabs
+        // Center: Primary Navigation Tabs (High contrast minimal)
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF101010))
+                .border(1.dp, Color(0xFF202020), RoundedCornerShape(8.dp))
+                .padding(3.dp)
         ) {
             TopNavTab(
-                label = "Home",
+                label = "HOME",
                 icon = Icons.Default.Home,
                 isSelected = currentScreen == NavigationScreen.HOME,
                 onClick = { viewModel.navigateTo(NavigationScreen.HOME) }
             )
             TopNavTab(
-                label = "Instances",
+                label = "INSTANCES",
                 icon = Icons.Default.Apps,
                 isSelected = currentScreen == NavigationScreen.INSTANCES,
                 onClick = { viewModel.navigateTo(NavigationScreen.INSTANCES) }
             )
             TopNavTab(
-                label = "Accounts",
+                label = "ACCOUNTS",
                 icon = Icons.Default.AccountCircle,
                 isSelected = currentScreen == NavigationScreen.ACCOUNTS,
                 onClick = { viewModel.navigateTo(NavigationScreen.ACCOUNTS) }
             )
             TopNavTab(
-                label = "Mods",
+                label = "MODS",
                 icon = Icons.Default.Extension,
                 isSelected = currentScreen == NavigationScreen.MODS,
                 onClick = { viewModel.navigateTo(NavigationScreen.MODS) }
             )
             TopNavTab(
-                label = "Servers",
+                label = "SERVERS",
                 icon = Icons.Default.Dns,
                 isSelected = currentScreen == NavigationScreen.SERVERS,
                 onClick = { viewModel.navigateTo(NavigationScreen.SERVERS) }
             )
             TopNavTab(
-                label = "Settings",
+                label = "SETTINGS",
                 icon = Icons.Default.Settings,
                 isSelected = currentScreen == NavigationScreen.SETTINGS,
                 onClick = { viewModel.navigateTo(NavigationScreen.SETTINGS) }
             )
         }
 
-        // Right: Account pill, Search, Console shortcut & Cloud status
+        // Right: Search, Console shortcut, Cloud status & Account area
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Search Quick Trigger
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(colors.inputBackground)
-                    .border(1.dp, colors.border, RoundedCornerShape(8.dp))
-                    .clickable { onSearchClick() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "Search",
-                    tint = colors.textSecondary,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
+            TopBarIconAction(
+                icon = Icons.Default.Search,
+                contentDescription = "Search",
+                onClick = onSearchClick
+            )
 
             // Console Shortcut
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (currentScreen == NavigationScreen.CONSOLE) colors.primary.copy(alpha = 0.15f) else colors.inputBackground)
-                    .border(1.dp, if (currentScreen == NavigationScreen.CONSOLE) colors.primary else colors.border, RoundedCornerShape(8.dp))
-                    .clickable { viewModel.navigateTo(NavigationScreen.CONSOLE) },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Terminal,
-                    contentDescription = "Console Logs",
-                    tint = if (currentScreen == NavigationScreen.CONSOLE) colors.primary else colors.textSecondary,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
+            TopBarIconAction(
+                icon = Icons.Default.Terminal,
+                contentDescription = "Console Logs",
+                isActive = currentScreen == NavigationScreen.CONSOLE,
+                onClick = { viewModel.navigateTo(NavigationScreen.CONSOLE) }
+            )
 
             // Cloud Status Pill
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(colors.inputBackground)
-                    .border(1.dp, colors.border, RoundedCornerShape(8.dp))
-                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFF141414))
+                    .border(1.dp, Color(0xFF242424), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 5.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(6.dp)
+                            .size(5.dp)
                             .clip(CircleShape)
                             .background(
                                 when (isConnected) {
-                                    true -> colors.accent
-                                    false -> colors.danger
-                                    null -> colors.warning
+                                    true -> Color(0xFF10B981)
+                                    false -> Color(0xFFEF4444)
+                                    null -> Color(0xFFF59E0B)
                                 }
                             )
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = when (isConnected) {
-                            true -> "Cloud Sync"
+                            true -> "Cloud"
                             false -> "Offline"
-                            null -> "Connecting"
+                            null -> "Syncing"
                         },
-                        color = colors.textSecondary,
+                        color = Color(0xFFA0A0A0),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium
                     )
@@ -234,38 +212,39 @@ fun TopBar(
             val account = selectedAccount
             Row(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(colors.cardBackground)
-                    .border(1.dp, colors.borderLight, RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFF151515))
+                    .border(1.dp, Color(0xFF2E2E2E), RoundedCornerShape(6.dp))
                     .clickable { viewModel.navigateTo(NavigationScreen.ACCOUNTS) }
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                    .padding(horizontal = 9.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(colors.surfaceLight),
+                        .size(22.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFF202020)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.AccountCircle,
                         contentDescription = "Avatar",
-                        tint = if (account?.type == AccountType.MICROSOFT) colors.primary else colors.textSecondary,
-                        modifier = Modifier.size(18.dp)
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
                     )
                 }
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(7.dp))
                 Column {
                     Text(
-                        text = account?.username ?: "No Account",
-                        color = colors.textPrimary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
+                        text = account?.username ?: "Offline Player",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
                     )
                     Text(
-                        text = if (account?.type == AccountType.MICROSOFT) "Microsoft" else "Offline",
-                        color = if (account?.type == AccountType.MICROSOFT) colors.primary else colors.textMuted,
+                        text = if (account?.type == AccountType.MICROSOFT) "Microsoft" else "Offline Account",
+                        color = Color(0xFF777777),
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Medium
                     )
@@ -282,24 +261,37 @@ private fun TopNavTab(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    val colors = EzzTheme.colors
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+
     val bgColor by animateColorAsState(
-        if (isSelected) colors.primary.copy(alpha = 0.12f) else Color.Transparent
+        targetValue = when {
+            isSelected -> Color(0xFF222222)
+            isHovered -> Color(0xFF181818)
+            else -> Color.Transparent
+        },
+        animationSpec = tween(120)
     )
-    val borderColor by animateColorAsState(
-        if (isSelected) colors.primary.copy(alpha = 0.7f) else Color.Transparent
-    )
+
     val contentColor by animateColorAsState(
-        if (isSelected) colors.primary else colors.textSecondary
+        targetValue = when {
+            isSelected -> Color.White
+            isHovered -> Color(0xFFE5E5E5)
+            else -> Color(0xFF888888)
+        },
+        animationSpec = tween(120)
     )
 
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(6.dp))
             .background(bgColor)
-            .border(1.dp, borderColor, RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 11.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -310,15 +302,48 @@ private fun TopNavTab(
                 imageVector = icon,
                 contentDescription = label,
                 tint = contentColor,
-                modifier = Modifier.size(15.dp)
+                modifier = Modifier.size(14.dp)
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = label,
-                color = if (isSelected) colors.textPrimary else colors.textSecondary,
-                fontSize = 13.sp,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                color = contentColor,
+                fontSize = 11.sp,
+                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                letterSpacing = 0.5.sp
             )
         }
+    }
+}
+
+@Composable
+private fun TopBarIconAction(
+    icon: ImageVector,
+    contentDescription: String,
+    isActive: Boolean = false,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (isActive) Color(0xFF242424) else if (isHovered) Color(0xFF1E1E1E) else Color(0xFF141414))
+            .border(1.dp, if (isActive) Color.White else if (isHovered) Color(0xFF383838) else Color(0xFF242424), RoundedCornerShape(6.dp))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = if (isActive || isHovered) Color.White else Color(0xFF888888),
+            modifier = Modifier.size(15.dp)
+        )
     }
 }

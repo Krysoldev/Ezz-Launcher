@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FolderOpen
@@ -21,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -39,7 +39,6 @@ fun EzzEmptyState(
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null
 ) {
-    val colors = EzzTheme.colors
     val btnText = actionButtonText ?: actionLabel
     val btnClick = onActionClick ?: onAction
 
@@ -52,17 +51,17 @@ fun EzzEmptyState(
     ) {
         Box(
             modifier = Modifier
-                .size(52.dp)
+                .size(48.dp)
                 .clip(CircleShape)
-                .background(colors.surfaceVariant)
-                .border(1.dp, colors.border, CircleShape),
+                .background(Color(0xFF181818))
+                .border(1.dp, Color(0xFF282828), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = colors.primary,
-                modifier = Modifier.size(24.dp)
+                tint = Color.White,
+                modifier = Modifier.size(22.dp)
             )
         }
 
@@ -70,8 +69,8 @@ fun EzzEmptyState(
 
         Text(
             text = title,
-            color = colors.textPrimary,
-            fontSize = 16.sp,
+            color = Color.White,
+            fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
         )
@@ -80,8 +79,8 @@ fun EzzEmptyState(
 
         Text(
             text = description,
-            color = colors.textSecondary,
-            fontSize = 13.sp,
+            color = Color(0xFF888888),
+            fontSize = 12.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
@@ -106,8 +105,6 @@ fun EzzErrorState(
     actionButtonText: String? = "Try Again",
     onActionClick: (() -> Unit)? = null
 ) {
-    val colors = EzzTheme.colors
-
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -117,17 +114,17 @@ fun EzzErrorState(
     ) {
         Box(
             modifier = Modifier
-                .size(52.dp)
+                .size(48.dp)
                 .clip(CircleShape)
-                .background(colors.dangerGlow)
-                .border(1.dp, colors.danger, CircleShape),
+                .background(Color(0xFF1F1414))
+                .border(1.dp, Color(0xFF382020), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.ErrorOutline,
                 contentDescription = null,
-                tint = colors.danger,
-                modifier = Modifier.size(24.dp)
+                tint = Color(0xFFEF4444),
+                modifier = Modifier.size(22.dp)
             )
         }
 
@@ -135,8 +132,8 @@ fun EzzErrorState(
 
         Text(
             text = title,
-            color = colors.textPrimary,
-            fontSize = 16.sp,
+            color = Color.White,
+            fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
         )
@@ -145,7 +142,7 @@ fun EzzErrorState(
 
         Text(
             text = description,
-            color = colors.danger,
+            color = Color(0xFFFCA5A5),
             fontSize = 12.sp,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 16.dp)

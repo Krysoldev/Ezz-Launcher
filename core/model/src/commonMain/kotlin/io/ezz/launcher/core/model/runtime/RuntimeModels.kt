@@ -50,5 +50,13 @@ data class LauncherSettings(
     val closeLauncherOnLaunch: Boolean = false,
     val darkTheme: Boolean = true,
     val selectedInstanceId: String? = null,
-    val selectedAccountId: String? = null
+    val selectedAccountId: String? = null,
+    val autoCheckUpdates: Boolean = true,
+    val enableDiscordRpc: Boolean = true,
+    val telemetryEnabled: Boolean = true,
+    val defaultWindowWidth: Int = 1280,
+    val defaultWindowHeight: Int = 720,
+    val defaultFullscreen: Boolean = false,
+    val maxConcurrentDownloads: Int = 8,
+    val downloadRetryAttempts: Int = 3
 )

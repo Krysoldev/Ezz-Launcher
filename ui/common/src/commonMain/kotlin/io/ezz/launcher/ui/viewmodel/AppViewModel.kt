@@ -673,6 +673,16 @@ class AppViewModel(
         }
     }
 
+    fun updateSettings(settings: LauncherSettings) {
+        scope.launch {
+            try {
+                settingsRepository.updateSettings { settings }
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to save settings: ${e.message}"
+            }
+        }
+    }
+
     fun clearLogs() {
         _logs.value = emptyList()
     }

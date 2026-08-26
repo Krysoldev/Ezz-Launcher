@@ -47,9 +47,7 @@ import io.ezz.launcher.ui.components.EzzCard
 import io.ezz.launcher.ui.components.EzzEmptyState
 import io.ezz.launcher.ui.components.EzzIconButton
 import io.ezz.launcher.ui.components.EzzSearchField
-import io.ezz.launcher.ui.components.EzzTabs
 import io.ezz.launcher.ui.components.EzzToggle
-import io.ezz.launcher.ui.components.TabItem
 import io.ezz.launcher.ui.theme.EzzTheme
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 import io.ezz.launcher.ui.viewmodel.NavigationScreen
@@ -65,7 +63,6 @@ fun ModsScreen(
     viewModel: AppViewModel,
     modifier: Modifier = Modifier
 ) {
-    val colors = EzzTheme.colors
     val selectedInstance by viewModel.selectedInstance.collectAsState()
     val installedMods by viewModel.installedMods.collectAsState()
 
@@ -92,8 +89,8 @@ fun ModsScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(colors.background)
-            .padding(32.dp)
+            .background(Color(0xFF050505))
+            .padding(26.dp)
     ) {
         // Header Row
         Row(
@@ -104,31 +101,32 @@ fun ModsScreen(
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "Mod Manager",
-                        color = colors.textPrimary,
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold
+                        text = "MODS",
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 0.5.sp
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     if (selectedInstance != null) {
                         EzzBadge(
                             text = "${installedMods.count { it.enabled }} / ${installedMods.size} Enabled",
-                            variant = EzzBadgeVariant.PRIMARY
+                            variant = EzzBadgeVariant.NEUTRAL
                         )
                     }
                 }
 
                 Text(
-                    text = if (selectedInstance != null) "Managing mods for: ${selectedInstance!!.name} (${selectedInstance!!.minecraftVersion})" else "Select an instance to manage mods",
-                    color = colors.textSecondary,
-                    fontSize = 14.sp
+                    text = if (selectedInstance != null) "Instance: ${selectedInstance!!.name} (MC ${selectedInstance!!.minecraftVersion})" else "Select an instance to manage mods",
+                    color = Color(0xFF888888),
+                    fontSize = 12.sp
                 )
             }
 
             // Action Buttons
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 EzzButton(
-                    text = "Open Mods Folder",
+                    text = "Open Folder",
                     onClick = { viewModel.openModsFolder() },
                     variant = EzzButtonVariant.SECONDARY,
                     size = EzzButtonSize.MEDIUM,
@@ -136,76 +134,109 @@ fun ModsScreen(
                     enabled = selectedInstance != null
                 )
 
-                Spacer(modifier = Modifier.width(10.dp))
-
                 EzzIconButton(
                     icon = Icons.Default.Refresh,
                     onClick = { viewModel.refreshMods() },
                     contentDescription = "Refresh Mods",
-                    tint = colors.textSecondary,
-                    backgroundColor = colors.surfaceVariant
+                    size = EzzButtonSize.MEDIUM
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(18.dp))
 
         if (selectedInstance == null) {
-            EzzEmptyState(
-                title = "No Instance Selected",
-                description = "Please select or create a Minecraft instance first to manage its mods.",
-                actionButtonText = "Go to Instances",
-                onActionClick = { viewModel.navigateTo(NavigationScreen.INSTANCES) }
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(280.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF0F0F0F))
+                    .border(1.dp, Color(0xFF202020), RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                EzzEmptyState(
+                    title = "No Instance Selected",
+                    description = "Please select or create a Minecraft instance first to manage its mods.",
+                    actionLabel = "Go to Instances",
+                    onAction = { viewModel.navigateTo(NavigationScreen.INSTANCES) }
+                )
+            }
             return@Column
         }
 
-        // Search and Filter Bar
+        // Search & Filter Row
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            EzzSearchField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier.width(360.dp),
-                placeholder = "Search installed mods..."
-            )
+            Box(modifier = Modifier.width(320.dp)) {
+                EzzSearchField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = "Search installed mods..."
+                )
+            }
 
-            EzzTabs(
-                items = listOf(
-                    TabItem(ModFilter.ALL, "All (${installedMods.size})"),
-                    TabItem(ModFilter.ENABLED, "Enabled (${installedMods.count { it.enabled }})"),
-                    TabItem(ModFilter.DISABLED, "Disabled (${installedMods.count { !it.enabled }})")
-                ),
-                selectedItem = selectedFilter,
-                onItemSelected = { selectedFilter = it }
-            )
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFF141414))
+                    .border(1.dp, Color(0xFF242424), RoundedCornerShape(6.dp))
+                    .padding(2.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                listOf(
+                    Pair(ModFilter.ALL, "All (${installedMods.size})"),
+                    Pair(ModFilter.ENABLED, "Enabled (${installedMods.count { it.enabled }})"),
+                    Pair(ModFilter.DISABLED, "Disabled (${installedMods.count { !it.enabled }})")
+                ).forEach { (filter, label) ->
+                    val isSelected = selectedFilter == filter
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(if (isSelected) Color(0xFF242424) else Color.Transparent)
+                            .clickable { selectedFilter = filter }
+                            .padding(horizontal = 11.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = label,
+                            color = if (isSelected) Color.White else Color(0xFF888888),
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                }
+            }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(18.dp))
 
         // Mod List
         if (filteredMods.isEmpty()) {
-            if (installedMods.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(280.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF0F0F0F))
+                    .border(1.dp, Color(0xFF202020), RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center
+            ) {
                 EzzEmptyState(
-                    title = "No Mods Installed",
-                    description = "Drop your Fabric or Forge .jar mod files into the mods folder to manage them here.",
-                    actionButtonText = "Open Mods Folder",
-                    onActionClick = { viewModel.openModsFolder() }
-                )
-            } else {
-                EzzEmptyState(
-                    title = "No Matching Mods",
-                    description = "No installed mods matched your search query '$searchQuery'.",
-                    actionButtonText = "Clear Search",
-                    onActionClick = { searchQuery = "" }
+                    title = if (installedMods.isEmpty()) "No Mods Installed" else "No Matching Mods",
+                    description = if (installedMods.isEmpty()) "Drop your Fabric .jar mod files into the instance mods folder." else "No installed mods matched '$searchQuery'.",
+                    actionLabel = if (installedMods.isEmpty()) "Open Mods Folder" else "Clear Search",
+                    onAction = {
+                        if (installedMods.isEmpty()) viewModel.openModsFolder()
+                        else searchQuery = ""
+                    }
                 )
             }
         } else {
             LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(filteredMods, key = { it.fileName }) { mod ->
@@ -230,17 +261,15 @@ private fun ModCard(
     onToggle: (Boolean) -> Unit,
     onDelete: () -> Unit
 ) {
-    val colors = EzzTheme.colors
-
     EzzCard(
         modifier = Modifier.fillMaxWidth(),
-        borderColor = if (mod.enabled) colors.border else colors.border.copy(alpha = 0.3f),
-        backgroundColor = if (mod.enabled) colors.cardBackground else colors.surface.copy(alpha = 0.5f)
+        borderColor = if (mod.enabled) Color(0xFF282828) else Color(0xFF1E1E1E),
+        backgroundColor = if (mod.enabled) Color(0xFF121212) else Color(0xFF0C0C0C)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -249,42 +278,41 @@ private fun ModCard(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f)
             ) {
-                // Mod Icon / Avatar
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(if (mod.enabled) colors.primaryGlow else colors.surfaceVariant)
-                        .border(1.dp, if (mod.enabled) colors.primary.copy(alpha = 0.5f) else colors.border, RoundedCornerShape(10.dp)),
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (mod.enabled) Color(0xFF202020) else Color(0xFF141414))
+                        .border(1.dp, if (mod.enabled) Color(0xFF383838) else Color(0xFF242424), RoundedCornerShape(6.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Extension,
                         contentDescription = null,
-                        tint = if (mod.enabled) colors.primary else colors.textMuted,
-                        modifier = Modifier.size(24.dp)
+                        tint = if (mod.enabled) Color.White else Color(0xFF666666),
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(14.dp))
 
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = mod.name,
-                            color = if (mod.enabled) colors.textPrimary else colors.textMuted,
-                            fontSize = 16.sp,
+                            color = if (mod.enabled) Color.White else Color(0xFF777777),
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         EzzBadge(
                             text = "v${mod.version}",
-                            variant = if (mod.enabled) EzzBadgeVariant.NEUTRAL else EzzBadgeVariant.NEUTRAL
+                            variant = EzzBadgeVariant.NEUTRAL
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         EzzBadge(
                             text = mod.loader.uppercase(),
-                            variant = if (mod.loader.equals("FABRIC", ignoreCase = true)) EzzBadgeVariant.INFO else EzzBadgeVariant.WARNING
+                            variant = EzzBadgeVariant.INFO
                         )
                     }
 
@@ -292,8 +320,8 @@ private fun ModCard(
                     if (!desc.isNullOrBlank()) {
                         Text(
                             text = desc,
-                            color = colors.textSecondary,
-                            fontSize = 13.sp,
+                            color = Color(0xFF888888),
+                            fontSize = 12.sp,
                             maxLines = 1,
                             modifier = Modifier.padding(top = 2.dp)
                         )
@@ -301,7 +329,7 @@ private fun ModCard(
 
                     Text(
                         text = "${mod.fileName} • ${formatFileSize(mod.fileSize)}",
-                        color = colors.textMuted,
+                        color = Color(0xFF555555),
                         fontSize = 11.sp,
                         modifier = Modifier.padding(top = 2.dp)
                     )
@@ -309,21 +337,19 @@ private fun ModCard(
             }
 
             // Right: Toggle Switch & Delete Action
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 EzzToggle(
                     checked = mod.enabled,
                     onCheckedChange = onToggle,
-                    modifier = Modifier.width(50.dp)
+                    modifier = Modifier.width(44.dp)
                 )
-
-                Spacer(modifier = Modifier.width(12.dp))
 
                 EzzIconButton(
                     icon = Icons.Default.Delete,
                     onClick = onDelete,
                     contentDescription = "Delete Mod",
-                    tint = colors.danger,
-                    backgroundColor = colors.surfaceVariant
+                    size = EzzButtonSize.SMALL,
+                    variant = EzzButtonVariant.DANGER
                 )
             }
         }

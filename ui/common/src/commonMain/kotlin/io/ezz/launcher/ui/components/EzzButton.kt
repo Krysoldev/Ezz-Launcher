@@ -1,7 +1,7 @@
 package io.ezz.launcher.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,12 +18,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -69,48 +64,48 @@ fun EzzButton(
     isLoading: Boolean = false,
     fullWidth: Boolean = false
 ) {
-    val colors = EzzTheme.colors
     val state = EzzTheme.state
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
     val isPressed by interactionSource.collectIsPressedAsState()
 
     val scale by animateFloatAsState(
-        targetValue = if (state.enableAnimations && isPressed) 0.96f else if (state.enableAnimations && isHovered) 1.02f else 1.0f
+        targetValue = if (state.enableAnimations && isPressed) 0.97f else if (state.enableAnimations && isHovered) 1.02f else 1.0f,
+        animationSpec = tween(durationMillis = 140)
     )
 
     val (containerColor, contentColor, borderStroke) = when (variant) {
         EzzButtonVariant.PRIMARY -> Triple(
-            if (isHovered) colors.primaryHover else colors.primary,
-            if (colors.isDark) Color(0xFF0B0F19) else Color.White,
+            if (isHovered) Color(0xFFE5E5E5) else Color(0xFFFFFFFF),
+            Color(0xFF050505),
             null
         )
         EzzButtonVariant.SECONDARY -> Triple(
-            if (isHovered) colors.surfaceLight else colors.surfaceVariant,
-            colors.textPrimary,
-            BorderStroke(1.dp, if (isHovered) colors.primary.copy(alpha = 0.5f) else colors.border)
+            if (isHovered) Color(0xFF1E1E1E) else Color(0xFF151515),
+            Color(0xFFFFFFFF),
+            BorderStroke(1.dp, if (isHovered) Color(0xFF404040) else Color(0xFF242424))
         )
         EzzButtonVariant.OUTLINE -> Triple(
-            if (isHovered) colors.primaryGlow else Color.Transparent,
-            if (isHovered) colors.primary else colors.textPrimary,
-            BorderStroke(1.dp, if (isHovered) colors.primary else colors.border)
+            if (isHovered) Color(0xFF1A1A1A) else Color.Transparent,
+            Color(0xFFFFFFFF),
+            BorderStroke(1.dp, if (isHovered) Color(0xFFFFFFFF) else Color(0xFF303030))
         )
         EzzButtonVariant.DANGER -> Triple(
-            if (isHovered) colors.danger.copy(alpha = 0.85f) else colors.danger,
+            if (isHovered) Color(0xFFDC2626) else Color(0xFFEF4444),
             Color.White,
             null
         )
         EzzButtonVariant.GHOST -> Triple(
-            if (isHovered) colors.surfaceVariant.copy(alpha = 0.5f) else Color.Transparent,
-            if (isHovered) colors.primary else colors.textSecondary,
+            if (isHovered) Color(0xFF171717) else Color.Transparent,
+            if (isHovered) Color(0xFFFFFFFF) else Color(0xFFB8B8B8),
             null
         )
     }
 
     val (height, fontSize, iconSize, paddingValues, cornerRadius) = when (size) {
-        EzzButtonSize.SMALL -> Tuple5(32.dp, 12.sp, 16.dp, PaddingValues(horizontal = 12.dp, vertical = 6.dp), 8.dp)
-        EzzButtonSize.MEDIUM -> Tuple5(42.dp, 14.sp, 18.dp, PaddingValues(horizontal = 18.dp, vertical = 10.dp), 10.dp)
-        EzzButtonSize.LARGE -> Tuple5(52.dp, 16.sp, 22.dp, PaddingValues(horizontal = 24.dp, vertical = 14.dp), 12.dp)
+        EzzButtonSize.SMALL -> Tuple5(32.dp, 12.sp, 15.dp, PaddingValues(horizontal = 12.dp, vertical = 6.dp), 6.dp)
+        EzzButtonSize.MEDIUM -> Tuple5(40.dp, 13.sp, 17.dp, PaddingValues(horizontal = 16.dp, vertical = 8.dp), 8.dp)
+        EzzButtonSize.LARGE -> Tuple5(48.dp, 15.sp, 20.dp, PaddingValues(horizontal = 22.dp, vertical = 12.dp), 8.dp)
     }
 
     Surface(
@@ -125,8 +120,8 @@ fun EzzButton(
                 onClick = onClick
             ),
         shape = RoundedCornerShape(cornerRadius),
-        color = if (enabled) containerColor else containerColor.copy(alpha = 0.4f),
-        contentColor = if (enabled) contentColor else contentColor.copy(alpha = 0.4f),
+        color = if (enabled) containerColor else containerColor.copy(alpha = 0.35f),
+        contentColor = if (enabled) contentColor else contentColor.copy(alpha = 0.35f),
         border = borderStroke
     ) {
         Row(
@@ -154,8 +149,9 @@ fun EzzButton(
             Text(
                 text = text,
                 fontSize = fontSize,
-                fontWeight = FontWeight.SemiBold,
-                color = contentColor
+                fontWeight = FontWeight.Bold,
+                color = contentColor,
+                letterSpacing = 0.3.sp
             )
 
             if (trailingIcon != null && !isLoading) {
@@ -181,19 +177,18 @@ fun EzzIconButton(
     size: EzzButtonSize = EzzButtonSize.MEDIUM,
     enabled: Boolean = true
 ) {
-    val colors = EzzTheme.colors
     val (dimension, iconDim) = when (size) {
-        EzzButtonSize.SMALL -> Pair(32.dp, 16.dp)
-        EzzButtonSize.MEDIUM -> Pair(38.dp, 18.dp)
-        EzzButtonSize.LARGE -> Pair(46.dp, 22.dp)
+        EzzButtonSize.SMALL -> Pair(30.dp, 15.dp)
+        EzzButtonSize.MEDIUM -> Pair(36.dp, 18.dp)
+        EzzButtonSize.LARGE -> Pair(42.dp, 20.dp)
     }
 
     val (bg, fg) = when (variant) {
-        EzzButtonVariant.PRIMARY -> Pair(colors.primary, Color.White)
-        EzzButtonVariant.SECONDARY -> Pair(colors.surfaceVariant, colors.textPrimary)
-        EzzButtonVariant.OUTLINE -> Pair(Color.Transparent, colors.textSecondary)
-        EzzButtonVariant.DANGER -> Pair(colors.danger.copy(alpha = 0.15f), colors.danger)
-        EzzButtonVariant.GHOST -> Pair(Color.Transparent, colors.textSecondary)
+        EzzButtonVariant.PRIMARY -> Pair(Color.White, Color(0xFF050505))
+        EzzButtonVariant.SECONDARY -> Pair(Color(0xFF151515), Color(0xFFFFFFFF))
+        EzzButtonVariant.OUTLINE -> Pair(Color.Transparent, Color(0xFFB8B8B8))
+        EzzButtonVariant.DANGER -> Pair(Color(0xFF2B1212), Color(0xFFEF4444))
+        EzzButtonVariant.GHOST -> Pair(Color.Transparent, Color(0xFFB8B8B8))
     }
 
     EzzIconButton(
@@ -215,36 +210,35 @@ fun EzzIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
-    tint: Color = EzzTheme.colors.textSecondary,
+    tint: Color = Color(0xFFB8B8B8),
     backgroundColor: Color = Color.Transparent,
-    size: Dp = 36.dp,
-    iconSize: Dp = 18.dp,
+    size: Dp = 34.dp,
+    iconSize: Dp = 16.dp,
     enabled: Boolean = true
 ) {
-    val colors = EzzTheme.colors
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
 
     Surface(
         modifier = modifier
             .size(size)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(6.dp))
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 enabled = enabled,
                 onClick = onClick
             ),
-        shape = RoundedCornerShape(8.dp),
-        color = if (isHovered) colors.surfaceLight else backgroundColor,
-        border = if (isHovered) BorderStroke(1.dp, colors.borderLight) else BorderStroke(1.dp, colors.border.copy(alpha = 0.5f))
+        shape = RoundedCornerShape(6.dp),
+        color = if (isHovered) Color(0xFF222222) else backgroundColor,
+        border = BorderStroke(1.dp, if (isHovered) Color(0xFF383838) else Color(0xFF242424))
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
                 modifier = Modifier.size(iconSize),
-                tint = if (isHovered) colors.primary else tint
+                tint = if (isHovered) Color.White else tint
             )
         }
     }
