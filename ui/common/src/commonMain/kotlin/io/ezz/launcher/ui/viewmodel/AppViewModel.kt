@@ -147,7 +147,8 @@ class AppViewModel(
     val skinService: io.ezz.launcher.core.minecraft.skin.MinecraftSkinManager =
         skinManager ?: io.ezz.launcher.core.minecraft.skin.MinecraftSkinManager(
             pathProvider = pathProvider,
-            httpClient = io.ezz.launcher.core.network.client.HttpClientFactory.create()
+            httpClient = io.ezz.launcher.core.network.client.HttpClientFactory.create(),
+            vaultSkinRepository = vaultRepository
         )
 
     val sessionTracker: io.ezz.launcher.core.runtime.process.ProcessSessionTracker =
@@ -367,6 +368,18 @@ class AppViewModel(
                 }
             } catch (e: Throwable) {
                 println("Error collecting instances: ${e.message}")
+            }
+        }
+
+        scope.launch {
+            try {
+                accountRepository.accounts.collect { accounts ->
+                    accounts.forEach { acc ->
+                        skinService.loadOrRefreshSkin(acc)
+                    }
+                }
+            } catch (e: Throwable) {
+                println("Error collecting accounts for skins: ${e.message}")
             }
         }
     }
@@ -898,6 +911,7 @@ class AppViewModel(
                     if (progress is MicrosoftLoginProgress.Success) {
                         showMicrosoftLoginDialog.value = false
                         microsoftLoginProgress.value = null
+                        skinService.loadOrRefreshSkin(progress.account)
                     }
                 }
             } catch (e: Exception) {
@@ -1552,7 +1566,12 @@ class AppViewModel(
         scope.launch {
             val result = vaultRepository.importSkin(bytes, preferredName, explicitModel)
             if (result.isSuccess) {
-                _selectedVaultSkin.value = result.getOrNull()
+                val imported = result.getOrNull()
+                _selectedVaultSkin.value = imported
+                val targetAccount = accountRepository.selectedAccount.value
+                if (targetAccount != null && (targetAccount.type == io.ezz.launcher.core.model.account.AccountType.OFFLINE)) {
+                    skinService.onSkinChanged(targetAccount, bytes)
+                }
             }
             onResult(result)
         }
@@ -1561,6 +1580,12 @@ class AppViewModel(
     fun setActiveVaultSkin(skinId: String?, accountId: String? = null) {
         scope.launch {
             vaultRepository.setActiveSkin(skinId, accountId)
+            val skin = skinId?.let { vaultRepository.getSkin(it) }
+            val skinBytes = skin?.let { vaultRepository.getSkinBytes(it) }
+            val targetAccount = accountId?.let { id -> accountRepository.accounts.value.find { it.id == id } } ?: accountRepository.selectedAccount.value
+            if (targetAccount != null && (targetAccount.type == io.ezz.launcher.core.model.account.AccountType.OFFLINE)) {
+                skinService.onSkinChanged(targetAccount, skinBytes)
+            }
         }
     }
 
@@ -1580,6 +1605,12 @@ class AppViewModel(
             if (result.isSuccess && _selectedVaultSkin.value?.id == skinId) {
                 _selectedVaultSkin.value = result.getOrNull()
             }
+            val skin = vaultRepository.getSkin(skinId)
+            val skinBytes = skin?.let { vaultRepository.getSkinBytes(it) }
+            val targetAccount = accountRepository.selectedAccount.value
+            if (targetAccount != null && (targetAccount.type == io.ezz.launcher.core.model.account.AccountType.OFFLINE)) {
+                skinService.onSkinChanged(targetAccount, skinBytes)
+            }
         }
     }
 
@@ -1589,6 +1620,12 @@ class AppViewModel(
             vaultRepository.deleteSkin(skinId)
             if (isCurrentSelected) {
                 _selectedVaultSkin.value = vaultRepository.skins.value.firstOrNull()
+            }
+            val targetAccount = accountRepository.selectedAccount.value
+            if (targetAccount != null && targetAccount.type == io.ezz.launcher.core.model.account.AccountType.OFFLINE) {
+                val activeSkin = vaultRepository.getActiveSkin(targetAccount.id)
+                val skinBytes = activeSkin?.let { vaultRepository.getSkinBytes(it) }
+                skinService.onSkinChanged(targetAccount, skinBytes)
             }
         }
     }

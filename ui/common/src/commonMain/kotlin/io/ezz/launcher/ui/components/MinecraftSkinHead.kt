@@ -41,7 +41,7 @@ fun MinecraftSkinHead(
 ) {
     val skinHeadsMap by skinManager.skinHeads.collectAsState()
 
-    val imageBitmap: ImageBitmap? = remember(account?.id, account?.username, account?.skinUrl, skinHeadsMap) {
+    val imageBitmap: ImageBitmap? = remember(account?.id, account?.username, account?.skinUrl, account?.skinHash, skinHeadsMap) {
         try {
             val bytes = skinManager.getHeadBytes(account)
             val bufferedImage = ImageIO.read(ByteArrayInputStream(bytes))

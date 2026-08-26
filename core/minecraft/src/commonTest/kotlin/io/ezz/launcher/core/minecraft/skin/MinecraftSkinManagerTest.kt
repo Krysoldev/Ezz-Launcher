@@ -2,6 +2,7 @@ package io.ezz.launcher.core.minecraft.skin
 
 import io.ezz.launcher.core.model.account.OfflineAccount
 import io.ezz.launcher.core.storage.path.DefaultPathProvider
+import io.ezz.launcher.core.storage.repository.LocalVaultSkinRepository
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -9,10 +10,14 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import okio.Path.Companion.toPath
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
 import java.io.File
+import javax.imageio.ImageIO
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -20,6 +25,7 @@ class MinecraftSkinManagerTest {
 
     private lateinit var tempDir: File
     private lateinit var pathProvider: DefaultPathProvider
+    private lateinit var vaultSkinRepo: LocalVaultSkinRepository
     private lateinit var skinManager: MinecraftSkinManager
 
     @BeforeTest
@@ -30,6 +36,7 @@ class MinecraftSkinManagerTest {
         }
         pathProvider = DefaultPathProvider(tempDir.absolutePath.toPath())
         pathProvider.initializeDirectories()
+        vaultSkinRepo = LocalVaultSkinRepository(pathProvider)
 
         val mockEngine = MockEngine { _ ->
             respond(
@@ -40,7 +47,7 @@ class MinecraftSkinManagerTest {
         }
 
         val httpClient = HttpClient(mockEngine)
-        skinManager = MinecraftSkinManager(pathProvider, httpClient)
+        skinManager = MinecraftSkinManager(pathProvider, httpClient, vaultSkinRepo)
     }
 
     @AfterTest
@@ -67,7 +74,32 @@ class MinecraftSkinManagerTest {
         assertEquals('G'.code.toByte(), headBytes[3])
     }
 
-    private fun assertEquals(expected: Byte, actual: Byte) {
-        kotlin.test.assertEquals(expected, actual)
+    @Test
+    fun testOnSkinChangedUpdatesHeadReactively() {
+        val account = OfflineAccount(
+            id = "test-acc-reactive",
+            username = "ReactivePlayer",
+            uuid = "uuid-reactive"
+        )
+
+        // Create a 64x64 dummy skin image
+        val img = BufferedImage(64, 64, BufferedImage.TYPE_INT_ARGB)
+        for (x in 0 until 64) {
+            for (y in 0 until 64) {
+                img.setRGB(x, y, 0xFFFF0000.toInt())
+            }
+        }
+        val baos = ByteArrayOutputStream()
+        ImageIO.write(img, "PNG", baos)
+        val skinBytes = baos.toByteArray()
+
+        skinManager.onSkinChanged(account, skinBytes)
+
+        val cachedMap = skinManager.skinHeads.value
+        assertTrue(cachedMap.containsKey(account.id))
+        val headBytes = cachedMap[account.id]
+        assertNotNull(headBytes)
+        assertTrue(headBytes.isNotEmpty())
+        assertEquals(0x89.toByte(), headBytes[0])
     }
 }

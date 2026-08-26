@@ -19,6 +19,7 @@ sealed interface Account {
     val avatarUrl: String?
     val skinUrl: String?
     val skinModel: String?
+    val skinHash: String?
 }
 
 @Serializable
@@ -30,7 +31,8 @@ data class OfflineAccount(
     override val lastUsedAt: Long? = null,
     override val avatarUrl: String? = null,
     override val skinUrl: String? = null,
-    override val skinModel: String? = null
+    override val skinModel: String? = null,
+    override val skinHash: String? = null
 ) : Account {
     override val type: AccountType = AccountType.OFFLINE
 }
@@ -46,6 +48,7 @@ data class MicrosoftAccount(
     override val avatarUrl: String? = null,
     override val skinUrl: String? = null,
     override val skinModel: String? = null,
+    override val skinHash: String? = null,
     override val createdAt: Long = 0L,
     override val lastUsedAt: Long? = null
 ) : Account {

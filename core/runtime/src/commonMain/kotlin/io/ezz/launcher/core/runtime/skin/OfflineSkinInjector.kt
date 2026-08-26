@@ -7,11 +7,19 @@ import io.ezz.launcher.core.model.skin.VaultSkin
 import io.ezz.launcher.core.storage.path.PathProvider
 import okio.FileSystem
 import okio.Path
-import java.io.ByteArrayOutputStream
-import java.io.File
 import java.io.FileOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+
+/**
+ * Result data class for Vault skin injection.
+ */
+data class SkinInjectionResult(
+    val applied: Boolean,
+    val overrideJarPath: Path? = null,
+    val packFormat: Int = 34,
+    val skinName: String? = null
+)
 
 /**
  * Robust Offline Game Skin Application Pipeline.
@@ -23,7 +31,10 @@ import java.util.zip.ZipOutputStream
  * 1. Version-Aware pack_format mapping (1.6.x through 1.21.4+).
  * 2. Complete coverage of ALL 9 player skin variants (steve, alex, ari, efe, kai, makena, noor, sunny, zuri)
  *    in wide, slim, and legacy paths to guarantee 100% resolution for any offline UUID hash.
- * 3. Dual-Format Generation: Unpacked folder pack (EzzVaultSkin) + Packed zip archive (EzzVaultSkin.zip).
+ * 3. Triple-Layer Deployment:
+ *    - Runtime Classpath Asset Override JAR (.ezz/vault_skin_override.jar)
+ *    - Directory Resource Pack (resourcepacks/EzzVaultSkin/)
+ *    - Compressed Zip Resource Pack (resourcepacks/EzzVaultSkin.zip)
  * 4. Multi-Version options.txt registration for 1.13+ (file/ prefix) and legacy <= 1.12.2.
  * 5. Preserves Server-Side skins (SkinsRestorer / CustomSkins plugins take natural precedence over default client textures).
  */
@@ -40,16 +51,16 @@ object OfflineSkinInjector {
         skinBytes: ByteArray?,
         pathProvider: PathProvider,
         fileSystem: FileSystem = FileSystem.SYSTEM
-    ): Boolean {
+    ): SkinInjectionResult {
         // Only apply to OFFLINE accounts
         if (account.type != AccountType.OFFLINE) {
             println("[VaultSkin] Bypassing Vault skin injection for online authenticated account '${account.username}'")
-            return false
+            return SkinInjectionResult(applied = false)
         }
 
         if (skin == null || skinBytes == null || skinBytes.isEmpty()) {
             println("[VaultSkin] No active Vault skin selected for '${account.username}'")
-            return false
+            return SkinInjectionResult(applied = false)
         }
 
         val skinFilePath = pathProvider.vaultSkinsDirectory.resolve(skin.fileName)
@@ -119,29 +130,43 @@ object OfflineSkinInjector {
             // 3. Prepare ZIP Pack (EzzVaultSkin.zip)
             val zipFile = skinZipPath.toFile()
             ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
-                // pack.mcmeta
                 zos.putNextEntry(ZipEntry("pack.mcmeta"))
                 zos.write(packMcmetaContent.toByteArray(Charsets.UTF_8))
                 zos.closeEntry()
 
                 for (skinName in PLAYER_SKIN_NAMES) {
-                    // Modern 1.20.2+
                     addZipEntry(zos, "assets/minecraft/textures/entity/player/wide/$skinName.png", skinBytes)
                     addZipEntry(zos, "assets/minecraft/textures/entity/player/slim/$skinName.png", skinBytes)
-
-                    // 1.19.3 - 1.20.1
                     addZipEntry(zos, "assets/minecraft/textures/entity/player/$skinName.png", skinBytes)
-
-                    // 1.8 - 1.19.2
                     addZipEntry(zos, "assets/minecraft/textures/entity/$skinName.png", skinBytes)
-
-                    // Legacy <= 1.7
                     addZipEntry(zos, "textures/entity/$skinName.png", skinBytes)
                 }
                 addZipEntry(zos, "mob/char.png", skinBytes)
             }
 
-            // 4. Update options.txt to automatically enable EzzVaultSkin with top priority
+            // 4. Prepare Runtime Classpath Override JAR (.ezz/vault_skin_override.jar)
+            val ezzDir = gameDir.resolve(".ezz")
+            if (!fileSystem.exists(ezzDir)) {
+                fileSystem.createDirectories(ezzDir)
+            }
+            val overrideJarPath = ezzDir.resolve("vault_skin_override.jar")
+            val overrideJarFile = overrideJarPath.toFile()
+            ZipOutputStream(FileOutputStream(overrideJarFile)).use { zos ->
+                zos.putNextEntry(ZipEntry("pack.mcmeta"))
+                zos.write(packMcmetaContent.toByteArray(Charsets.UTF_8))
+                zos.closeEntry()
+
+                for (skinName in PLAYER_SKIN_NAMES) {
+                    addZipEntry(zos, "assets/minecraft/textures/entity/player/wide/$skinName.png", skinBytes)
+                    addZipEntry(zos, "assets/minecraft/textures/entity/player/slim/$skinName.png", skinBytes)
+                    addZipEntry(zos, "assets/minecraft/textures/entity/player/$skinName.png", skinBytes)
+                    addZipEntry(zos, "assets/minecraft/textures/entity/$skinName.png", skinBytes)
+                    addZipEntry(zos, "textures/entity/$skinName.png", skinBytes)
+                }
+                addZipEntry(zos, "mob/char.png", skinBytes)
+            }
+
+            // 5. Update options.txt to automatically enable EzzVaultSkin with top priority
             val optionsFile = gameDir.resolve("options.txt")
             updateOptionsTxt(optionsFile, fileSystem)
 
@@ -153,13 +178,19 @@ object OfflineSkinInjector {
             println("Skin File: $skinFilePath")
             println("Minecraft Version: ${instance.minecraftVersion}")
             println("Pack Format: $packFormat")
+            println("Override JAR: $overrideJarPath")
             println("Preparation: SUCCESS")
-            println("Application: SUCCESS")
+            println("Application: PREPARED")
 
-            true
+            SkinInjectionResult(
+                applied = true,
+                overrideJarPath = overrideJarPath,
+                packFormat = packFormat,
+                skinName = skin.name
+            )
         } catch (e: Exception) {
             println("[VaultSkin] Warning: Vault skin could not be applied: ${e.message}")
-            false
+            SkinInjectionResult(applied = false)
         }
     }
 

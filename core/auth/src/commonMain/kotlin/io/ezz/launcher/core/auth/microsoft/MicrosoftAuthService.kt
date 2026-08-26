@@ -86,6 +86,7 @@ class MicrosoftAuthService(
             val activeSkin = profile.skins.find { it.state.equals("ACTIVE", ignoreCase = true) } ?: profile.skins.firstOrNull()
 
             val expiresAt = System.currentTimeMillis() + (mcLogin.expiresIn * 1000L)
+            val skinTextureHash = activeSkin?.id ?: activeSkin?.url?.substringAfterLast("/")?.takeIf { it.isNotBlank() }
             val account = MicrosoftAccount(
                 id = UUID.randomUUID().toString(),
                 username = profile.name,
@@ -93,9 +94,10 @@ class MicrosoftAuthService(
                 msaRefreshToken = msaToken.refreshToken ?: "",
                 mcAccessToken = mcLogin.accessToken,
                 expiresAt = expiresAt,
-                avatarUrl = "https://minotar.net/avatar/${profile.name}/128.png",
+                avatarUrl = null,
                 skinUrl = activeSkin?.url,
                 skinModel = activeSkin?.variant ?: "classic",
+                skinHash = skinTextureHash,
                 createdAt = System.currentTimeMillis()
             )
 
@@ -132,6 +134,7 @@ class MicrosoftAuthService(
         val activeSkin = profile.skins.find { it.state.equals("ACTIVE", ignoreCase = true) } ?: profile.skins.firstOrNull()
 
         val expiresAt = System.currentTimeMillis() + (mcLogin.expiresIn * 1000L)
+        val skinTextureHash = activeSkin?.id ?: activeSkin?.url?.substringAfterLast("/")?.takeIf { it.isNotBlank() }
         return account.copy(
             username = profile.name,
             uuid = profile.id,
@@ -139,7 +142,8 @@ class MicrosoftAuthService(
             mcAccessToken = mcLogin.accessToken,
             expiresAt = expiresAt,
             skinUrl = activeSkin?.url ?: account.skinUrl,
-            skinModel = activeSkin?.variant ?: account.skinModel
+            skinModel = activeSkin?.variant ?: account.skinModel,
+            skinHash = skinTextureHash ?: account.skinHash
         )
     }
 

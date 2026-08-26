@@ -37,6 +37,7 @@ interface VaultSkinRepository {
     suspend fun renameSkin(skinId: String, newName: String): Result<VaultSkin>
     suspend fun updateSkinModel(skinId: String, modelType: SkinModelType): Result<VaultSkin>
     suspend fun deleteSkin(skinId: String): Boolean
+    suspend fun cacheOfficialAccountSkin(accountUsername: String, bytes: ByteArray, explicitModel: SkinModelType? = null): VaultSkin
     fun findDuplicateByHash(fileHash: String): VaultSkin?
     fun detectModelType(bytes: ByteArray): SkinModelType
     fun computeSha256(bytes: ByteArray): String
@@ -291,6 +292,18 @@ class LocalVaultSkinRepository(
             )
         )
         true
+    }
+
+    override suspend fun cacheOfficialAccountSkin(
+        accountUsername: String,
+        bytes: ByteArray,
+        explicitModel: SkinModelType?
+    ): VaultSkin = withContext(dispatcher) {
+        val hash = computeSha256(bytes)
+        val existing = findDuplicateByHash(hash)
+        if (existing != null) return@withContext existing
+        val result = importSkin(bytes, "$accountUsername's Skin", explicitModel)
+        result.getOrThrow()
     }
 
     override fun findDuplicateByHash(fileHash: String): VaultSkin? {

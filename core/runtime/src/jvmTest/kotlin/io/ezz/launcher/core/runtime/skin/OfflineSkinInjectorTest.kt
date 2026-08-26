@@ -16,6 +16,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class OfflineSkinInjectorTest {
@@ -40,7 +41,7 @@ class OfflineSkinInjectorTest {
     }
 
     @Test
-    fun testApplyVaultSkinToOfflineInstance_All9VariantsAndZip() {
+    fun testApplyVaultSkinToOfflineInstance_All9VariantsAndZipAndJar() {
         val instance = Instance(
             id = "test-instance-1",
             name = "Survival 1.21.4",
@@ -63,7 +64,7 @@ class OfflineSkinInjectorTest {
 
         val dummyBytes = "REAL_MINECRAFT_PNG_SKIN_BYTES".toByteArray()
 
-        val applied = OfflineSkinInjector.applyVaultSkin(
+        val result = OfflineSkinInjector.applyVaultSkin(
             instance = instance,
             account = account,
             skin = skin,
@@ -72,7 +73,9 @@ class OfflineSkinInjectorTest {
             fileSystem = fileSystem
         )
 
-        assertTrue(applied)
+        assertTrue(result.applied)
+        assertNotNull(result.overrideJarPath)
+        assertTrue(fileSystem.exists(result.overrideJarPath!!))
 
         val gameDir = pathProvider.getInstanceGameDirectory(instance.id)
         val skinPackDir = gameDir.resolve("resourcepacks").resolve("EzzVaultSkin")
@@ -109,6 +112,15 @@ class OfflineSkinInjectorTest {
         assertTrue(zip.getEntry("assets/minecraft/textures/entity/player/wide/noor.png") != null)
         zip.close()
 
+        // Verify Override JAR was created and contains assets
+        val jarFile = result.overrideJarPath!!.toFile()
+        assertTrue(jarFile.exists() && jarFile.length() > 0)
+        val jar = ZipFile(jarFile)
+        assertTrue(jar.getEntry("pack.mcmeta") != null)
+        assertTrue(jar.getEntry("assets/minecraft/textures/entity/player/wide/steve.png") != null)
+        assertTrue(jar.getEntry("assets/minecraft/textures/entity/player/wide/alex.png") != null)
+        jar.close()
+
         // Verify options.txt updated
         val optionsFile = gameDir.resolve("options.txt")
         assertTrue(fileSystem.exists(optionsFile))
@@ -142,7 +154,7 @@ class OfflineSkinInjectorTest {
             modelType = SkinModelType.STEVE
         )
 
-        val applied = OfflineSkinInjector.applyVaultSkin(
+        val result = OfflineSkinInjector.applyVaultSkin(
             instance = instance,
             account = account,
             skin = skin,
@@ -151,7 +163,7 @@ class OfflineSkinInjectorTest {
             fileSystem = fileSystem
         )
 
-        assertFalse(applied, "Should not apply Vault skin to online account")
+        assertFalse(result.applied, "Should not apply Vault skin to online account")
     }
 
     @Test

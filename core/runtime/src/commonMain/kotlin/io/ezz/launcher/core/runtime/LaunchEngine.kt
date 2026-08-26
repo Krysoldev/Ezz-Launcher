@@ -123,7 +123,7 @@ class LaunchEngine(
             NativeExtractor.extractNatives(nativeJars, nativesDir, fileSystem)
 
             // Build classpath
-            val classpath = libraryResolved.filter { !it.isNative }.map { it.localPath }
+            var classpath = libraryResolved.filter { !it.isNative }.map { it.localPath }
             val clientJarPath = pathProvider.versionsDirectory
                 .resolve(instance.minecraftVersion)
                 .resolve("${instance.minecraftVersion}.jar")
@@ -135,13 +135,18 @@ class LaunchEngine(
             var vaultSkinStatus = "Bypassed (Online Account / Disabled)"
             var skinResolved = false
             var skinPrepared = false
+            var effectiveSkinSource = if (validAccount.type == io.ezz.launcher.core.model.account.AccountType.OFFLINE) "VAULT" else "ONLINE"
+            var effectiveSkinHash = ""
+            var clientIntegrationStatus = "READY"
+
             if (validAccount.type == io.ezz.launcher.core.model.account.AccountType.OFFLINE && vaultSkinRepository != null) {
                 try {
                     val activeSkin = vaultSkinRepository.getActiveSkin(validAccount.id)
                     if (activeSkin != null) {
                         skinResolved = true
+                        effectiveSkinHash = activeSkin.fileHash
                         val skinBytes = vaultSkinRepository.getSkinBytes(activeSkin)
-                        val applied = io.ezz.launcher.core.runtime.skin.OfflineSkinInjector.applyVaultSkin(
+                        val skinResult = io.ezz.launcher.core.runtime.skin.OfflineSkinInjector.applyVaultSkin(
                             instance = instance,
                             account = validAccount,
                             skin = activeSkin,
@@ -149,14 +154,29 @@ class LaunchEngine(
                             pathProvider = pathProvider,
                             fileSystem = fileSystem
                         )
-                        skinPrepared = applied
-                        vaultSkinStatus = if (applied) "Applied '${activeSkin.name}' (${activeSkin.modelType})" else "Failed to apply"
+                        skinPrepared = skinResult.applied
+                        if (skinResult.applied && skinResult.overrideJarPath != null && fileSystem.exists(skinResult.overrideJarPath)) {
+                            // Prepend override JAR to classpath so ClassLoader directly returns custom player textures
+                            classpath = listOf(skinResult.overrideJarPath) + classpath
+                            clientIntegrationStatus = "APPLIED (Classpath & ResourcePack)"
+                            vaultSkinStatus = "Applied '${activeSkin.name}' (${activeSkin.modelType})"
+                        } else {
+                            clientIntegrationStatus = "FAILED"
+                            vaultSkinStatus = "Failed to apply"
+                        }
                     } else {
-                        vaultSkinStatus = "No active skin in Vault"
+                        effectiveSkinSource = "DEFAULT"
+                        vaultSkinStatus = "No active skin in Vault (Using Steve/Alex)"
                     }
                 } catch (e: Exception) {
+                    clientIntegrationStatus = "ERROR"
                     vaultSkinStatus = "Error: ${e.message}"
                 }
+            } else if (validAccount.type == io.ezz.launcher.core.model.account.AccountType.MICROSOFT) {
+                effectiveSkinSource = "ONLINE"
+                effectiveSkinHash = validAccount.skinHash ?: validAccount.skinUrl?.substringAfterLast("/") ?: "official_profile"
+                clientIntegrationStatus = "AUTHENTICATED (Official Mojang Profile)"
+                vaultSkinStatus = "Using Official Online Account Skin"
             }
 
             emit(LaunchEvent.StateChanged(ProcessState.Preparing("Building launch command...")))
@@ -189,10 +209,14 @@ class LaunchEngine(
             emit(LaunchEvent.LogReceived("Mod Loader        : ${instance.loaderType} (${instance.loaderVersion ?: "default"})", isError = false))
             emit(LaunchEvent.LogReceived("Java Runtime      : ${javaRuntime.path} (Java ${javaRuntime.majorVersion}, ${javaRuntime.vendor})", isError = false))
             emit(LaunchEvent.LogReceived("Required Java     : Java $requiredJavaMajor", isError = false))
+            emit(LaunchEvent.LogReceived("Account           : ${validAccount.username}", isError = false))
+            emit(LaunchEvent.LogReceived("Account Type      : ${validAccount.type}", isError = false))
+            emit(LaunchEvent.LogReceived("Skin Source       : $effectiveSkinSource", isError = false))
+            emit(LaunchEvent.LogReceived("Skin Hash         : ${effectiveSkinHash.ifBlank { "N/A" }}", isError = false))
             emit(LaunchEvent.LogReceived("Vault Skin        : $vaultSkinStatus", isError = false))
-            emit(LaunchEvent.LogReceived("Account Offline?  : ${if (validAccount.type == io.ezz.launcher.core.model.account.AccountType.OFFLINE) "YES" else "NO"}", isError = false))
             emit(LaunchEvent.LogReceived("Skin Resolved?    : ${if (skinResolved) "YES" else "NO"}", isError = false))
             emit(LaunchEvent.LogReceived("Skin Prepared?    : ${if (skinPrepared) "YES" else "NO"}", isError = false))
+            emit(LaunchEvent.LogReceived("Client Integration: $clientIntegrationStatus", isError = false))
             emit(LaunchEvent.LogReceived("Game Directory    : $gameDir", isError = false))
             emit(LaunchEvent.LogReceived("Natives Directory : $nativesDir", isError = false))
             emit(LaunchEvent.LogReceived("Libraries Count   : ${classpath.size} JARs", isError = false))

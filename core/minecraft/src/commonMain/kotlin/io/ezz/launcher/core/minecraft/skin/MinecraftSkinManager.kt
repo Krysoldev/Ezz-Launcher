@@ -1,7 +1,10 @@
 package io.ezz.launcher.core.minecraft.skin
 
 import io.ezz.launcher.core.model.account.Account
+import io.ezz.launcher.core.model.account.AccountType
+import io.ezz.launcher.core.model.skin.SkinModelType
 import io.ezz.launcher.core.storage.path.PathProvider
+import io.ezz.launcher.core.storage.repository.VaultSkinRepository
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
@@ -21,18 +24,20 @@ import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.security.MessageDigest
 import javax.imageio.ImageIO
 
 /**
- * High-performance Minecraft Skin & Head Avatar Service.
- * - Extracts and composites the 2-layer Minecraft head (Face + Hat/Helmet layer).
- * - Applies Nearest-Neighbor scaling for razor-sharp pixel art.
- * - Manages local disk caching (cache/skins/{uuid}_head.png).
- * - Provides immediate cached heads upon startup.
+ * Unified Skin & Head Avatar Service.
+ * - Single source of truth for effective player skin resolution.
+ * - Manages skin caching keyed by [accountId] + [skinContentHash].
+ * - Generates razor-sharp 2-layer pixel-art avatar heads (Face + Hat/Helmet layer).
+ * - Reactively updates in-memory and UI state on skin modifications without launcher restart.
  */
 class MinecraftSkinManager(
     private val pathProvider: PathProvider,
     private val httpClient: HttpClient,
+    private val vaultSkinRepository: VaultSkinRepository? = null,
     private val fileSystem: FileSystem = FileSystem.SYSTEM,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
@@ -48,113 +53,195 @@ class MinecraftSkinManager(
         pathProvider.initializeDirectories(fileSystem)
     }
 
+    /**
+     * Computes the effective skin hash for an account.
+     */
+    fun getEffectiveSkinHash(account: Account): String {
+        return when (account.type) {
+            AccountType.OFFLINE -> {
+                val vaultSkin = vaultSkinRepository?.getActiveSkin(account.id)
+                vaultSkin?.fileHash ?: "default_steve"
+            }
+            AccountType.MICROSOFT -> {
+                account.skinHash ?: account.skinUrl?.substringAfterLast("/")?.takeIf { it.isNotBlank() } ?: "default_steve"
+            }
+        }
+    }
+
+    /**
+     * Gets the 2-layer composite head bytes for the account.
+     * Checks memory cache, then disk cache with skinHash, and triggers background refresh if missing.
+     */
     fun getHeadBytes(account: Account?): ByteArray {
         if (account == null) return defaultSteveHeadBytes
-        val memory = _skinHeads.value[account.id]
+
+        val currentHash = getEffectiveSkinHash(account)
+        val cacheKey = "${account.id}_$currentHash"
+
+        // 1. Check in-memory composite cache
+        val memory = _skinHeads.value[cacheKey] ?: _skinHeads.value[account.id]
         if (memory != null) return memory
 
-        val cacheFile = getHeadCachePath(account)
-        if (fileSystem.exists(cacheFile)) {
+        // 2. Check offline Vault skin directly if available
+        if (account.type == AccountType.OFFLINE && vaultSkinRepository != null) {
+            val vaultSkin = vaultSkinRepository.getActiveSkin(account.id)
+            if (vaultSkin != null) {
+                val skinBytes = vaultSkinRepository.getSkinBytes(vaultSkin)
+                if (skinBytes != null && skinBytes.isNotEmpty()) {
+                    val head = extractHeadFromSkinBytes(skinBytes)
+                    cacheHeadToDiskAndMemory(account, currentHash, head)
+                    return head
+                }
+            }
+        }
+
+        // 3. Check disk cache
+        val diskCacheFile = getHeadCachePath(account, currentHash)
+        if (fileSystem.exists(diskCacheFile)) {
             try {
-                val bytes = fileSystem.read(cacheFile) { readByteArray() }
+                val bytes = fileSystem.read(diskCacheFile) { readByteArray() }
                 if (bytes.isNotEmpty()) {
                     val updated = _skinHeads.value.toMutableMap()
+                    updated[cacheKey] = bytes
                     updated[account.id] = bytes
                     _skinHeads.value = updated
                     return bytes
                 }
             } catch (e: Exception) {
-                println("Note: could not read cached skin head for ${account.username}: ${e.message}")
+                // Ignore disk read error
             }
         }
 
-        // Trigger background load/refresh
+        // 4. Trigger asynchronous fetch/refresh
         loadOrRefreshSkin(account)
 
         return defaultSteveHeadBytes
     }
 
+    /**
+     * Called when an account's skin is explicitly set or changed in Vault/online.
+     * Immediately generates the head and updates UI StateFlow reactively.
+     */
+    fun onSkinChanged(account: Account?, newSkinBytes: ByteArray?) {
+        if (account == null) return
+        if (newSkinBytes != null && newSkinBytes.isNotEmpty()) {
+            val hash = computeSha256(newSkinBytes)
+            val headBytes = extractHeadFromSkinBytes(newSkinBytes)
+            cacheHeadToDiskAndMemory(account, hash, headBytes)
+        } else {
+            invalidateAccountSkin(account.id)
+        }
+    }
+
+    /**
+     * Invalidates cached avatar in memory for the given account.
+     */
+    fun invalidateAccountSkin(accountId: String) {
+        val updated = _skinHeads.value.toMutableMap()
+        val keysToRemove = updated.keys.filter { it == accountId || it.startsWith("${accountId}_") }
+        keysToRemove.forEach { updated.remove(it) }
+        _skinHeads.value = updated
+    }
+
+    /**
+     * Fetches the official or Vault skin, extracts head avatar, caches to disk, and updates state.
+     */
     fun loadOrRefreshSkin(account: Account) {
         scope.launch {
             try {
-                val cacheFile = getHeadCachePath(account)
+                val currentHash = getEffectiveSkinHash(account)
                 var headBytes: ByteArray? = null
 
-                // 1. If skinUrl is available from Microsoft authentication
-                if (!account.skinUrl.isNullOrBlank()) {
+                // A. For Offline Account: load from Vault
+                if (account.type == AccountType.OFFLINE && vaultSkinRepository != null) {
+                    val activeSkin = vaultSkinRepository.getActiveSkin(account.id)
+                    if (activeSkin != null) {
+                        val skinBytes = vaultSkinRepository.getSkinBytes(activeSkin)
+                        if (skinBytes != null && skinBytes.isNotEmpty()) {
+                            headBytes = extractHeadFromSkinBytes(skinBytes)
+                        }
+                    }
+                }
+
+                // B. For Online Account: download from official skinUrl
+                if (headBytes == null && !account.skinUrl.isNullOrBlank()) {
                     try {
                         val response = httpClient.get(account.skinUrl!!)
                         if (response.status.isSuccess()) {
                             val skinBytes: ByteArray = response.body()
                             headBytes = extractHeadFromSkinBytes(skinBytes)
-                        }
-                    } catch (e: Exception) {
-                        println("Note: fetching skin texture failed: ${e.message}")
-                    }
-                }
 
-                // 2. If headBytes not obtained, query avatar head service
-                if (headBytes == null) {
-                    val candidateUrls = listOf(
-                        "https://mc-heads.net/avatar/${account.username}/64",
-                        "https://minotar.net/helm/${account.username}/64.png"
-                    )
+                            // Save full skin to cache/skins/
+                            val skinHash = computeSha256(skinBytes)
+                            val skinCacheFile = pathProvider.skinsDirectory.resolve("${skinHash}.png")
+                            if (!fileSystem.exists(skinCacheFile)) {
+                                fileSystem.write(skinCacheFile) { write(skinBytes) }
+                            }
 
-                    for (url in candidateUrls) {
-                        try {
-                            val resp = httpClient.get(url)
-                            if (resp.status.isSuccess()) {
-                                val bytes: ByteArray = resp.body()
-                                if (bytes.isNotEmpty()) {
-                                    headBytes = bytes
-                                    break
+                            // Also register in Vault if official account skin
+                            if (vaultSkinRepository != null) {
+                                try {
+                                    val modelType = if (account.skinModel?.equals("slim", ignoreCase = true) == true) {
+                                        SkinModelType.ALEX
+                                    } else {
+                                        SkinModelType.STEVE
+                                    }
+                                    vaultSkinRepository.cacheOfficialAccountSkin(
+                                        accountUsername = account.username,
+                                        bytes = skinBytes,
+                                        explicitModel = modelType
+                                    )
+                                } catch (e: Exception) {
+                                    // Non-fatal
                                 }
                             }
-                        } catch (e: Exception) {
-                            // try next
                         }
+                    } catch (e: Exception) {
+                        println("Note: official skin fetch failed for ${account.username}: ${e.message}")
                     }
                 }
 
-                // 3. Fallback to Steve head if network unavailable
+                // C. Fallback: Steve head
                 val finalBytes = headBytes ?: defaultSteveHeadBytes
+                cacheHeadToDiskAndMemory(account, currentHash, finalBytes)
 
-                // Cache to disk
-                try {
-                    val parent = cacheFile.parent
-                    if (parent != null && !fileSystem.exists(parent)) {
-                        fileSystem.createDirectories(parent)
-                    }
-                    fileSystem.write(cacheFile) {
-                        write(finalBytes)
-                    }
-                } catch (e: Exception) {
-                    println("Note: failed to cache skin head to disk: ${e.message}")
-                }
-
-                // Update in-memory state
-                withContext(Dispatchers.Main) {
-                    val updated = _skinHeads.value.toMutableMap()
-                    updated[account.id] = finalBytes
-                    _skinHeads.value = updated
-                }
-
-                println("[ACCOUNT_SKIN_LOADED] Loaded skin head avatar for '${account.username}' (${finalBytes.size} bytes)")
+                println("[ACCOUNT_SKIN_LOADED] Loaded skin head avatar for '${account.username}' (${finalBytes.size} bytes, hash: $currentHash)")
             } catch (e: Exception) {
-                println("Warning: skin head pipeline completed with notice: ${e.message}")
+                println("Warning: skin head pipeline notice: ${e.message}")
             }
         }
     }
 
-    private fun getHeadCachePath(account: Account): Path {
-        val cleanIdentifier = (account.uuid.ifBlank { account.username }).replace("-", "").lowercase()
-        return pathProvider.skinsDirectory.resolve("${cleanIdentifier}_head.png")
+    private fun cacheHeadToDiskAndMemory(account: Account, hash: String, headBytes: ByteArray) {
+        val cacheKey = "${account.id}_$hash"
+        val diskFile = getHeadCachePath(account, hash)
+
+        try {
+            val parent = diskFile.parent
+            if (parent != null && !fileSystem.exists(parent)) {
+                fileSystem.createDirectories(parent)
+            }
+            fileSystem.write(diskFile) {
+                write(headBytes)
+            }
+        } catch (e: Exception) {
+            // Ignore disk cache write failures
+        }
+
+        val updated = _skinHeads.value.toMutableMap()
+        updated[cacheKey] = headBytes
+        updated[account.id] = headBytes
+        _skinHeads.value = updated
     }
 
-    private fun extractHeadFromSkinBytes(skinBytes: ByteArray): ByteArray {
+    private fun getHeadCachePath(account: Account, hash: String): Path {
+        val cleanIdentifier = (account.uuid.ifBlank { account.username }).replace("-", "").lowercase()
+        return pathProvider.skinsDirectory.resolve("${cleanIdentifier}_${hash}_head.png")
+    }
+
+    fun extractHeadFromSkinBytes(skinBytes: ByteArray): ByteArray {
         val skinImage = ImageIO.read(ByteArrayInputStream(skinBytes)) ?: return defaultSteveHeadBytes
 
-        // Minecraft skins are 64x64 or 64x32
         val width = skinImage.width
         val height = skinImage.height
 
@@ -186,7 +273,7 @@ class MinecraftSkinManager(
         return baos.toByteArray()
     }
 
-    private fun generateSteveHeadPng(): ByteArray {
+    fun generateSteveHeadPng(): ByteArray {
         val steveFacePixels = intArrayOf(
             0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(),
             0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(), 0xFF2A1C12.toInt(),
@@ -210,5 +297,11 @@ class MinecraftSkinManager(
         val baos = ByteArrayOutputStream()
         ImageIO.write(scaled, "PNG", baos)
         return baos.toByteArray()
+    }
+
+    private fun computeSha256(bytes: ByteArray): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        val hash = digest.digest(bytes)
+        return hash.joinToString("") { "%02x".format(it) }
     }
 }
