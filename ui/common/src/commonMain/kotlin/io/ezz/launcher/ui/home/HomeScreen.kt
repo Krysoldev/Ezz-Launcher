@@ -75,7 +75,6 @@ fun HomeScreen(
     val installedMods by viewModel.installedMods.collectAsState()
     val selectedAccount by viewModel.accountRepository.selectedAccount.collectAsState()
     val processState by viewModel.processState.collectAsState()
-    val announcements by viewModel.announcements.collectAsState()
     val updateCheckResult by viewModel.updateCheckResult.collectAsState()
     val isMaintenanceMode by viewModel.isMaintenanceMode.collectAsState()
     val maintenanceMessage by viewModel.maintenanceMessage.collectAsState()
@@ -254,7 +253,7 @@ fun HomeScreen(
                 }
             }
 
-            // Right Column: System Specs & Network Announcements
+            // Right Column: System Specs
             Column(
                 modifier = Modifier.weight(0.32f),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -263,11 +262,6 @@ fun HomeScreen(
                     instance = selectedInstance,
                     accountName = selectedAccount?.username ?: "Offline Player",
                     onViewSettings = { viewModel.navigateTo(NavigationScreen.SETTINGS) }
-                )
-
-                AnnouncementsPanel(
-                    announcements = announcements,
-                    onOpenAnnouncements = { viewModel.platformBridge.openUrl("https://github.com/Krysoldev/Ezz-Launcher") }
                 )
             }
         }
@@ -711,71 +705,5 @@ private fun SpecRow(label: String, value: String) {
     ) {
         Text(text = label, color = Color(0xFF888888), fontSize = 12.sp)
         Text(text = value, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun AnnouncementsPanel(
-    announcements: List<io.ezz.launcher.core.storage.supabase.SupabaseAnnouncementDto>,
-    onOpenAnnouncements: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF101010))
-            .border(1.dp, Color(0xFF242424), RoundedCornerShape(8.dp))
-            .padding(16.dp)
-    ) {
-        Column {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "NETWORK BROADCASTS",
-                    color = Color(0xFF888888),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.8.sp
-                )
-                Text(
-                    text = "GitHub",
-                    color = Color.White,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clickable { onOpenAnnouncements() }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            if (announcements.isEmpty()) {
-                Text(
-                    text = "All Ezz authentication and cloud services are fully operational.",
-                    color = Color(0xFF777777),
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp
-                )
-            } else {
-                announcements.take(3).forEach { ann ->
-                    Column(modifier = Modifier.padding(vertical = 5.dp)) {
-                        Text(
-                            text = ann.title,
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = ann.message,
-                            color = Color(0xFFA0A0A0),
-                            fontSize = 11.sp,
-                            maxLines = 2
-                        )
-                    }
-                }
-            }
-        }
     }
 }
