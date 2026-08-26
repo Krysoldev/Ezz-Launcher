@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -235,9 +236,8 @@ fun InstancesScreen(
                             viewModel.launchInstance(instance)
                             viewModel.navigateTo(NavigationScreen.HOME)
                         },
-                        onManageMods = {
-                            viewModel.selectInstance(instance)
-                            viewModel.navigateTo(NavigationScreen.MODS)
+                        onManage = {
+                            viewModel.openInstanceManager(instance)
                         },
                         onEdit = { viewModel.showEditInstanceDialog.value = instance },
                         onDuplicate = { viewModel.duplicateInstance(instance.id, "${instance.name} (Copy)") },
@@ -257,7 +257,7 @@ private fun InstanceGridCard(
     startedAt: Long? = null,
     onSelect: () -> Unit,
     onPlay: () -> Unit,
-    onManageMods: () -> Unit,
+    onManage: () -> Unit,
     onEdit: () -> Unit,
     onDuplicate: () -> Unit,
     onOpenFolder: () -> Unit,
@@ -379,15 +379,13 @@ private fun InstanceGridCard(
                         )
                     }
 
-                    if (instance.loaderType == LoaderType.FABRIC) {
-                        EzzButton(
-                            text = "Mods",
-                            icon = Icons.Default.Extension,
-                            onClick = onManageMods,
-                            variant = EzzButtonVariant.SECONDARY,
-                            size = EzzButtonSize.SMALL
-                        )
-                    }
+                    EzzButton(
+                        text = "Manage",
+                        icon = Icons.Default.Settings,
+                        onClick = onManage,
+                        variant = EzzButtonVariant.SECONDARY,
+                        size = EzzButtonSize.SMALL
+                    )
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {

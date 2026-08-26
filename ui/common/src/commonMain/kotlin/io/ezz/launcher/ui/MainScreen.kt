@@ -47,6 +47,7 @@ import io.ezz.launcher.ui.dialogs.MicrosoftLoginDialog
 import io.ezz.launcher.ui.dialogs.QuickSearchDialog
 import io.ezz.launcher.ui.home.HomeScreen
 import io.ezz.launcher.ui.instances.InstancesScreen
+import io.ezz.launcher.ui.manager.InstanceManagerScreen
 import io.ezz.launcher.ui.mods.ModsScreen
 import io.ezz.launcher.ui.profiles.ProfilesScreen
 import io.ezz.launcher.ui.servers.ServersScreen
@@ -97,6 +98,7 @@ fun MainScreen(
                             NavigationScreen.PROFILES -> ProfilesScreen(viewModel = viewModel)
                             NavigationScreen.SETTINGS -> SettingsScreen(viewModel = viewModel)
                             NavigationScreen.CONSOLE -> ConsoleScreen(viewModel = viewModel)
+                            NavigationScreen.INSTANCE_MANAGER -> InstanceManagerScreen(viewModel = viewModel)
                         }
                     }
 

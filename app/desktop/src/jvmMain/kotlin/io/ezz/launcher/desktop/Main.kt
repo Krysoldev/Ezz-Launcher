@@ -107,6 +107,8 @@ fun main() = application {
     val localModScanner = io.ezz.launcher.core.minecraft.mods.LocalModScanner(pathProvider)
     val skinManager = io.ezz.launcher.core.minecraft.skin.MinecraftSkinManager(pathProvider, httpClient)
     val processSessionTracker = io.ezz.launcher.core.runtime.process.ProcessSessionTracker(pathProvider)
+    val localInstanceManager = io.ezz.launcher.core.storage.instance.LocalInstanceManager(pathProvider, instanceRepository)
+    val modrinthService = io.ezz.launcher.core.network.modrinth.ModrinthService(httpClient)
 
     val viewModel = AppViewModel(
         instanceRepository = instanceRepository,
@@ -130,6 +132,8 @@ fun main() = application {
         localModScanner = localModScanner,
         skinManager = skinManager,
         processSessionTracker = processSessionTracker,
+        localInstanceManager = localInstanceManager,
+        modrinthService = modrinthService,
         platformBridge = platformBridge
     )
 

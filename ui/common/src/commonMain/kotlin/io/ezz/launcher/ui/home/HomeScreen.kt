@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CircularProgressIndicator
@@ -172,6 +173,9 @@ fun HomeScreen(
             startedAt = selectedStartedAt,
             modCount = installedMods.size,
             onLaunch = { viewModel.launchInstance(selectedInstance) },
+            onManage = {
+                selectedInstance?.let { viewModel.openInstanceManager(it) }
+            },
             onConfigure = {
                 selectedInstance?.let { viewModel.showEditInstanceDialog.value = it }
             },
@@ -252,6 +256,7 @@ fun HomeScreen(
                                     viewModel.selectInstance(inst)
                                     viewModel.launchInstance(inst)
                                 },
+                                onManage = { viewModel.openInstanceManager(inst) },
                                 onEdit = { viewModel.showEditInstanceDialog.value = inst },
                                 onOpenFolder = { viewModel.openInstanceFolder(inst.id) }
                             )
@@ -283,6 +288,7 @@ private fun HeroBannerSection(
     startedAt: Long?,
     modCount: Int,
     onLaunch: () -> Unit,
+    onManage: () -> Unit,
     onConfigure: () -> Unit,
     onOpenFolder: () -> Unit,
     onCreateInstance: () -> Unit
@@ -492,6 +498,13 @@ private fun HeroBannerSection(
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         EzzButton(
+                            text = "Manage",
+                            icon = Icons.Default.Settings,
+                            onClick = onManage,
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.SMALL
+                        )
+                        EzzButton(
                             text = "Configure",
                             icon = Icons.Default.Tune,
                             onClick = onConfigure,
@@ -527,6 +540,7 @@ private fun InstanceCompactCard(
     startedAt: Long? = null,
     onSelect: () -> Unit,
     onPlay: () -> Unit,
+    onManage: () -> Unit,
     onEdit: () -> Unit,
     onOpenFolder: () -> Unit
 ) {
@@ -638,6 +652,14 @@ private fun InstanceCompactCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                EzzButton(
+                    text = "Manage",
+                    icon = Icons.Default.Settings,
+                    onClick = onManage,
+                    variant = EzzButtonVariant.SECONDARY,
+                    size = EzzButtonSize.SMALL
+                )
+
                 EzzIconButton(
                     icon = Icons.Default.FolderOpen,
                     onClick = onOpenFolder,

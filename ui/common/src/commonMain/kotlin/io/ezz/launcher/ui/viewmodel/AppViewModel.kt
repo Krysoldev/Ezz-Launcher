@@ -42,8 +42,24 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import io.ezz.launcher.ui.platform.DefaultPlatformBridge
+import io.ezz.launcher.core.model.instance.InstanceManagerTab
+import io.ezz.launcher.core.model.instance.InstanceStatistics
+import io.ezz.launcher.core.model.instance.LocalMod
+import io.ezz.launcher.core.model.instance.LocalResourcePack
+import io.ezz.launcher.core.model.instance.LocalShaderPack
+import io.ezz.launcher.core.model.instance.LocalWorld
+import io.ezz.launcher.core.model.instance.LocalWorldBackup
+import io.ezz.launcher.core.model.instance.LocalScreenshot
+import io.ezz.launcher.core.model.instance.InstanceLogEntry
+import io.ezz.launcher.core.model.instance.InstanceRepairReport
+import io.ezz.launcher.core.model.modrinth.ModrinthContentType
+import io.ezz.launcher.core.model.modrinth.ModrinthProjectHit
+import io.ezz.launcher.core.model.modrinth.ModrinthVersion
+import io.ezz.launcher.core.model.modrinth.ModUpdateCandidate
+import io.ezz.launcher.core.storage.instance.LocalInstanceManager
+import io.ezz.launcher.core.network.modrinth.ModrinthService
 import io.ezz.launcher.ui.platform.PlatformBridge
+import io.ezz.launcher.ui.platform.DefaultPlatformBridge
 
 enum class NavigationScreen {
     HOME,
@@ -53,7 +69,8 @@ enum class NavigationScreen {
     SERVERS,
     PROFILES,
     SETTINGS,
-    CONSOLE
+    CONSOLE,
+    INSTANCE_MANAGER
 }
 
 data class LaunchErrorData(
@@ -101,10 +118,18 @@ class AppViewModel(
     val localModScanner: io.ezz.launcher.core.minecraft.mods.LocalModScanner? = null,
     val skinManager: io.ezz.launcher.core.minecraft.skin.MinecraftSkinManager? = null,
     val processSessionTracker: io.ezz.launcher.core.runtime.process.ProcessSessionTracker? = null,
+    val localInstanceManager: LocalInstanceManager? = null,
+    val modrinthService: ModrinthService? = null,
     val platformBridge: PlatformBridge = DefaultPlatformBridge(),
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main)
 ) {
     val currentLauncherVersion = "1.0.0"
+
+    val instanceManager: LocalInstanceManager =
+        localInstanceManager ?: LocalInstanceManager(pathProvider, instanceRepository)
+
+    val modrinth: ModrinthService =
+        modrinthService ?: ModrinthService()
 
     val skinService: io.ezz.launcher.core.minecraft.skin.MinecraftSkinManager =
         skinManager ?: io.ezz.launcher.core.minecraft.skin.MinecraftSkinManager(
@@ -197,6 +222,39 @@ class AppViewModel(
     val showAddServerDialog = MutableStateFlow(false)
     val showSearchDialog = MutableStateFlow(false)
     val microsoftLoginProgress = MutableStateFlow<MicrosoftLoginProgress?>(null)
+
+    // Dedicated Instance Manager State
+    val activeManageTab = MutableStateFlow(InstanceManagerTab.OVERVIEW)
+    val manageStatistics = MutableStateFlow<InstanceStatistics?>(null)
+    val manageMods = MutableStateFlow<List<LocalMod>>(emptyList())
+    val manageResourcePacks = MutableStateFlow<List<LocalResourcePack>>(emptyList())
+    val manageShaders = MutableStateFlow<List<LocalShaderPack>>(emptyList())
+    val manageWorlds = MutableStateFlow<List<LocalWorld>>(emptyList())
+    val manageScreenshots = MutableStateFlow<List<LocalScreenshot>>(emptyList())
+    val manageLogs = MutableStateFlow<List<InstanceLogEntry>>(emptyList())
+    val manageSelectedLogContent = MutableStateFlow<String?>(null)
+    val manageRepairReport = MutableStateFlow<InstanceRepairReport?>(null)
+
+    // Modrinth Discovery State
+    val modrinthSearchQuery = MutableStateFlow("")
+    val modrinthSearchResults = MutableStateFlow<List<ModrinthProjectHit>>(emptyList())
+    val isModrinthSearching = MutableStateFlow(false)
+    val modrinthContentType = MutableStateFlow(ModrinthContentType.MOD)
+    val modrinthCategoryFilter = MutableStateFlow<String?>(null)
+    val modrinthSortIndex = MutableStateFlow("relevance")
+    val modrinthDownloadingProject = MutableStateFlow<String?>(null)
+    val modrinthDownloadProgress = MutableStateFlow(0f)
+    val modUpdateCandidates = MutableStateFlow<List<ModUpdateCandidate>>(emptyList())
+    val isCheckingModUpdates = MutableStateFlow(false)
+
+    // Instance Manager Modals & Dialogs
+    val selectedScreenshotForViewer = MutableStateFlow<LocalScreenshot?>(null)
+    val showRepairDialog = MutableStateFlow(false)
+    val showDuplicateInstanceDialog = MutableStateFlow<Instance?>(null)
+    val showExportInstanceDialog = MutableStateFlow<Instance?>(null)
+    val showWorldBackupRestoreDialog = MutableStateFlow<LocalWorld?>(null)
+    val worldBackupsList = MutableStateFlow<List<LocalWorldBackup>>(emptyList())
+    val selectedLogFile = MutableStateFlow<InstanceLogEntry?>(null)
 
     init {
         // Start 1-second live ticker
@@ -806,5 +864,365 @@ class AppViewModel(
 
     fun clearLogs() {
         _logs.value = emptyList()
+    }
+
+    // ==========================================================
+    // INSTANCE MANAGER ACTIONS
+    // ==========================================================
+
+    fun openInstanceManager(instance: Instance, initialTab: InstanceManagerTab = InstanceManagerTab.OVERVIEW) {
+        selectInstance(instance)
+        activeManageTab.value = initialTab
+        _currentScreen.value = NavigationScreen.INSTANCE_MANAGER
+        refreshManageData()
+    }
+
+    fun setManageTab(tab: InstanceManagerTab) {
+        activeManageTab.value = tab
+        if (tab == InstanceManagerTab.MODS && modrinthSearchResults.value.isEmpty()) {
+            modrinthContentType.value = ModrinthContentType.MOD
+            searchModrinth()
+        } else if (tab == InstanceManagerTab.RESOURCE_PACKS && modrinthSearchResults.value.isEmpty()) {
+            modrinthContentType.value = ModrinthContentType.RESOURCE_PACK
+            searchModrinth()
+        } else if (tab == InstanceManagerTab.SHADERS && modrinthSearchResults.value.isEmpty()) {
+            modrinthContentType.value = ModrinthContentType.SHADER
+            searchModrinth()
+        }
+    }
+
+    fun refreshManageData() {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            try {
+                manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+                manageMods.value = instanceManager.getMods(instance.id)
+                manageResourcePacks.value = instanceManager.getResourcePacks(instance.id)
+                manageShaders.value = instanceManager.getShaderPacks(instance.id)
+                manageWorlds.value = instanceManager.getWorlds(instance.id)
+                manageScreenshots.value = instanceManager.getScreenshots(instance.id)
+                manageLogs.value = instanceManager.getLogs(instance.id)
+            } catch (e: Throwable) {
+                println("Error refreshing manage data: ${e.message}")
+            }
+        }
+    }
+
+    // MODS
+    fun toggleManageMod(fileName: String, enable: Boolean) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            instanceManager.toggleMod(instance.id, fileName, enable)
+            manageMods.value = instanceManager.getMods(instance.id)
+            manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+            refreshMods(instance.id)
+        }
+    }
+
+    fun deleteManageMod(fileName: String) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            instanceManager.deleteMod(instance.id, fileName)
+            manageMods.value = instanceManager.getMods(instance.id)
+            manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+            refreshMods(instance.id)
+        }
+    }
+
+    // RESOURCE PACKS
+    fun toggleManageResourcePack(fileName: String, enable: Boolean) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            instanceManager.toggleResourcePack(instance.id, fileName, enable)
+            manageResourcePacks.value = instanceManager.getResourcePacks(instance.id)
+            manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+        }
+    }
+
+    fun deleteManageResourcePack(fileName: String) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            instanceManager.deleteResourcePack(instance.id, fileName)
+            manageResourcePacks.value = instanceManager.getResourcePacks(instance.id)
+            manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+        }
+    }
+
+    // SHADERS
+    fun toggleManageShader(fileName: String, enable: Boolean) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            instanceManager.toggleShaderPack(instance.id, fileName, enable)
+            manageShaders.value = instanceManager.getShaderPacks(instance.id)
+            manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+        }
+    }
+
+    fun deleteManageShader(fileName: String) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            instanceManager.deleteShaderPack(instance.id, fileName)
+            manageShaders.value = instanceManager.getShaderPacks(instance.id)
+            manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+        }
+    }
+
+    // WORLDS
+    fun backupWorld(worldFolderName: String) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            val backup = instanceManager.backupWorld(instance.id, instance.name, worldFolderName)
+            if (backup != null) {
+                showWorldBackupRestoreDialog.value?.let { openWorldBackups(it) }
+            }
+        }
+    }
+
+    fun openWorldBackups(world: LocalWorld) {
+        val instance = _selectedInstance.value ?: return
+        showWorldBackupRestoreDialog.value = world
+        scope.launch {
+            worldBackupsList.value = instanceManager.getWorldBackups(instance.name, world.folderName)
+        }
+    }
+
+    fun restoreWorldBackup(backupFilePath: String, targetFolderName: String) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            instanceManager.restoreWorldBackup(instance.id, backupFilePath, targetFolderName)
+            showWorldBackupRestoreDialog.value = null
+            manageWorlds.value = instanceManager.getWorlds(instance.id)
+            manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+        }
+    }
+
+    fun duplicateWorld(worldFolderName: String, newName: String) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            instanceManager.duplicateWorld(instance.id, worldFolderName, newName)
+            manageWorlds.value = instanceManager.getWorlds(instance.id)
+            manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+        }
+    }
+
+    fun renameWorld(worldFolderName: String, newName: String) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            instanceManager.renameWorld(instance.id, worldFolderName, newName)
+            manageWorlds.value = instanceManager.getWorlds(instance.id)
+        }
+    }
+
+    fun deleteWorld(worldFolderName: String) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            instanceManager.deleteWorld(instance.id, worldFolderName)
+            manageWorlds.value = instanceManager.getWorlds(instance.id)
+            manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+        }
+    }
+
+    fun exportWorld(worldFolderName: String, destinationZip: java.io.File) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            instanceManager.exportWorld(instance.id, worldFolderName, destinationZip)
+        }
+    }
+
+    fun importWorld(sourceFile: java.io.File) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            instanceManager.importWorld(instance.id, sourceFile)
+            manageWorlds.value = instanceManager.getWorlds(instance.id)
+            manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+        }
+    }
+
+    // SCREENSHOTS
+    fun deleteScreenshot(fileName: String) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            instanceManager.deleteScreenshot(instance.id, fileName)
+            manageScreenshots.value = instanceManager.getScreenshots(instance.id)
+            manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+            if (selectedScreenshotForViewer.value?.fileName == fileName) {
+                selectedScreenshotForViewer.value = null
+            }
+        }
+    }
+
+    // LOGS
+    fun loadLogContent(logEntry: InstanceLogEntry) {
+        selectedLogFile.value = logEntry
+        scope.launch {
+            manageSelectedLogContent.value = instanceManager.readLogContent(logEntry.filePath)
+        }
+    }
+
+    // REPAIR
+    fun runInstanceRepair() {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            manageRepairReport.value = instanceManager.repairInstance(instance)
+            showRepairDialog.value = true
+        }
+    }
+
+    // DUPLICATE & EXPORT
+    fun duplicateInstanceWithOption(source: Instance, newName: String, includeWorlds: Boolean) {
+        scope.launch {
+            try {
+                val duplicated = instanceManager.duplicateInstance(source, newName, includeWorlds)
+                showDuplicateInstanceDialog.value = null
+                instanceRepository.loadAll()
+                _selectedInstance.value = duplicated
+            } catch (e: Throwable) {
+                _errorMessage.value = "Failed to duplicate: ${e.message}"
+            }
+        }
+    }
+
+    fun exportInstanceWithOption(source: Instance, targetZip: java.io.File, includeWorlds: Boolean) {
+        scope.launch {
+            try {
+                instanceManager.exportInstance(source, targetZip, includeWorlds)
+                showExportInstanceDialog.value = null
+            } catch (e: Throwable) {
+                _errorMessage.value = "Failed to export: ${e.message}"
+            }
+        }
+    }
+
+    // MODRINTH SEARCH & INSTALL
+    fun searchModrinth(query: String = modrinthSearchQuery.value) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            isModrinthSearching.value = true
+            try {
+                val loaders = if (instance.loaderType != LoaderType.VANILLA) listOf(instance.loaderType.name.lowercase()) else null
+                val versions = listOf(instance.minecraftVersion)
+                val categories = if (!modrinthCategoryFilter.value.isNullOrBlank()) listOf(modrinthCategoryFilter.value!!) else null
+
+                val res = modrinth.searchProjects(
+                    query = query,
+                    contentType = modrinthContentType.value,
+                    loaders = loaders,
+                    gameVersions = versions,
+                    categories = categories,
+                    index = modrinthSortIndex.value,
+                    limit = 30
+                )
+                modrinthSearchResults.value = res.hits
+            } catch (e: Throwable) {
+                println("Modrinth search error: ${e.message}")
+                modrinthSearchResults.value = emptyList()
+            } finally {
+                isModrinthSearching.value = false
+            }
+        }
+    }
+
+    fun installModrinthProject(hit: ModrinthProjectHit) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            modrinthDownloadingProject.value = hit.title
+            modrinthDownloadProgress.value = 0f
+            try {
+                val loaders = if (instance.loaderType != LoaderType.VANILLA) listOf(instance.loaderType.name.lowercase()) else null
+                val versions = listOf(instance.minecraftVersion)
+                val projectVersions = modrinth.getProjectVersions(hit.projectId, loaders, versions)
+                val latest = projectVersions.firstOrNull()
+
+                if (latest != null && latest.files.isNotEmpty()) {
+                    val primaryFile = latest.files.firstOrNull { it.primary } ?: latest.files.first()
+                    val gameDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").toFile()
+                    val targetDir = when (hit.projectType) {
+                        "resourcepack" -> java.io.File(gameDir, "resourcepacks")
+                        "shader" -> java.io.File(gameDir, "shaderpacks")
+                        else -> java.io.File(gameDir, "mods")
+                    }
+                    val targetFile = java.io.File(targetDir, primaryFile.filename)
+
+                    val ok = modrinth.downloadContent(
+                        url = primaryFile.url,
+                        targetFile = targetFile,
+                        onProgress = { downloaded, total ->
+                            if (total > 0) {
+                                modrinthDownloadProgress.value = downloaded.toFloat() / total.toFloat()
+                            }
+                        }
+                    )
+
+                    // Also download required dependencies for mods
+                    if (ok && hit.projectType == "mod" && latest.dependencies.isNotEmpty()) {
+                        for (dep in latest.dependencies) {
+                            val depProjId = dep.projectId
+                            if (dep.dependencyType == "required" && depProjId != null) {
+                                val depVersions = modrinth.getProjectVersions(depProjId, loaders, versions)
+                                val depLatest = depVersions.firstOrNull()
+                                if (depLatest != null && depLatest.files.isNotEmpty()) {
+                                    val depFile = depLatest.files.firstOrNull { it.primary } ?: depLatest.files.first()
+                                    val depTarget = java.io.File(targetDir, depFile.filename)
+                                    if (!depTarget.exists()) {
+                                        modrinth.downloadContent(depFile.url, depTarget) { _, _ -> }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    refreshManageData()
+                    refreshMods(instance.id)
+                }
+            } catch (e: Throwable) {
+                println("Error installing Modrinth item: ${e.message}")
+            } finally {
+                modrinthDownloadingProject.value = null
+                modrinthDownloadProgress.value = 0f
+            }
+        }
+    }
+
+    fun checkForModUpdates() {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            isCheckingModUpdates.value = true
+            try {
+                val mods = instanceManager.getMods(instance.id)
+                val candidates = modrinth.checkForUpdates(
+                    installedMods = mods,
+                    gameVersion = instance.minecraftVersion,
+                    loader = instance.loaderType.name.lowercase()
+                )
+                modUpdateCandidates.value = candidates
+            } catch (_: Throwable) {
+            } finally {
+                isCheckingModUpdates.value = false
+            }
+        }
+    }
+
+    fun updateModFromCandidate(candidate: ModUpdateCandidate) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            try {
+                val file = candidate.latestVersion.files.firstOrNull { it.primary } ?: candidate.latestVersion.files.firstOrNull()
+                if (file != null) {
+                    val gameDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").toFile()
+                    val modsDir = java.io.File(gameDir, "mods")
+                    // Delete old mod
+                    instanceManager.deleteMod(instance.id, candidate.localMod.fileName)
+                    // Download new mod
+                    val targetFile = java.io.File(modsDir, file.filename)
+                    modrinth.downloadContent(file.url, targetFile) { _, _ -> }
+                    refreshManageData()
+                    refreshMods(instance.id)
+                    // Remove candidate from list
+                    modUpdateCandidates.value = modUpdateCandidates.value.filter { it.localMod.id != candidate.localMod.id }
+                }
+            } catch (e: Throwable) {
+                println("Update error: ${e.message}")
+            }
+        }
     }
 }
