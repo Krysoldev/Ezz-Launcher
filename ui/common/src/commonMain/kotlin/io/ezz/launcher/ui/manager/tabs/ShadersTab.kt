@@ -1,6 +1,5 @@
 package io.ezz.launcher.ui.manager.tabs
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,21 +16,21 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -47,19 +46,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LocalShaderPack
-import io.ezz.launcher.core.model.modrinth.ModrinthContentType
+import io.ezz.launcher.core.model.modrinth.ModrinthBrowseState
 import io.ezz.launcher.core.model.modrinth.ModrinthProjectHit
+import io.ezz.launcher.ui.components.ModrinthAsyncImage
+import io.ezz.launcher.ui.components.PaginationBar
 import io.ezz.launcher.ui.theme.EzzTheme
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 
-private enum class ShadersSubTab {
-    INSTALLED,
-    BROWSE
+private enum class ShadersSubTab(val title: String) {
+    INSTALLED("Installed"),
+    BROWSE("Browse Modrinth")
 }
 
 @Composable
@@ -68,17 +70,15 @@ fun ShadersTab(
     viewModel: AppViewModel,
     modifier: Modifier = Modifier
 ) {
-    val colors = EzzTheme.colors
     var subTab by remember { mutableStateOf(ShadersSubTab.INSTALLED) }
 
     val installedShaders by viewModel.manageShaders.collectAsState()
-    val searchResults by viewModel.modrinthSearchResults.collectAsState()
-    val isSearching by viewModel.isModrinthSearching.collectAsState()
-    val searchQuery by viewModel.modrinthSearchQuery.collectAsState()
+    val browseState by viewModel.shadersBrowseState.collectAsState()
     val downloadingProject by viewModel.modrinthDownloadingProject.collectAsState()
     val downloadProgress by viewModel.modrinthDownloadProgress.collectAsState()
 
     var localSearch by remember { mutableStateOf("") }
+    var localFilter by remember { mutableStateOf("ALL") }
 
     Column(
         modifier = modifier
@@ -86,7 +86,7 @@ fun ShadersTab(
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Header with SubTabs and Folder Action
+        // Sub-Navigation Bar
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -95,66 +95,149 @@ fun ShadersTab(
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(colors.surface)
-                    .border(1.dp, colors.border, RoundedCornerShape(8.dp))
+                    .background(Color(0xFF141414))
+                    .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
                     .padding(4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                SubTabPill("Installed (${installedShaders.size})", subTab == ShadersSubTab.INSTALLED) {
-                    subTab = ShadersSubTab.INSTALLED
-                }
-                SubTabPill("Browse Modrinth", subTab == ShadersSubTab.BROWSE) {
-                    subTab = ShadersSubTab.BROWSE
-                    viewModel.modrinthContentType.value = ModrinthContentType.SHADER
-                    if (searchResults.isEmpty()) viewModel.searchModrinth()
+                ShadersSubTab.values().forEach { tab ->
+                    val isActive = subTab == tab
+                    val badgeCount = if (tab == ShadersSubTab.INSTALLED) installedShaders.size else null
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (isActive) Color(0xFF222222) else Color.Transparent)
+                            .clickable {
+                                subTab = tab
+                                if (tab == ShadersSubTab.BROWSE && browseState.items.isEmpty()) {
+                                    viewModel.searchShaders()
+                                }
+                            }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = tab.title,
+                                color = if (isActive) Color.White else Color(0xFF888888),
+                                fontSize = 13.sp,
+                                fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal
+                            )
+                            if (badgeCount != null && badgeCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF333333))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = badgeCount.toString(),
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(
-                    onClick = { viewModel.refreshManageData() },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textPrimary)
+            // Quick Actions
+            if (subTab == ShadersSubTab.INSTALLED) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF1C1C1C))
+                        .border(1.dp, Color(0xFF2A2A2A), RoundedCornerShape(6.dp))
+                        .clickable { viewModel.openInstanceFolder(instance.id) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Refresh")
-                }
-
-                Button(
-                    onClick = {
-                        val path = viewModel.pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("shaderpacks")
-                        viewModel.platformBridge.openFolder(path)
-                    },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = colors.surfaceLight, contentColor = colors.textPrimary)
-                ) {
-                    Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Open Folder")
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FolderOpen,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text("Open Folder", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    }
                 }
             }
         }
 
+        // Active Download Banner
+        if (downloadingProject != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF141414))
+                    .border(1.dp, Color(0xFF2E7D32).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                    .padding(12.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Installing $downloadingProject...",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "${(downloadProgress * 100).toInt()}%",
+                            color = Color(0xFF4CAF50),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    LinearProgressIndicator(
+                        progress = { downloadProgress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp)),
+                        color = Color(0xFF4CAF50),
+                        trackColor = Color(0xFF222222)
+                    )
+                }
+            }
+        }
+
+        // SubTab Content
         when (subTab) {
             ShadersSubTab.INSTALLED -> {
-                InstalledShadersList(
-                    shaders = installedShaders,
-                    searchQuery = localSearch,
+                InstalledShadersView(
+                    installedShaders = installedShaders,
+                    localSearch = localSearch,
                     onSearchChange = { localSearch = it },
-                    onToggle = { shader, enable -> viewModel.toggleManageShader(shader.fileName, enable) },
-                    onDelete = { shader -> viewModel.deleteManageShader(shader.fileName) }
+                    localFilter = localFilter,
+                    onFilterChange = { localFilter = it },
+                    onToggleShader = { shader -> viewModel.toggleManageShader(shader.fileName, !shader.enabled) },
+                    onDeleteShader = { shader -> viewModel.deleteManageShader(shader.fileName) },
+                    onBrowseClick = {
+                        subTab = ShadersSubTab.BROWSE
+                        if (browseState.items.isEmpty()) viewModel.searchShaders()
+                    }
                 )
             }
             ShadersSubTab.BROWSE -> {
-                BrowseModrinthShadersList(
-                    query = searchQuery,
-                    onQueryChange = { viewModel.modrinthSearchQuery.value = it },
-                    onSearch = { viewModel.searchModrinth(it) },
-                    results = searchResults,
-                    isSearching = isSearching,
-                    downloadingProject = downloadingProject,
-                    downloadProgress = downloadProgress,
+                BrowseShadersView(
+                    instance = instance,
+                    viewModel = viewModel,
+                    browseState = browseState,
                     onInstall = { hit -> viewModel.installModrinthProject(hit) }
                 )
             }
@@ -163,232 +246,574 @@ fun ShadersTab(
 }
 
 @Composable
-private fun SubTabPill(title: String, selected: Boolean, onClick: () -> Unit) {
-    val colors = EzzTheme.colors
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (selected) colors.primary else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp)
-    ) {
-        Text(
-            text = title,
-            color = if (selected) Color.Black else colors.textSecondary,
-            fontSize = 13.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-        )
-    }
-}
-
-@Composable
-private fun InstalledShadersList(
-    shaders: List<LocalShaderPack>,
-    searchQuery: String,
+private fun InstalledShadersView(
+    installedShaders: List<LocalShaderPack>,
+    localSearch: String,
     onSearchChange: (String) -> Unit,
-    onToggle: (LocalShaderPack, Boolean) -> Unit,
-    onDelete: (LocalShaderPack) -> Unit
+    localFilter: String,
+    onFilterChange: (String) -> Unit,
+    onToggleShader: (LocalShaderPack) -> Unit,
+    onDeleteShader: (LocalShaderPack) -> Unit,
+    onBrowseClick: () -> Unit
 ) {
-    val colors = EzzTheme.colors
-    val filtered = remember(shaders, searchQuery) {
-        shaders.filter { it.name.contains(searchQuery, ignoreCase = true) || it.fileName.contains(searchQuery, ignoreCase = true) }
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        TextField(
-            value = searchQuery,
-            onValueChange = onSearchChange,
-            placeholder = { Text("Search installed shader packs...", color = colors.textMuted, fontSize = 13.sp) },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(18.dp)) },
-            modifier = Modifier.fillMaxWidth().height(48.dp),
-            shape = RoundedCornerShape(8.dp),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = colors.surface,
-                unfocusedContainerColor = colors.surface,
-                focusedTextColor = colors.textPrimary,
-                unfocusedTextColor = colors.textPrimary,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent
-            ),
-            singleLine = true
-        )
-
-        if (filtered.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(10.dp)).background(colors.surface).border(1.dp, colors.border, RoundedCornerShape(10.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = if (shaders.isEmpty()) "No shaders installed" else "No matching shaders found",
-                    color = colors.textMuted,
-                    fontSize = 13.sp
-                )
-            }
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(filtered, key = { it.fileName }) { shader ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(colors.cardBackground)
-                            .border(1.dp, if (shader.enabled) colors.border else colors.border.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
-                            .padding(16.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                                Box(
-                                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(colors.surfaceLight),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.Layers, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(22.dp))
-                                }
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(text = shader.name, color = if (shader.enabled) colors.textPrimary else colors.textMuted, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                                    Text(text = shader.fileName, color = colors.textMuted, fontSize = 12.sp)
-                                }
-                            }
-
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                Switch(
-                                    checked = shader.enabled,
-                                    onCheckedChange = { onToggle(shader, it) },
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = Color.Black,
-                                        checkedTrackColor = Color.White,
-                                        uncheckedThumbColor = colors.textMuted,
-                                        uncheckedTrackColor = colors.surfaceLight
-                                    )
-                                )
-                                IconButton(onClick = { onDelete(shader) }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = colors.danger.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+    val filtered = installedShaders.filter { shader ->
+        val matchesSearch = localSearch.isBlank() ||
+                shader.name.contains(localSearch, ignoreCase = true) ||
+                shader.fileName.contains(localSearch, ignoreCase = true)
+        val matchesFilter = when (localFilter) {
+            "ENABLED" -> shader.enabled
+            "DISABLED" -> !shader.enabled
+            else -> true
         }
+        matchesSearch && matchesFilter
     }
-}
 
-@Composable
-private fun BrowseModrinthShadersList(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onSearch: (String) -> Unit,
-    results: List<ModrinthProjectHit>,
-    isSearching: Boolean,
-    downloadingProject: String?,
-    downloadProgress: Float,
-    onInstall: (ModrinthProjectHit) -> Unit
-) {
-    val colors = EzzTheme.colors
-
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Search Toolbar
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             TextField(
-                value = query,
-                onValueChange = onQueryChange,
-                placeholder = { Text("Search Modrinth Shaders (e.g. Complementary, BSL, Bliss...)", color = colors.textMuted, fontSize = 13.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(18.dp)) },
-                modifier = Modifier.weight(1f).height(48.dp),
-                shape = RoundedCornerShape(8.dp),
+                value = localSearch,
+                onValueChange = onSearchChange,
+                placeholder = { Text("Filter installed shaders...", color = Color(0xFF666666), fontSize = 13.sp) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF666666), modifier = Modifier.size(16.dp)) },
+                trailingIcon = {
+                    if (localSearch.isNotBlank()) {
+                        IconButton(onClick = { onSearchChange("") }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF666666), modifier = Modifier.size(16.dp))
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF141414)),
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = colors.surface,
-                    unfocusedContainerColor = colors.surface,
-                    focusedTextColor = colors.textPrimary,
-                    unfocusedTextColor = colors.textPrimary,
+                    focusedContainerColor = Color(0xFF141414),
+                    unfocusedContainerColor = Color(0xFF141414),
                     focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent
+                    unfocusedIndicatorColor = Color.Transparent,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
                 ),
                 singleLine = true
             )
 
-            Button(
-                onClick = { onSearch(query) },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
+            // Status Filter Chips
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF141414))
+                    .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
+                    .padding(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                if (isSearching) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.Black)
-                } else {
-                    Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                listOf("ALL" to "All", "ENABLED" to "Enabled", "DISABLED" to "Disabled").forEach { (key, label) ->
+                    val isSelected = localFilter == key
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (isSelected) Color(0xFF242424) else Color.Transparent)
+                            .clickable { onFilterChange(key) }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = label,
+                            color = if (isSelected) Color.White else Color(0xFF888888),
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                        )
+                    }
                 }
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Search")
             }
         }
 
-        AnimatedVisibility(visible = downloadingProject != null) {
+        if (filtered.isEmpty()) {
             Box(
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(colors.surface).border(1.dp, colors.accent, RoundedCornerShape(8.dp)).padding(14.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(260.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF121212))
+                    .border(1.dp, Color(0xFF1E1E1E), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(text = "Downloading $downloadingProject...", color = colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        Text(text = "${(downloadProgress * 100).toInt()}%", color = colors.accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Layers,
+                        contentDescription = null,
+                        tint = Color(0xFF444444),
+                        modifier = Modifier.size(44.dp)
+                    )
+                    Text(
+                        text = if (installedShaders.isEmpty()) "No shaders installed in this instance." else "No shaders matched your filter.",
+                        color = Color(0xFF888888),
+                        fontSize = 14.sp
+                    )
+                    if (installedShaders.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.White)
+                                .clickable { onBrowseClick() }
+                                .padding(horizontal = 16.dp, vertical = 10.dp)
+                        ) {
+                            Text("Browse Modrinth Shaders", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
-                    LinearProgressIndicator(
-                        progress = { downloadProgress },
-                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-                        color = colors.accent,
-                        trackColor = colors.surfaceLight
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(filtered, key = { it.fileName }) { shader ->
+                    InstalledShaderRow(
+                        shader = shader,
+                        onToggle = { onToggleShader(shader) },
+                        onDelete = { onDeleteShader(shader) }
                     )
                 }
             }
         }
+    }
+}
 
-        if (results.isEmpty() && !isSearching) {
+@Composable
+private fun InstalledShaderRow(
+    shader: LocalShaderPack,
+    onToggle: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFF141414))
+            .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (shader.enabled) Color(0xFF1E1E1E) else Color(0xFF161616))
+                        .border(1.dp, Color(0xFF2A2A2A), RoundedCornerShape(6.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Layers,
+                        contentDescription = null,
+                        tint = if (shader.enabled) Color(0xFFFFB300) else Color(0xFF666666),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = shader.name,
+                        color = if (shader.enabled) Color.White else Color(0xFF777777),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    val desc = shader.description
+                    Text(
+                        text = if (!desc.isNullOrBlank()) desc else shader.fileName,
+                        color = Color(0xFF666666),
+                        fontSize = 12.sp,
+                        maxLines = 1
+                    )
+                }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Switch(
+                    checked = shader.enabled,
+                    onCheckedChange = { onToggle() },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Color(0xFFFFA500),
+                        uncheckedThumbColor = Color(0xFF888888),
+                        uncheckedTrackColor = Color(0xFF242424),
+                        uncheckedBorderColor = Color(0xFF333333)
+                    )
+                )
+
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete Shader",
+                        tint = Color(0xFFE53935),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BrowseShadersView(
+    instance: Instance,
+    viewModel: AppViewModel,
+    browseState: ModrinthBrowseState,
+    onInstall: (ModrinthProjectHit) -> Unit
+) {
+    var searchQuery by remember(browseState.searchQuery) { mutableStateOf(browseState.searchQuery) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        // Search & Sort Bar
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextField(
+                value = searchQuery,
+                onValueChange = {
+                    searchQuery = it
+                    viewModel.searchShaders(query = it, debounceMs = 350L)
+                },
+                placeholder = { Text("Search Modrinth Shaders (e.g. Complementary, BSL, Bliss, Solas)...", color = Color(0xFF666666), fontSize = 13.sp) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF666666), modifier = Modifier.size(16.dp)) },
+                trailingIcon = {
+                    if (searchQuery.isNotBlank()) {
+                        IconButton(onClick = {
+                            searchQuery = ""
+                            viewModel.searchShaders(query = "")
+                        }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF666666), modifier = Modifier.size(16.dp))
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF141414)),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color(0xFF141414),
+                    unfocusedContainerColor = Color(0xFF141414),
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                ),
+                singleLine = true
+            )
+
+            // Sort Options
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF141414))
+                    .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
+                    .padding(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                listOf(
+                    "relevance" to "Relevance",
+                    "downloads" to "Downloads",
+                    "newest" to "Newest",
+                    "updated" to "Updated"
+                ).forEach { (sortKey, sortLabel) ->
+                    val isSelected = browseState.selectedSort == sortKey
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (isSelected) Color(0xFF242424) else Color.Transparent)
+                            .clickable { viewModel.searchShaders(sort = sortKey) }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = sortLabel,
+                            color = if (isSelected) Color.White else Color(0xFF888888),
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+        }
+
+        // Active Version Badge
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Filtering Shaders for:", color = Color(0xFF666666), fontSize = 12.sp)
             Box(
-                modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(10.dp)).background(colors.surface).border(1.dp, colors.border, RoundedCornerShape(10.dp)),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Color(0xFFFFB300).copy(alpha = 0.15f))
+                    .border(1.dp, Color(0xFFFFB300).copy(alpha = 0.3f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text("MC ${instance.minecraftVersion}", color = Color(0xFFFFB300), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        // Results Container
+        if (browseState.isLoading && browseState.items.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(300.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = if (query.isEmpty()) "Search Modrinth to discover shader packs" else "No shaders found for '$query'",
-                    color = colors.textMuted,
-                    fontSize = 13.sp
-                )
+                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp))
+            }
+        } else if (browseState.error != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(240.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF141414))
+                    .border(1.dp, Color(0xFF222222), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFE53935), modifier = Modifier.size(36.dp))
+                    Text(browseState.error ?: "Error fetching shaders", color = Color(0xFF888888), fontSize = 13.sp)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF222222))
+                            .clickable { viewModel.searchShaders() }
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Text("Retry", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        } else if (browseState.items.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(240.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF141414))
+                    .border(1.dp, Color(0xFF222222), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("No shaders found matching your query.", color = Color(0xFF888888), fontSize = 14.sp)
             }
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(results, key = { it.projectId }) { hit ->
-                    Box(
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(colors.cardBackground).border(1.dp, colors.border, RoundedCornerShape(10.dp)).padding(16.dp)
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(browseState.items, key = { it.projectId }) { hit ->
+                    ShaderBrowseCard(
+                        hit = hit,
+                        viewModel = viewModel,
+                        onInstall = { onInstall(hit) }
+                    )
+                }
+
+                item {
+                    PaginationBar(
+                        currentPage = browseState.page,
+                        totalPages = browseState.totalPages,
+                        totalHits = browseState.totalHits,
+                        isLoading = browseState.isLoading,
+                        onPrevious = { viewModel.setShadersPage(browseState.page - 1) },
+                        onNext = { viewModel.setShadersPage(browseState.page + 1) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShaderBrowseCard(
+    hit: ModrinthProjectHit,
+    viewModel: AppViewModel,
+    onInstall: () -> Unit
+) {
+    val isInstalled = viewModel.isShaderInstalled(hit)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color(0xFF141414))
+            .border(1.dp, Color(0xFF222222), RoundedCornerShape(10.dp))
+            .padding(14.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                ModrinthAsyncImage(
+                    url = hit.iconUrl,
+                    imageLoader = viewModel.imageLoader,
+                    modifier = Modifier.size(54.dp),
+                    placeholderIcon = Icons.Default.Layers,
+                    contentScale = ContentScale.Fit
+                )
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(text = hit.title, color = colors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Black)
-                                Text(text = hit.description, color = colors.textSecondary, fontSize = 13.sp, maxLines = 2)
-                                Text(text = "by ${hit.author} • ↓ ${hit.downloads} downloads", color = colors.textMuted, fontSize = 11.sp)
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Button(
-                                onClick = { onInstall(hit) },
-                                enabled = downloadingProject != hit.title,
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = Color.Black)
+                        Text(
+                            text = hit.title,
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (hit.author.isNotBlank()) {
+                            Text(
+                                text = "by ${hit.author}",
+                                color = Color(0xFF777777),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = hit.description,
+                        color = Color(0xFFAAAAAA),
+                        fontSize = 13.sp,
+                        maxLines = 2
+                    )
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) {
+                        Text(
+                            text = "${formatDownloads(hit.downloads)} downloads",
+                            color = Color(0xFF777777),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+
+                        hit.categories.take(3).forEach { cat ->
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF202020))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
-                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Install", fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = cat,
+                                    color = Color(0xFF888888),
+                                    fontSize = 10.sp
+                                )
                             }
                         }
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // Action Button
+            if (isInstalled) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFF1E281E))
+                        .border(1.dp, Color(0xFF2E7D32).copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = Color(0xFF4CAF50),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "INSTALLED",
+                            color = Color(0xFF4CAF50),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color.White)
+                        .clickable { onInstall() }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Download,
+                            contentDescription = null,
+                            tint = Color.Black,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "INSTALL",
+                            color = Color.Black,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
         }
+    }
+}
+
+private fun formatDownloads(downloads: Long): String {
+    return when {
+        downloads >= 1_000_000 -> "${(downloads / 1_000_000.0).toInt()}M"
+        downloads >= 1_000 -> "${(downloads / 1_000.0).toInt()}k"
+        else -> downloads.toString()
     }
 }

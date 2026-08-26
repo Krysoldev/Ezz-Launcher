@@ -56,10 +56,13 @@ import io.ezz.launcher.core.model.modrinth.ModrinthContentType
 import io.ezz.launcher.core.model.modrinth.ModrinthProjectHit
 import io.ezz.launcher.core.model.modrinth.ModrinthVersion
 import io.ezz.launcher.core.model.modrinth.ModUpdateCandidate
+import io.ezz.launcher.core.model.modrinth.ModrinthBrowseState
 import io.ezz.launcher.core.storage.instance.LocalInstanceManager
 import io.ezz.launcher.core.network.modrinth.ModrinthService
+import io.ezz.launcher.ui.image.ModrinthImageLoader
 import io.ezz.launcher.ui.platform.PlatformBridge
 import io.ezz.launcher.ui.platform.DefaultPlatformBridge
+import kotlinx.coroutines.Job
 
 enum class NavigationScreen {
     HOME,
@@ -235,17 +238,23 @@ class AppViewModel(
     val manageSelectedLogContent = MutableStateFlow<String?>(null)
     val manageRepairReport = MutableStateFlow<InstanceRepairReport?>(null)
 
-    // Modrinth Discovery State
-    val modrinthSearchQuery = MutableStateFlow("")
-    val modrinthSearchResults = MutableStateFlow<List<ModrinthProjectHit>>(emptyList())
-    val isModrinthSearching = MutableStateFlow(false)
-    val modrinthContentType = MutableStateFlow(ModrinthContentType.MOD)
-    val modrinthCategoryFilter = MutableStateFlow<String?>(null)
-    val modrinthSortIndex = MutableStateFlow("relevance")
+    // Modrinth Image Caching Engine
+    val imageLoader: ModrinthImageLoader = ModrinthImageLoader(pathProvider, modrinth, scope)
+
+    // Isolated Modrinth Browse States per Content Type (Prevents State Leaks)
+    val modsBrowseState = MutableStateFlow(ModrinthBrowseState(contentType = ModrinthContentType.MOD))
+    val resourcePacksBrowseState = MutableStateFlow(ModrinthBrowseState(contentType = ModrinthContentType.RESOURCE_PACK))
+    val shadersBrowseState = MutableStateFlow(ModrinthBrowseState(contentType = ModrinthContentType.SHADER))
+
+    // Modrinth Global Actions
     val modrinthDownloadingProject = MutableStateFlow<String?>(null)
     val modrinthDownloadProgress = MutableStateFlow(0f)
     val modUpdateCandidates = MutableStateFlow<List<ModUpdateCandidate>>(emptyList())
     val isCheckingModUpdates = MutableStateFlow(false)
+
+    private var searchModsJob: Job? = null
+    private var searchResourcePacksJob: Job? = null
+    private var searchShadersJob: Job? = null
 
     // Instance Manager Modals & Dialogs
     val selectedScreenshotForViewer = MutableStateFlow<LocalScreenshot?>(null)
@@ -879,15 +888,12 @@ class AppViewModel(
 
     fun setManageTab(tab: InstanceManagerTab) {
         activeManageTab.value = tab
-        if (tab == InstanceManagerTab.MODS && modrinthSearchResults.value.isEmpty()) {
-            modrinthContentType.value = ModrinthContentType.MOD
-            searchModrinth()
-        } else if (tab == InstanceManagerTab.RESOURCE_PACKS && modrinthSearchResults.value.isEmpty()) {
-            modrinthContentType.value = ModrinthContentType.RESOURCE_PACK
-            searchModrinth()
-        } else if (tab == InstanceManagerTab.SHADERS && modrinthSearchResults.value.isEmpty()) {
-            modrinthContentType.value = ModrinthContentType.SHADER
-            searchModrinth()
+        if (tab == InstanceManagerTab.MODS && modsBrowseState.value.items.isEmpty()) {
+            searchMods()
+        } else if (tab == InstanceManagerTab.RESOURCE_PACKS && resourcePacksBrowseState.value.items.isEmpty()) {
+            searchResourcePacks()
+        } else if (tab == InstanceManagerTab.SHADERS && shadersBrowseState.value.items.isEmpty()) {
+            searchShaders()
         }
     }
 
@@ -1093,34 +1099,228 @@ class AppViewModel(
         }
     }
 
-    // MODRINTH SEARCH & INSTALL
-    fun searchModrinth(query: String = modrinthSearchQuery.value) {
-        val instance = _selectedInstance.value ?: return
-        scope.launch {
-            isModrinthSearching.value = true
-            try {
-                val loaders = if (instance.loaderType != LoaderType.VANILLA) listOf(instance.loaderType.name.lowercase()) else null
-                val versions = listOf(instance.minecraftVersion)
-                val categories = if (!modrinthCategoryFilter.value.isNullOrBlank()) listOf(modrinthCategoryFilter.value!!) else null
+    // ==========================================================
+    // MODRINTH SEARCH & PAGINATION (ISOLATED SERVICES)
+    // ==========================================================
 
-                val res = modrinth.searchProjects(
-                    query = query,
-                    contentType = modrinthContentType.value,
+    fun searchMods(
+        query: String? = null,
+        page: Int? = null,
+        loader: String? = null,
+        version: String? = null,
+        category: String? = null,
+        sort: String? = null,
+        debounceMs: Long = 0L
+    ) {
+        val instance = _selectedInstance.value ?: return
+        val current = modsBrowseState.value
+        val newQuery = query ?: current.searchQuery
+        val newPage = page ?: (if (query != null || loader != null || version != null || category != null || sort != null) 1 else current.page)
+        val newLoader = loader ?: current.selectedLoader ?: if (instance.loaderType != LoaderType.VANILLA) instance.loaderType.name.lowercase() else null
+        val newVersion = version ?: current.selectedGameVersion ?: instance.minecraftVersion
+        val newCategory = if (category == "ALL") null else (category ?: current.selectedCategory)
+        val newSort = sort ?: current.selectedSort
+
+        modsBrowseState.value = current.copy(
+            searchQuery = newQuery,
+            page = newPage,
+            selectedLoader = newLoader,
+            selectedGameVersion = newVersion,
+            selectedCategory = newCategory,
+            selectedSort = newSort,
+            isLoading = true,
+            error = null
+        )
+
+        searchModsJob?.cancel()
+        searchModsJob = scope.launch {
+            if (debounceMs > 0) delay(debounceMs)
+            try {
+                val loaders = if (!newLoader.isNullOrBlank()) listOf(newLoader) else null
+                val versions = if (!newVersion.isNullOrBlank()) listOf(newVersion) else null
+                val categories = if (!newCategory.isNullOrBlank()) listOf(newCategory) else null
+                val offset = (newPage - 1) * current.pageSize
+
+                val res = modrinth.searchMods(
+                    query = newQuery,
                     loaders = loaders,
                     gameVersions = versions,
                     categories = categories,
-                    index = modrinthSortIndex.value,
-                    limit = 30
+                    index = newSort,
+                    offset = offset,
+                    limit = current.pageSize
                 )
-                modrinthSearchResults.value = res.hits
+
+                val validHits = res.hits.filter { it.projectType.equals("mod", ignoreCase = true) }
+                val totalPages = maxOf(1, kotlin.math.ceil(res.totalHits.toDouble() / current.pageSize).toInt())
+
+                modsBrowseState.value = modsBrowseState.value.copy(
+                    items = validHits,
+                    totalHits = res.totalHits,
+                    totalPages = totalPages,
+                    isLoading = false,
+                    error = null
+                )
             } catch (e: Throwable) {
-                println("Modrinth search error: ${e.message}")
-                modrinthSearchResults.value = emptyList()
-            } finally {
-                isModrinthSearching.value = false
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                modsBrowseState.value = modsBrowseState.value.copy(
+                    isLoading = false,
+                    error = "Failed to load mods from Modrinth: ${e.message}"
+                )
             }
         }
     }
+
+    fun setModsPage(page: Int) {
+        if (page < 1 || page > modsBrowseState.value.totalPages) return
+        searchMods(page = page)
+    }
+
+    fun searchResourcePacks(
+        query: String? = null,
+        page: Int? = null,
+        version: String? = null,
+        resolution: String? = null,
+        category: String? = null,
+        sort: String? = null,
+        debounceMs: Long = 0L
+    ) {
+        val instance = _selectedInstance.value ?: return
+        val current = resourcePacksBrowseState.value
+        val newQuery = query ?: current.searchQuery
+        val newPage = page ?: (if (query != null || version != null || resolution != null || category != null || sort != null) 1 else current.page)
+        val newVersion = version ?: current.selectedGameVersion ?: instance.minecraftVersion
+        val newResolution = if (resolution == "ALL") null else (resolution ?: current.selectedResolution)
+        val newCategory = if (category == "ALL") null else (category ?: current.selectedCategory)
+        val newSort = sort ?: current.selectedSort
+
+        resourcePacksBrowseState.value = current.copy(
+            searchQuery = newQuery,
+            page = newPage,
+            selectedGameVersion = newVersion,
+            selectedResolution = newResolution,
+            selectedCategory = newCategory,
+            selectedSort = newSort,
+            isLoading = true,
+            error = null
+        )
+
+        searchResourcePacksJob?.cancel()
+        searchResourcePacksJob = scope.launch {
+            if (debounceMs > 0) delay(debounceMs)
+            try {
+                val versions = if (!newVersion.isNullOrBlank()) listOf(newVersion) else null
+                val catList = mutableListOf<String>()
+                if (!newCategory.isNullOrBlank()) catList.add(newCategory)
+                if (!newResolution.isNullOrBlank()) catList.add(newResolution)
+                val categories = if (catList.isNotEmpty()) catList else null
+                val offset = (newPage - 1) * current.pageSize
+
+                val res = modrinth.searchResourcePacks(
+                    query = newQuery,
+                    gameVersions = versions,
+                    categories = categories,
+                    index = newSort,
+                    offset = offset,
+                    limit = current.pageSize
+                )
+
+                val validHits = res.hits.filter { it.projectType.equals("resourcepack", ignoreCase = true) }
+                val totalPages = maxOf(1, kotlin.math.ceil(res.totalHits.toDouble() / current.pageSize).toInt())
+
+                resourcePacksBrowseState.value = resourcePacksBrowseState.value.copy(
+                    items = validHits,
+                    totalHits = res.totalHits,
+                    totalPages = totalPages,
+                    isLoading = false,
+                    error = null
+                )
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                resourcePacksBrowseState.value = resourcePacksBrowseState.value.copy(
+                    isLoading = false,
+                    error = "Failed to load resource packs from Modrinth: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun setResourcePacksPage(page: Int) {
+        if (page < 1 || page > resourcePacksBrowseState.value.totalPages) return
+        searchResourcePacks(page = page)
+    }
+
+    fun searchShaders(
+        query: String? = null,
+        page: Int? = null,
+        version: String? = null,
+        category: String? = null,
+        sort: String? = null,
+        debounceMs: Long = 0L
+    ) {
+        val instance = _selectedInstance.value ?: return
+        val current = shadersBrowseState.value
+        val newQuery = query ?: current.searchQuery
+        val newPage = page ?: (if (query != null || version != null || category != null || sort != null) 1 else current.page)
+        val newVersion = version ?: current.selectedGameVersion ?: instance.minecraftVersion
+        val newCategory = if (category == "ALL") null else (category ?: current.selectedCategory)
+        val newSort = sort ?: current.selectedSort
+
+        shadersBrowseState.value = current.copy(
+            searchQuery = newQuery,
+            page = newPage,
+            selectedGameVersion = newVersion,
+            selectedCategory = newCategory,
+            selectedSort = newSort,
+            isLoading = true,
+            error = null
+        )
+
+        searchShadersJob?.cancel()
+        searchShadersJob = scope.launch {
+            if (debounceMs > 0) delay(debounceMs)
+            try {
+                val versions = if (!newVersion.isNullOrBlank()) listOf(newVersion) else null
+                val categories = if (!newCategory.isNullOrBlank()) listOf(newCategory) else null
+                val offset = (newPage - 1) * current.pageSize
+
+                val res = modrinth.searchShaders(
+                    query = newQuery,
+                    gameVersions = versions,
+                    categories = categories,
+                    index = newSort,
+                    offset = offset,
+                    limit = current.pageSize
+                )
+
+                val validHits = res.hits.filter { it.projectType.equals("shader", ignoreCase = true) }
+                val totalPages = maxOf(1, kotlin.math.ceil(res.totalHits.toDouble() / current.pageSize).toInt())
+
+                shadersBrowseState.value = shadersBrowseState.value.copy(
+                    items = validHits,
+                    totalHits = res.totalHits,
+                    totalPages = totalPages,
+                    isLoading = false,
+                    error = null
+                )
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                shadersBrowseState.value = shadersBrowseState.value.copy(
+                    isLoading = false,
+                    error = "Failed to load shaders from Modrinth: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun setShadersPage(page: Int) {
+        if (page < 1 || page > shadersBrowseState.value.totalPages) return
+        searchShaders(page = page)
+    }
+
+    // ==========================================================
+    // INSTALLATION & VERIFICATION
+    // ==========================================================
 
     fun installModrinthProject(hit: ModrinthProjectHit) {
         val instance = _selectedInstance.value ?: return
@@ -1128,19 +1328,24 @@ class AppViewModel(
             modrinthDownloadingProject.value = hit.title
             modrinthDownloadProgress.value = 0f
             try {
-                val loaders = if (instance.loaderType != LoaderType.VANILLA) listOf(instance.loaderType.name.lowercase()) else null
+                val loaders = if (hit.projectType.equals("mod", ignoreCase = true) && instance.loaderType != LoaderType.VANILLA) {
+                    listOf(instance.loaderType.name.lowercase())
+                } else null
                 val versions = listOf(instance.minecraftVersion)
                 val projectVersions = modrinth.getProjectVersions(hit.projectId, loaders, versions)
-                val latest = projectVersions.firstOrNull()
+                val latest = projectVersions.firstOrNull() ?: modrinth.getProjectVersions(hit.projectId).firstOrNull()
 
                 if (latest != null && latest.files.isNotEmpty()) {
                     val primaryFile = latest.files.firstOrNull { it.primary } ?: latest.files.first()
                     val gameDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").toFile()
-                    val targetDir = when (hit.projectType) {
-                        "resourcepack" -> java.io.File(gameDir, "resourcepacks")
-                        "shader" -> java.io.File(gameDir, "shaderpacks")
+                    
+                    // Strict directory destination checking
+                    val targetDir = when {
+                        hit.projectType.equals("resourcepack", ignoreCase = true) -> java.io.File(gameDir, "resourcepacks")
+                        hit.projectType.equals("shader", ignoreCase = true) -> java.io.File(gameDir, "shaderpacks")
                         else -> java.io.File(gameDir, "mods")
                     }
+                    targetDir.mkdirs()
                     val targetFile = java.io.File(targetDir, primaryFile.filename)
 
                     val ok = modrinth.downloadContent(
@@ -1154,7 +1359,7 @@ class AppViewModel(
                     )
 
                     // Also download required dependencies for mods
-                    if (ok && hit.projectType == "mod" && latest.dependencies.isNotEmpty()) {
+                    if (ok && hit.projectType.equals("mod", ignoreCase = true) && latest.dependencies.isNotEmpty()) {
                         for (dep in latest.dependencies) {
                             val depProjId = dep.projectId
                             if (dep.dependencyType == "required" && depProjId != null) {
@@ -1172,7 +1377,7 @@ class AppViewModel(
                     }
 
                     refreshManageData()
-                    refreshMods(instance.id)
+                    if (hit.projectType.equals("mod", ignoreCase = true)) refreshMods(instance.id)
                 }
             } catch (e: Throwable) {
                 println("Error installing Modrinth item: ${e.message}")
@@ -1180,6 +1385,32 @@ class AppViewModel(
                 modrinthDownloadingProject.value = null
                 modrinthDownloadProgress.value = 0f
             }
+        }
+    }
+
+    fun isModInstalled(hit: ModrinthProjectHit): Boolean {
+        val mods = manageMods.value
+        return mods.any { local ->
+            local.fileName.contains(hit.slug, ignoreCase = true) ||
+            local.fileName.contains(hit.projectId, ignoreCase = true) ||
+            local.name.equals(hit.title, ignoreCase = true) ||
+            local.id.equals(hit.slug, ignoreCase = true)
+        }
+    }
+
+    fun isResourcePackInstalled(hit: ModrinthProjectHit): Boolean {
+        val packs = manageResourcePacks.value
+        return packs.any { local ->
+            local.fileName.contains(hit.slug, ignoreCase = true) ||
+            local.name.contains(hit.title, ignoreCase = true)
+        }
+    }
+
+    fun isShaderInstalled(hit: ModrinthProjectHit): Boolean {
+        val shaders = manageShaders.value
+        return shaders.any { local ->
+            local.fileName.contains(hit.slug, ignoreCase = true) ||
+            local.name.contains(hit.title, ignoreCase = true)
         }
     }
 

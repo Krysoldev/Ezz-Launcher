@@ -46,7 +46,7 @@ class ModrinthService(
         try {
             val facetGroups = mutableListOf<List<String>>()
 
-            // Content Type facet
+            // Content Type facet (strict filtering)
             facetGroups.add(listOf("project_type:${contentType.apiValue}"))
 
             // Loader facets (e.g., categories:fabric)
@@ -80,7 +80,10 @@ class ModrinthService(
             }
 
             if (response.status.isSuccess()) {
-                response.body<ModrinthSearchResponse>()
+                val res = response.body<ModrinthSearchResponse>()
+                // Double safety layer: ensure only requested content type is returned
+                val filteredHits = res.hits.filter { it.projectType.equals(contentType.apiValue, ignoreCase = true) }
+                res.copy(hits = filteredHits)
             } else {
                 ModrinthSearchResponse()
             }
@@ -88,6 +91,76 @@ class ModrinthService(
             println("Modrinth search warning: ${e.message}")
             ModrinthSearchResponse()
         }
+    }
+
+    /**
+     * Search specifically for MODS.
+     */
+    suspend fun searchMods(
+        query: String,
+        loaders: List<String>? = null,
+        gameVersions: List<String>? = null,
+        categories: List<String>? = null,
+        index: String = "relevance",
+        offset: Int = 0,
+        limit: Int = 20
+    ): ModrinthSearchResponse {
+        return searchProjects(
+            query = query,
+            contentType = ModrinthContentType.MOD,
+            loaders = loaders,
+            gameVersions = gameVersions,
+            categories = categories,
+            index = index,
+            offset = offset,
+            limit = limit
+        )
+    }
+
+    /**
+     * Search specifically for RESOURCE PACKS.
+     */
+    suspend fun searchResourcePacks(
+        query: String,
+        gameVersions: List<String>? = null,
+        categories: List<String>? = null,
+        index: String = "relevance",
+        offset: Int = 0,
+        limit: Int = 20
+    ): ModrinthSearchResponse {
+        return searchProjects(
+            query = query,
+            contentType = ModrinthContentType.RESOURCE_PACK,
+            loaders = null, // Resource packs are loader-independent
+            gameVersions = gameVersions,
+            categories = categories,
+            index = index,
+            offset = offset,
+            limit = limit
+        )
+    }
+
+    /**
+     * Search specifically for SHADERS.
+     */
+    suspend fun searchShaders(
+        query: String,
+        gameVersions: List<String>? = null,
+        categories: List<String>? = null,
+        index: String = "relevance",
+        offset: Int = 0,
+        limit: Int = 20
+    ): ModrinthSearchResponse {
+        return searchProjects(
+            query = query,
+            contentType = ModrinthContentType.SHADER,
+            loaders = null,
+            gameVersions = gameVersions,
+            categories = categories,
+            index = index,
+            offset = offset,
+            limit = limit
+        )
     }
 
     /**
@@ -146,6 +219,24 @@ class ModrinthService(
             }
             if (response.status.isSuccess()) {
                 response.body<ModrinthVersion>()
+            } else {
+                null
+            }
+        } catch (e: Throwable) {
+            null
+        }
+    }
+
+    /**
+     * Download an image and save to disk.
+     */
+    suspend fun downloadImageBytes(url: String): ByteArray? = withContext(Dispatchers.IO) {
+        try {
+            val response = client.get(url) {
+                header("User-Agent", userAgent)
+            }
+            if (response.status.isSuccess()) {
+                response.body<ByteArray>()
             } else {
                 null
             }
@@ -214,9 +305,8 @@ class ModrinthService(
             if (!mod.enabled) continue
             try {
                 // Search Modrinth by mod name
-                val searchRes = searchProjects(
+                val searchRes = searchMods(
                     query = mod.name,
-                    contentType = ModrinthContentType.MOD,
                     loaders = listOf(loader),
                     gameVersions = listOf(gameVersion),
                     limit = 3
