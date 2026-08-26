@@ -131,70 +131,37 @@ class LaunchEngine(
             val gameDir = pathProvider.getInstanceGameDirectory(instance.id)
             val assetsDir = pathProvider.assetsDirectory
 
-            // Apply Vault Skin for Offline accounts
-            var skinResolved = false
-            var skinPrepared = false
-            var effectiveSkinSource = if (validAccount.type == io.ezz.launcher.core.model.account.AccountType.OFFLINE) "VAULT" else "ONLINE"
-            var effectiveSkinHash = ""
+            // Sync Vault skin metadata launcher-side and safely clean up legacy skin mod files if present
             var activeVaultSkinName = "Default"
             var activeVaultSkinModel = "CLASSIC"
-            var activeSkinFileName = "default.png"
-            var clientIntegrationStatus = "READY"
 
             if (validAccount.type == io.ezz.launcher.core.model.account.AccountType.OFFLINE && vaultSkinRepository != null) {
                 try {
                     val activeSkin = vaultSkinRepository.getActiveSkin(validAccount.id)
                     if (activeSkin != null) {
-                        skinResolved = true
                         activeVaultSkinName = activeSkin.name
                         activeVaultSkinModel = activeSkin.modelType.name
-                        activeSkinFileName = activeSkin.fileName
-                        effectiveSkinHash = activeSkin.fileHash
-                        val skinBytes = vaultSkinRepository.getSkinBytes(activeSkin)
-                        val skinResult = io.ezz.launcher.core.runtime.skin.OfflineSkinInjector.applyVaultSkin(
+                        io.ezz.launcher.core.runtime.skin.OfflineSkinManager.syncOfflineSkin(
                             instance = instance,
                             account = validAccount,
                             skin = activeSkin,
-                            skinBytes = skinBytes,
                             pathProvider = pathProvider,
                             fileSystem = fileSystem
                         )
-                        skinPrepared = skinResult.applied
-                        if (skinResult.applied && skinResult.overrideJarPath != null && fileSystem.exists(skinResult.overrideJarPath)) {
-                            // Prepend override JAR to classpath so ClassLoader directly returns custom player textures
-                            classpath = listOf(skinResult.overrideJarPath) + classpath
-                            clientIntegrationStatus = if (instance.loaderType == io.ezz.launcher.core.model.instance.LoaderType.FABRIC) {
-                                "APPLIED (Fabric Mod, Classpath & ResourcePack)"
-                            } else {
-                                "APPLIED (Classpath & ResourcePack)"
-                            }
-                        } else {
-                            clientIntegrationStatus = "FAILED"
-                        }
                     } else {
-                        effectiveSkinSource = "DEFAULT"
-                        // Also apply canonical default skin for offline accounts with no custom skin
-                        val defaultResult = io.ezz.launcher.core.runtime.skin.OfflineSkinInjector.applyVaultSkin(
+                        io.ezz.launcher.core.runtime.skin.OfflineSkinManager.syncOfflineSkin(
                             instance = instance,
                             account = validAccount,
                             skin = null,
-                            skinBytes = null,
                             pathProvider = pathProvider,
                             fileSystem = fileSystem
                         )
-                        skinPrepared = defaultResult.applied
-                        if (defaultResult.applied && defaultResult.overrideJarPath != null && fileSystem.exists(defaultResult.overrideJarPath)) {
-                            classpath = listOf(defaultResult.overrideJarPath) + classpath
-                            clientIntegrationStatus = "DEFAULT APPLIED (Classpath & ResourcePack)"
-                        }
                     }
                 } catch (e: Exception) {
-                    clientIntegrationStatus = "ERROR: ${e.message}"
+                    println("[LaunchEngine] Notice during offline skin sync: ${e.message}")
                 }
             } else if (validAccount.type == io.ezz.launcher.core.model.account.AccountType.MICROSOFT) {
-                effectiveSkinSource = "ONLINE"
-                effectiveSkinHash = validAccount.skinHash ?: validAccount.skinUrl?.substringAfterLast("/") ?: "official_profile"
-                clientIntegrationStatus = "AUTHENTICATED (Official Mojang Profile)"
+                io.ezz.launcher.core.runtime.skin.OfflineSkinManager.cleanupLegacySkinMod(gameDir, fileSystem)
             }
 
             emit(LaunchEvent.StateChanged(ProcessState.Preparing("Building launch command...")))
@@ -219,22 +186,10 @@ class LaunchEngine(
             val workingDir = gameDir.toFile()
             workingDir.mkdirs()
 
-            // Emit full diagnostics log before launch
-            emit(LaunchEvent.LogReceived("==================== [EZZ-SKIN] LAUNCH DIAGNOSTICS ====================", isError = false))
-            emit(LaunchEvent.LogReceived("[EZZ-SKIN] Account                  : ${validAccount.username}", isError = false))
-            emit(LaunchEvent.LogReceived("[EZZ-SKIN] UUID                     : ${validAccount.uuid}", isError = false))
-            emit(LaunchEvent.LogReceived("[EZZ-SKIN] Type                     : ${validAccount.type}", isError = false))
-            emit(LaunchEvent.LogReceived("[EZZ-SKIN] Skin Source              : $effectiveSkinSource", isError = false))
-            emit(LaunchEvent.LogReceived("[EZZ-SKIN] Vault Skin               : $activeVaultSkinName ($activeVaultSkinModel)", isError = false))
-            emit(LaunchEvent.LogReceived("[EZZ-SKIN] Skin File                : $activeSkinFileName", isError = false))
-            emit(LaunchEvent.LogReceived("[EZZ-SKIN] Skin Hash                : ${effectiveSkinHash.ifBlank { "default_canonical" }}", isError = false))
-            emit(LaunchEvent.LogReceived("[EZZ-SKIN] Minecraft Version        : ${instance.minecraftVersion}", isError = false))
-            emit(LaunchEvent.LogReceived("[EZZ-SKIN] Loader                   : ${instance.loaderType}", isError = false))
-            emit(LaunchEvent.LogReceived("[EZZ-SKIN] Texture Registration     : ${if (skinPrepared) "SUCCESS" else "BYPASSED"}", isError = false))
-            emit(LaunchEvent.LogReceived("[EZZ-SKIN] Player Skin Resolution   : ${if (skinResolved) "SUCCESS" else "DEFAULT"}", isError = false))
-            emit(LaunchEvent.LogReceived("[EZZ-SKIN] Player Skin Bound        : ${if (skinPrepared) "SUCCESS" else "BYPASSED"}", isError = false))
-            emit(LaunchEvent.LogReceived("[EZZ-SKIN] Client Integration       : $clientIntegrationStatus", isError = false))
-            emit(LaunchEvent.LogReceived("------------------------------------------------------------------------", isError = false))
+            emit(LaunchEvent.LogReceived("==================== LAUNCH CONFIGURATION ====================", isError = false))
+            emit(LaunchEvent.LogReceived("Account           : ${validAccount.username} (${validAccount.type})", isError = false))
+            emit(LaunchEvent.LogReceived("UUID              : ${validAccount.uuid}", isError = false))
+            emit(LaunchEvent.LogReceived("Skin Preference   : $activeVaultSkinName ($activeVaultSkinModel)", isError = false))
             emit(LaunchEvent.LogReceived("Instance ID       : ${instance.id}", isError = false))
             emit(LaunchEvent.LogReceived("Instance Name     : ${instance.name}", isError = false))
             emit(LaunchEvent.LogReceived("Java Runtime      : ${javaRuntime.path} (Java ${javaRuntime.majorVersion}, ${javaRuntime.vendor})", isError = false))
