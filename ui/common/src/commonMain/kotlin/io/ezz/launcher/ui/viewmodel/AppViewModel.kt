@@ -146,6 +146,8 @@ class AppViewModel(
     private val _currentScreen = MutableStateFlow(NavigationScreen.HOME)
     val currentScreen: StateFlow<NavigationScreen> = _currentScreen.asStateFlow()
 
+    val instances: StateFlow<List<Instance>> = instanceRepository.instances
+
     private val _selectedInstance = MutableStateFlow<Instance?>(null)
     val selectedInstance: StateFlow<Instance?> = _selectedInstance.asStateFlow()
 
@@ -765,23 +767,37 @@ class AppViewModel(
         minecraftVersion: String,
         loaderType: LoaderType,
         loaderVersion: String?,
-        minMemoryMb: Int,
-        maxMemoryMb: Int,
-        customJvmArgs: List<String>
+        minMemoryMb: Int = 1024,
+        maxMemoryMb: Int = 4096,
+        customJvmArgs: List<String> = emptyList(),
+        javaPath: String? = null,
+        windowWidth: Int = 1280,
+        windowHeight: Int = 720,
+        customIconFile: java.io.File? = null,
+        onSuccess: (() -> Unit)? = null
     ) {
         scope.launch {
             try {
-                val newInstance = instanceRepository.createInstance(
-                    name = name,
+                var newInstance = instanceRepository.createInstance(
+                    name = name.trim().ifBlank { "Minecraft $minecraftVersion" },
                     minecraftVersion = minecraftVersion,
                     loaderType = loaderType,
                     loaderVersion = loaderVersion,
                     minMemoryMb = minMemoryMb,
                     maxMemoryMb = maxMemoryMb,
-                    customJvmArgs = customJvmArgs
+                    customJvmArgs = customJvmArgs,
+                    javaPath = javaPath,
+                    windowWidth = windowWidth,
+                    windowHeight = windowHeight
                 )
+
+                if (customIconFile != null && customIconFile.exists()) {
+                    newInstance = instanceManager.setCustomIcon(newInstance.id, customIconFile)
+                }
+
                 _selectedInstance.value = newInstance
                 showCreateInstanceDialog.value = false
+                onSuccess?.invoke()
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to create instance: ${e.message}"
             }

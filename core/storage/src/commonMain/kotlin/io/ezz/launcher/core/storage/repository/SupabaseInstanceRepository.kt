@@ -114,7 +114,11 @@ class SupabaseInstanceRepository(
         iconId: String,
         minMemoryMb: Int,
         maxMemoryMb: Int,
-        customJvmArgs: List<String>
+        customJvmArgs: List<String>,
+        javaPath: String?,
+        windowWidth: Int,
+        windowHeight: Int,
+        customIconPath: String?
     ): Instance = withContext(dispatcher) {
         val newId = UUID.randomUUID().toString()
         val instance = Instance(
@@ -124,9 +128,13 @@ class SupabaseInstanceRepository(
             loaderType = loaderType,
             loaderVersion = loaderVersion,
             iconId = iconId,
+            javaPath = javaPath,
             minMemoryMb = minMemoryMb,
             maxMemoryMb = maxMemoryMb,
             customJvmArgs = customJvmArgs,
+            windowWidth = windowWidth,
+            windowHeight = windowHeight,
+            customIconPath = customIconPath,
             createdAt = System.currentTimeMillis()
         )
 

@@ -16,7 +16,11 @@ interface InstanceRepository {
         iconId: String = "grass_block",
         minMemoryMb: Int = 1024,
         maxMemoryMb: Int = 4096,
-        customJvmArgs: List<String> = emptyList()
+        customJvmArgs: List<String> = emptyList(),
+        javaPath: String? = null,
+        windowWidth: Int = 1280,
+        windowHeight: Int = 720,
+        customIconPath: String? = null
     ): Instance
     suspend fun updateInstance(instance: Instance)
     suspend fun deleteInstance(id: String)
