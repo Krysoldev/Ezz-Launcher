@@ -41,7 +41,7 @@ class OfflineSkinInjectorTest {
     }
 
     @Test
-    fun testApplyVaultSkinToOfflineInstance_All9VariantsAndZipAndJar() {
+    fun testApplyVaultSkinToOfflineInstance_IsolatedNamespace() {
         val instance = Instance(
             id = "test-instance-1",
             name = "Survival 1.21.4",
@@ -78,55 +78,20 @@ class OfflineSkinInjectorTest {
         assertTrue(fileSystem.exists(result.overrideJarPath!!))
 
         val gameDir = pathProvider.getInstanceGameDirectory(instance.id)
-        val skinPackDir = gameDir.resolve("resourcepacks").resolve("EzzVaultSkin")
-        val skinZipFile = gameDir.resolve("resourcepacks").resolve("EzzVaultSkin.zip").toFile()
 
-        // Verify folder pack
-        assertTrue(fileSystem.exists(skinPackDir.resolve("pack.mcmeta")))
-        val mcmetaContent = fileSystem.read(skinPackDir.resolve("pack.mcmeta")) { readUtf8() }
-        assertTrue(mcmetaContent.contains("\"pack_format\": 46")) // 1.21.4 pack_format
+        // Verify active skin metadata and raw png
+        assertTrue(fileSystem.exists(gameDir.resolve(".ezz").resolve("active_skin.json")))
+        assertTrue(fileSystem.exists(gameDir.resolve(".ezz").resolve("active_skin.png")))
 
-        // Verify all 9 skin variants in wide and slim
-        val expectedSkins = listOf("steve", "alex", "ari", "efe", "kai", "makena", "noor", "sunny", "zuri")
-        for (name in expectedSkins) {
-            assertTrue(
-                fileSystem.exists(skinPackDir.resolve("assets").resolve("minecraft").resolve("textures").resolve("entity").resolve("player").resolve("wide").resolve("$name.png")),
-                "Missing wide variant $name.png"
-            )
-            assertTrue(
-                fileSystem.exists(skinPackDir.resolve("assets").resolve("minecraft").resolve("textures").resolve("entity").resolve("player").resolve("slim").resolve("$name.png")),
-                "Missing slim variant $name.png"
-            )
-            assertTrue(
-                fileSystem.exists(skinPackDir.resolve("assets").resolve("minecraft").resolve("textures").resolve("entity").resolve("$name.png")),
-                "Missing standard entity variant $name.png"
-            )
-        }
-
-        // Verify ZIP archive was created and contains assets
-        assertTrue(skinZipFile.exists() && skinZipFile.length() > 0)
-        val zip = ZipFile(skinZipFile)
-        assertTrue(zip.getEntry("pack.mcmeta") != null)
-        assertTrue(zip.getEntry("assets/minecraft/textures/entity/player/wide/steve.png") != null)
-        assertTrue(zip.getEntry("assets/minecraft/textures/entity/player/slim/alex.png") != null)
-        assertTrue(zip.getEntry("assets/minecraft/textures/entity/player/wide/noor.png") != null)
-        zip.close()
-
-        // Verify Override JAR was created and contains assets
+        // Verify Override JAR was created with isolated ezz namespace
         val jarFile = result.overrideJarPath!!.toFile()
         assertTrue(jarFile.exists() && jarFile.length() > 0)
         val jar = ZipFile(jarFile)
         assertTrue(jar.getEntry("pack.mcmeta") != null)
-        assertTrue(jar.getEntry("assets/minecraft/textures/entity/player/wide/steve.png") != null)
-        assertTrue(jar.getEntry("assets/minecraft/textures/entity/player/wide/alex.png") != null)
+        assertTrue(jar.getEntry("assets/ezz/textures/skin.png") != null, "Skin must be in isolated ezz namespace")
+        // Verify it NEVER overwrites vanilla steve.png globally
+        assertTrue(jar.getEntry("assets/minecraft/textures/entity/player/wide/steve.png") == null, "Must NOT pollute vanilla textures")
         jar.close()
-
-        // Verify options.txt updated
-        val optionsFile = gameDir.resolve("options.txt")
-        assertTrue(fileSystem.exists(optionsFile))
-        val optionsContent = fileSystem.read(optionsFile) { readUtf8() }
-        assertTrue(optionsContent.contains("file/EzzVaultSkin"))
-        assertTrue(optionsContent.contains("file/EzzVaultSkin.zip"))
     }
 
     @Test
@@ -217,7 +182,8 @@ class OfflineSkinInjectorTest {
 
         val modZip = ZipFile(result.fabricModJarPath!!.toFile())
         assertTrue(modZip.getEntry("fabric.mod.json") != null)
-        assertTrue(modZip.getEntry("assets/minecraft/textures/entity/player/wide/steve.png") != null)
+        assertTrue(modZip.getEntry("assets/ezz/textures/skin.png") != null, "Skin must be in isolated ezz namespace")
+        assertTrue(modZip.getEntry("assets/minecraft/textures/entity/player/wide/steve.png") == null, "Must NOT pollute vanilla textures")
         modZip.close()
 
         val gameDir = pathProvider.getInstanceGameDirectory(fabricInstance.id)
