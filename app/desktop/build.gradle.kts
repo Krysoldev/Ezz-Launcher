@@ -41,6 +41,12 @@ compose.desktop {
             packageVersion = "1.0.0"
             description = "Ezz Launcher — Cross-Platform Minecraft Java Edition Launcher"
             vendor = "Ezz"
+
+            windows {
+                iconFile.set(project.file("src/jvmMain/resources/icon.ico"))
+                menu = true
+                shortcut = true
+            }
         }
     }
 }
