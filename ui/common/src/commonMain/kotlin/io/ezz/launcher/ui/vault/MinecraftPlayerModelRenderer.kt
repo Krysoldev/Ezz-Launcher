@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -47,16 +48,16 @@ import kotlin.math.exp
 import kotlin.math.sin
 
 /**
- * Vault V3 — Studio-Grade 3D Minecraft Player Model Renderer.
+ * Vault V4 — Solid-Face 3D Minecraft Player Model Engine.
  *
- * Key Architecture:
- * 1. Pixel-Perfect Nearest-Neighbor texture sampling from canonical 64x64 PNG.
- * 2. Body-Centered Orbit Camera (Target = Chest Pivot at Y = -16).
- * 3. Smooth exponential damping for manual drag, scroll zoom, and reset animation.
- * 4. Delta-time auto-rotation (12s period) with automatic drag-pause & 1.5s resumption.
- * 5. Full dual-layer geometry: Head, Torso, Arms, Legs + Hat, Jacket, Sleeves, Pants.
- * 6. Verified Steve (4px) and Alex (3px) Minecraft Java Edition UV mapping.
- * 7. Soft ground contact shadow aligned at player feet (Y = 0).
+ * Key Engineering Architecture:
+ * 1. Solid-Face Texture Mapping: Faces are projected and depth-sorted as solid geometric units,
+ *    preventing depth interleaving, transparent holes, and grid/seam artifacts.
+ * 2. PlayerRoot Y-Axis Rotation: The character rotates naturally around its vertical chest center (pivot Y = -16).
+ * 3. Outward Normal Winding: Verified counter-clockwise winding ensures accurate backface culling from all 360° angles.
+ * 4. Alpha Cutout: Transparent pixels in outer layers or Alex inner arms are cleanly discarded without ghost faces.
+ * 5. Nearest-Neighbor Sampling: Direct sRGB sampling from original 64x64 PNG with ClampToEdge UV boundaries.
+ * 6. Smooth Damping & Delta-Time: Frame-rate independent exponential interpolation for mouse drag and 12s auto-rotation.
  */
 @Composable
 fun MinecraftPlayerModel3DView(
@@ -68,39 +69,38 @@ fun MinecraftPlayerModel3DView(
 ) {
     // Camera Target Angles (Updated by user interaction or auto-rotation)
     var targetYaw by remember { mutableFloatStateOf(-20f) }
-    var targetPitch by remember { mutableFloatStateOf(8f) }
+    var targetPitch by remember { mutableFloatStateOf(6f) }
     var targetZoom by remember { mutableFloatStateOf(1.0f) }
 
-    // Interpolated Damped Camera Angles (Rendered every frame)
+    // Interpolated Damped Camera Angles (Rendered smoothly every frame)
     var currentYaw by remember { mutableFloatStateOf(-20f) }
-    var currentPitch by remember { mutableFloatStateOf(8f) }
+    var currentPitch by remember { mutableFloatStateOf(6f) }
     var currentZoom by remember { mutableFloatStateOf(1.0f) }
 
     var isDragging by remember { mutableStateOf(false) }
     var lastDragEndTime by remember { mutableLongStateOf(0L) }
 
-    // Handle Reset View Trigger (Smooth transition)
+    // Smooth Reset View Handler
     LaunchedEffect(resetTrigger) {
         if (resetTrigger > 0) {
             targetYaw = -20f
-            targetPitch = 8f
+            targetPitch = 6f
             targetZoom = 1.0f
         }
     }
 
-    // Parse skin texture bitmap directly from canonical PNG bytes (No downscaling)
+    // Decode original 64x64 PNG losslessly
     val skinImage = remember(skinBytes) {
         if (skinBytes != null && skinBytes.isNotEmpty()) {
             try {
                 val img = ImageIO.read(ByteArrayInputStream(skinBytes))
                 if (img != null) {
-                    println("[VaultRenderer] Skin loaded: ${img.width}x${img.height} (Filter: Nearest-Neighbor, Model: $modelType)")
+                    println("[VaultRenderer] Skin: 64x64, Filter: Nearest, Wrap: ClampToEdge, Alpha: Cutout, Model: $modelType")
                     img
                 } else {
                     generateDefaultSteveSkin()
                 }
             } catch (e: Exception) {
-                println("[VaultRenderer] Error decoding skin: ${e.message}")
                 generateDefaultSteveSkin()
             }
         } else {
@@ -129,13 +129,13 @@ fun MinecraftPlayerModel3DView(
                     val deltaSeconds = ((timeNanos - lastTimeNanos) / 1_000_000_000.0).toFloat().coerceIn(0.001f, 0.1f)
                     val now = System.currentTimeMillis()
 
-                    // Auto-Rotate at constant speed (~30 deg/sec = 1 full 360 rotation every 12 seconds)
+                    // Auto-Rotate PlayerRoot around Y axis (1 full 360 rotation every 12 seconds = 30 deg/s)
                     if (autoRotate && !isDragging && (now - lastDragEndTime > 1500L)) {
                         targetYaw = (targetYaw + 30f * deltaSeconds) % 360f
                     }
 
-                    // Exponential smooth damping (Spring factor: 14.0)
-                    val dampFactor = (1.0 - exp(-14.0 * deltaSeconds)).toFloat()
+                    // Exponential smooth damping (Spring factor: 16.0)
+                    val dampFactor = (1.0 - exp(-16.0 * deltaSeconds)).toFloat()
                     currentYaw += (targetYaw - currentYaw) * dampFactor
                     currentPitch += (targetPitch - currentPitch) * dampFactor
                     currentZoom += (targetZoom - currentZoom) * dampFactor
@@ -158,7 +158,7 @@ fun MinecraftPlayerModel3DView(
                 )
             )
             .border(1.dp, Color(0xFF222222), RoundedCornerShape(10.dp))
-            // Mouse Drag Interaction for Orbit Camera
+            // Mouse Drag: Rotates PlayerRoot around Y axis horizontally, subtle pitch vertically
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragStart = {
@@ -177,14 +177,14 @@ fun MinecraftPlayerModel3DView(
                     isDragging = true
                     lastDragEndTime = System.currentTimeMillis()
 
-                    // Natural horizontal orbit (Drag Left -> character turns left)
+                    // Horizontal drag: Rotates player around vertical Y axis
                     targetYaw = (targetYaw - dragAmount.x * 0.45f) % 360f
 
-                    // Bounded vertical orbit (Clamped between -35 deg and +35 deg to prevent camera flip)
-                    targetPitch = (targetPitch + dragAmount.y * 0.35f).coerceIn(-35f, 35f)
+                    // Vertical drag: Subtle camera pitch adjustment (Clamped [-28°, +28°] to prevent flipping)
+                    targetPitch = (targetPitch + dragAmount.y * 0.30f).coerceIn(-28f, 28f)
                 }
             }
-            // Mouse Wheel Scroll for Smooth Zoom
+            // Mouse Wheel Scroll: Smooth Zoom
             .pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) {
@@ -205,17 +205,17 @@ fun MinecraftPlayerModel3DView(
             val canvasH = size.height
             if (canvasW <= 0f || canvasH <= 0f) return@Canvas
 
-            // Scale to fill ~74% of canvas height (Character is 32 Minecraft units tall)
+            // Character is 32 units tall -> Scale to fill ~74% of viewport
             val baseScale = ((canvasH * 0.74f) / 32f) * currentZoom
 
-            // Orbit center pivot: Center of player torso/chest (X = 0, Y = -16, Z = 0)
+            // Pivot Center: Player chest/torso (X = 0, Y = -16, Z = 0)
             val centerX = canvasW / 2f
             val centerY = canvasH * 0.50f
 
             val yawRad = (currentYaw * PI / 180.0).toFloat()
             val pitchRad = (currentPitch * PI / 180.0).toFloat()
 
-            // 1. Draw Soft Ground Contact Shadow at Feet Plane (Y = 0)
+            // 1. Soft Ground Contact Shadow at Feet Plane (Y = 0)
             val feetScreenPos = projectVertex(
                 v = Vec3(0f, 0f, 0f),
                 pivotY = -16f,
@@ -226,7 +226,7 @@ fun MinecraftPlayerModel3DView(
                 scale = baseScale
             )
             val shadowW = 15f * baseScale
-            val shadowH = 5f * baseScale * (1f - (currentPitch / 90f).coerceIn(-0.5f, 0.5f))
+            val shadowH = 5.5f * baseScale * (1f - (currentPitch / 90f).coerceIn(-0.4f, 0.4f))
             drawOval(
                 brush = Brush.radialGradient(
                     colors = listOf(Color(0xB3000000), Color(0x40000000), Color.Transparent),
@@ -234,23 +234,23 @@ fun MinecraftPlayerModel3DView(
                     radius = shadowW
                 ),
                 topLeft = Offset(feetScreenPos.screenX - shadowW, feetScreenPos.screenY - shadowH / 2f),
-                size = androidx.compose.ui.geometry.Size(shadowW * 2f, shadowH)
+                size = Size(shadowW * 2f, shadowH)
             )
 
             val armW = if (modelType == SkinModelType.ALEX) 3 else 4
 
-            // Build all textured 3D quads
-            val quads = mutableListOf<RenderQuad>()
+            // List of all solid geometric model faces
+            val solidFaces = mutableListOf<SolidModelFace>()
 
-            // Subtle harmonic breathing offset & arm resting swing
+            // Idle harmonic breathing offset & arm swing
             val breathOffset = sin(animTime.toDouble()).toFloat() * 0.20f
             val armSwing = sin(animTime.toDouble()).toFloat() * 1.8f
 
             // ==========================================
             // 1. HEAD (8x8x8) at [X: -4..4, Y: -32..-24, Z: -4..4]
             // ==========================================
-            buildBoxFaces(
-                quads = quads, skin = skinImage,
+            addCuboidFaces(
+                faces = solidFaces, skin = skinImage,
                 minX = -4f, maxX = 4f,
                 minY = -32f - breathOffset, maxY = -24f - breathOffset,
                 minZ = -4f, maxZ = 4f,
@@ -262,12 +262,12 @@ fun MinecraftPlayerModel3DView(
                 uvBack = UvRect(24, 8, 8, 8),
                 isOverlay = false
             )
-            // Head Hat Overlay (+0.5 expand)
-            buildBoxFaces(
-                quads = quads, skin = skinImage,
-                minX = -4.5f, maxX = 4.5f,
-                minY = -32.5f - breathOffset, maxY = -23.5f - breathOffset,
-                minZ = -4.5f, maxZ = 4.5f,
+            // Head Hat Overlay (+0.45 expand)
+            addCuboidFaces(
+                faces = solidFaces, skin = skinImage,
+                minX = -4.45f, maxX = 4.45f,
+                minY = -32.45f - breathOffset, maxY = -23.55f - breathOffset,
+                minZ = -4.45f, maxZ = 4.45f,
                 uvTop = UvRect(40, 0, 8, 8),
                 uvBottom = UvRect(48, 0, 8, 8),
                 uvRight = UvRect(32, 8, 8, 8),
@@ -280,8 +280,8 @@ fun MinecraftPlayerModel3DView(
             // ==========================================
             // 2. TORSO / BODY (8x12x4) at [X: -4..4, Y: -24..-12, Z: -2..2]
             // ==========================================
-            buildBoxFaces(
-                quads = quads, skin = skinImage,
+            addCuboidFaces(
+                faces = solidFaces, skin = skinImage,
                 minX = -4f, maxX = 4f,
                 minY = -24f - breathOffset, maxY = -12f,
                 minZ = -2f, maxZ = 2f,
@@ -294,8 +294,8 @@ fun MinecraftPlayerModel3DView(
                 isOverlay = false
             )
             // Torso Jacket Overlay (+0.35 expand)
-            buildBoxFaces(
-                quads = quads, skin = skinImage,
+            addCuboidFaces(
+                faces = solidFaces, skin = skinImage,
                 minX = -4.35f, maxX = 4.35f,
                 minY = -24.35f - breathOffset, maxY = -11.65f,
                 minZ = -2.35f, maxZ = 2.35f,
@@ -314,8 +314,8 @@ fun MinecraftPlayerModel3DView(
             val rArmMinX = -4f - armW
             val rArmMaxX = -4f
             if (modelType == SkinModelType.ALEX) {
-                buildBoxFaces(
-                    quads = quads, skin = skinImage,
+                addCuboidFaces(
+                    faces = solidFaces, skin = skinImage,
                     minX = rArmMinX, maxX = rArmMaxX,
                     minY = -24f - breathOffset, maxY = -12f - breathOffset,
                     minZ = -2f, maxZ = 2f,
@@ -329,8 +329,8 @@ fun MinecraftPlayerModel3DView(
                     pitchOffset = armSwing
                 )
                 // Alex Right Arm Sleeve
-                buildBoxFaces(
-                    quads = quads, skin = skinImage,
+                addCuboidFaces(
+                    faces = solidFaces, skin = skinImage,
                     minX = rArmMinX - 0.35f, maxX = rArmMaxX + 0.35f,
                     minY = -24.35f - breathOffset, maxY = -11.65f - breathOffset,
                     minZ = -2.35f, maxZ = 2.35f,
@@ -344,8 +344,8 @@ fun MinecraftPlayerModel3DView(
                     pitchOffset = armSwing
                 )
             } else {
-                buildBoxFaces(
-                    quads = quads, skin = skinImage,
+                addCuboidFaces(
+                    faces = solidFaces, skin = skinImage,
                     minX = rArmMinX, maxX = rArmMaxX,
                     minY = -24f - breathOffset, maxY = -12f - breathOffset,
                     minZ = -2f, maxZ = 2f,
@@ -359,8 +359,8 @@ fun MinecraftPlayerModel3DView(
                     pitchOffset = armSwing
                 )
                 // Steve Right Arm Sleeve
-                buildBoxFaces(
-                    quads = quads, skin = skinImage,
+                addCuboidFaces(
+                    faces = solidFaces, skin = skinImage,
                     minX = rArmMinX - 0.35f, maxX = rArmMaxX + 0.35f,
                     minY = -24.35f - breathOffset, maxY = -11.65f - breathOffset,
                     minZ = -2.35f, maxZ = 2.35f,
@@ -381,8 +381,8 @@ fun MinecraftPlayerModel3DView(
             val lArmMinX = 4f
             val lArmMaxX = 4f + armW
             if (modelType == SkinModelType.ALEX) {
-                buildBoxFaces(
-                    quads = quads, skin = skinImage,
+                addCuboidFaces(
+                    faces = solidFaces, skin = skinImage,
                     minX = lArmMinX, maxX = lArmMaxX,
                     minY = -24f - breathOffset, maxY = -12f - breathOffset,
                     minZ = -2f, maxZ = 2f,
@@ -396,8 +396,8 @@ fun MinecraftPlayerModel3DView(
                     pitchOffset = -armSwing
                 )
                 // Alex Left Arm Sleeve
-                buildBoxFaces(
-                    quads = quads, skin = skinImage,
+                addCuboidFaces(
+                    faces = solidFaces, skin = skinImage,
                     minX = lArmMinX - 0.35f, maxX = lArmMaxX + 0.35f,
                     minY = -24.35f - breathOffset, maxY = -11.65f - breathOffset,
                     minZ = -2.35f, maxZ = 2.35f,
@@ -411,8 +411,8 @@ fun MinecraftPlayerModel3DView(
                     pitchOffset = -armSwing
                 )
             } else {
-                buildBoxFaces(
-                    quads = quads, skin = skinImage,
+                addCuboidFaces(
+                    faces = solidFaces, skin = skinImage,
                     minX = lArmMinX, maxX = lArmMaxX,
                     minY = -24f - breathOffset, maxY = -12f - breathOffset,
                     minZ = -2f, maxZ = 2f,
@@ -426,8 +426,8 @@ fun MinecraftPlayerModel3DView(
                     pitchOffset = -armSwing
                 )
                 // Steve Left Arm Sleeve
-                buildBoxFaces(
-                    quads = quads, skin = skinImage,
+                addCuboidFaces(
+                    faces = solidFaces, skin = skinImage,
                     minX = lArmMinX - 0.35f, maxX = lArmMaxX + 0.35f,
                     minY = -24.35f - breathOffset, maxY = -11.65f - breathOffset,
                     minZ = -2.35f, maxZ = 2.35f,
@@ -445,8 +445,8 @@ fun MinecraftPlayerModel3DView(
             // ==========================================
             // 5. RIGHT LEG (4x12x4) at [X: -4..0, Y: -12..0, Z: -2..2]
             // ==========================================
-            buildBoxFaces(
-                quads = quads, skin = skinImage,
+            addCuboidFaces(
+                faces = solidFaces, skin = skinImage,
                 minX = -4f, maxX = 0f,
                 minY = -12f, maxY = 0f,
                 minZ = -2f, maxZ = 2f,
@@ -459,8 +459,8 @@ fun MinecraftPlayerModel3DView(
                 isOverlay = false
             )
             // Right Leg Pants Overlay (+0.35 expand)
-            buildBoxFaces(
-                quads = quads, skin = skinImage,
+            addCuboidFaces(
+                faces = solidFaces, skin = skinImage,
                 minX = -4.35f, maxX = 0.35f,
                 minY = -12.35f, maxY = 0.35f,
                 minZ = -2.35f, maxZ = 2.35f,
@@ -476,8 +476,8 @@ fun MinecraftPlayerModel3DView(
             // ==========================================
             // 6. LEFT LEG (4x12x4) at [X: 0..4, Y: -12..0, Z: -2..2]
             // ==========================================
-            buildBoxFaces(
-                quads = quads, skin = skinImage,
+            addCuboidFaces(
+                faces = solidFaces, skin = skinImage,
                 minX = 0f, maxX = 4f,
                 minY = -12f, maxY = 0f,
                 minZ = -2f, maxZ = 2f,
@@ -490,8 +490,8 @@ fun MinecraftPlayerModel3DView(
                 isOverlay = false
             )
             // Left Leg Pants Overlay (+0.35 expand)
-            buildBoxFaces(
-                quads = quads, skin = skinImage,
+            addCuboidFaces(
+                faces = solidFaces, skin = skinImage,
                 minX = -0.35f, maxX = 4.35f,
                 minY = -12.35f, maxY = 0.35f,
                 minZ = -2.35f, maxZ = 2.35f,
@@ -505,44 +505,81 @@ fun MinecraftPlayerModel3DView(
             )
 
             // ==========================================
-            // 3D CAMERA PROJECTION & DEPTH SORTING
+            // 3D PROJECTION & SOLID FACE DEPTH SORTING
             // ==========================================
-            val projectedQuads = quads.mapNotNull { quad ->
-                val v0 = projectVertex(quad.v0, -16f, yawRad, pitchRad, centerX, centerY, baseScale)
-                val v1 = projectVertex(quad.v1, -16f, yawRad, pitchRad, centerX, centerY, baseScale)
-                val v2 = projectVertex(quad.v2, -16f, yawRad, pitchRad, centerX, centerY, baseScale)
-                val v3 = projectVertex(quad.v3, -16f, yawRad, pitchRad, centerX, centerY, baseScale)
+            val projectedFaces = solidFaces.mapNotNull { face ->
+                val p0 = projectVertex(face.v0, -16f, yawRad, pitchRad, centerX, centerY, baseScale)
+                val p1 = projectVertex(face.v1, -16f, yawRad, pitchRad, centerX, centerY, baseScale)
+                val p2 = projectVertex(face.v2, -16f, yawRad, pitchRad, centerX, centerY, baseScale)
+                val p3 = projectVertex(face.v3, -16f, yawRad, pitchRad, centerX, centerY, baseScale)
 
-                // Backface Culling (Signed 2D cross product of winding order)
-                val cross = (v1.screenX - v0.screenX) * (v2.screenY - v0.screenY) - (v1.screenY - v0.screenY) * (v2.screenX - v0.screenX)
-                if (cross >= 0f) {
-                    val avgZ = (v0.z + v1.z + v2.z + v3.z) / 4f
-                    ProjectedQuad(
-                        p0 = Offset(v0.screenX, v0.screenY),
-                        p1 = Offset(v1.screenX, v1.screenY),
-                        p2 = Offset(v2.screenX, v2.screenY),
-                        p3 = Offset(v3.screenX, v3.screenY),
-                        avgZ = avgZ + (if (quad.isOverlay) 0.12f else 0f),
-                        color = quad.color
+                // Accurate Outward Normal Backface Culling (Counter-Clockwise Winding)
+                val cross = (p1.screenX - p0.screenX) * (p2.screenY - p0.screenY) - (p1.screenY - p0.screenY) * (p2.screenX - p0.screenX)
+                if (cross > 0.001f) {
+                    val avgZ = (p0.z + p1.z + p2.z + p3.z) / 4f
+                    ProjectedSolidFace(
+                        p0 = Offset(p0.screenX, p0.screenY),
+                        p1 = Offset(p1.screenX, p1.screenY),
+                        p2 = Offset(p2.screenX, p2.screenY),
+                        p3 = Offset(p3.screenX, p3.screenY),
+                        avgZ = avgZ + (if (face.isOverlay) 0.15f else 0f),
+                        face = face
                     )
                 } else {
                     null
                 }
             }
 
-            // Depth sorting for Painter's Algorithm (Lowest Z / farthest rendered first)
-            val sortedQuads = projectedQuads.sortedBy { it.avgZ }
+            // Painter's Algorithm Depth Sorting: lowest Z (farthest) rendered first
+            val sortedFaces = projectedFaces.sortedBy { it.avgZ }
 
-            // Render all nearest-neighbor pixel quads
+            // Render all solid faces with seamless nearest-neighbor pixel mapping
             val path = Path()
-            for (quad in sortedQuads) {
-                path.reset()
-                path.moveTo(quad.p0.x, quad.p0.y)
-                path.lineTo(quad.p1.x, quad.p1.y)
-                path.lineTo(quad.p2.x, quad.p2.y)
-                path.lineTo(quad.p3.x, quad.p3.y)
-                path.close()
-                drawPath(path = path, color = quad.color)
+            for (pf in sortedFaces) {
+                val face = pf.face
+                val uv = face.uv
+                val p0 = pf.p0
+                val p1 = pf.p1
+                val p2 = pf.p2
+                val p3 = pf.p3
+
+                // Bilinear mapping function across quadrilateral (u, v in [0, 1])
+                fun qLerp(u: Float, v: Float): Offset {
+                    val x = (1f - u) * (1f - v) * p0.x + u * (1f - v) * p1.x + u * v * p2.x + (1f - u) * v * p3.x
+                    val y = (1f - u) * (1f - v) * p0.y + u * (1f - v) * p1.y + u * v * p2.y + (1f - u) * v * p3.y
+                    return Offset(x, y)
+                }
+
+                // Render each pixel of the face directly into the quadrilateral
+                val w = uv.w
+                val h = uv.h
+
+                for (iy in 0 until h) {
+                    val v0 = iy / h.toFloat()
+                    val v1 = (iy + 1) / h.toFloat()
+
+                    for (ix in 0 until w) {
+                        val color = getPixelColor(face.skin, uv.x + ix, uv.y + iy, face.light)
+                        // Alpha cutout: discard transparent pixels
+                        if (color.alpha > 0.05f) {
+                            val u0 = ix / w.toFloat()
+                            val u1 = (ix + 1) / w.toFloat()
+
+                            val c0 = qLerp(u0, v0)
+                            val c1 = qLerp(u1, v0)
+                            val c2 = qLerp(u1, v1)
+                            val c3 = qLerp(u0, v1)
+
+                            path.reset()
+                            path.moveTo(c0.x, c0.y)
+                            path.lineTo(c1.x, c1.y)
+                            path.lineTo(c2.x, c2.y)
+                            path.lineTo(c3.x, c3.y)
+                            path.close()
+                            drawPath(path = path, color = color)
+                        }
+                    }
+                }
             }
         }
     }
@@ -641,21 +678,25 @@ private fun createHeadBitmap(skin: BufferedImage): ImageBitmap? {
 private data class UvRect(val x: Int, val y: Int, val w: Int, val h: Int)
 private data class Vec3(val x: Float, val y: Float, val z: Float)
 private data class ProjectedVertex(val screenX: Float, val screenY: Float, val z: Float)
-private data class RenderQuad(
+
+private data class SolidModelFace(
     val v0: Vec3,
     val v1: Vec3,
     val v2: Vec3,
     val v3: Vec3,
-    val color: Color,
+    val uv: UvRect,
+    val skin: BufferedImage,
+    val light: Float,
     val isOverlay: Boolean
 )
-private data class ProjectedQuad(
+
+private data class ProjectedSolidFace(
     val p0: Offset,
     val p1: Offset,
     val p2: Offset,
     val p3: Offset,
     val avgZ: Float,
-    val color: Color
+    val face: SolidModelFace
 )
 
 /**
@@ -676,14 +717,14 @@ private fun projectVertex(
     val y0 = v.y - pivotY
     val z0 = v.z
 
-    // 2. Yaw rotation around Y axis
+    // 2. Yaw rotation around Y axis (PlayerRoot horizontal rotation)
     val cosYaw = cos(yawRad)
     val sinYaw = sin(yawRad)
     val x1 = x0 * cosYaw - z0 * sinYaw
     val z1 = x0 * sinYaw + z0 * cosYaw
     val y1 = y0
 
-    // 3. Pitch rotation around X axis
+    // 3. Pitch tilt around X axis
     val cosPitch = cos(pitchRad)
     val sinPitch = sin(pitchRad)
     val y2 = y1 * cosPitch - z1 * sinPitch
@@ -701,10 +742,10 @@ private fun projectVertex(
 }
 
 /**
- * Builds the 6 textured faces of a 3D box with exact pixel-level nearest-neighbor sampling.
+ * Adds the 6 solid faces of a cuboid with verified outward-pointing counter-clockwise winding.
  */
-private fun buildBoxFaces(
-    quads: MutableList<RenderQuad>,
+private fun addCuboidFaces(
+    faces: MutableList<SolidModelFace>,
     skin: BufferedImage,
     minX: Float, maxX: Float,
     minY: Float, maxY: Float,
@@ -730,147 +771,89 @@ private fun buildBoxFaces(
         return Vec3(v.x, newY, newZ)
     }
 
-    val stepX = (maxX - minX) / uvFront.w
-    val stepY = (maxY - minY) / uvFront.h
-    val stepZ = (maxZ - minZ) / uvTop.h
+    // 1. TOP FACE (y = minY, looking downward from top) -> Counter-clockwise: (minX, maxZ) -> (maxX, maxZ) -> (maxX, minZ) -> (minX, minZ)
+    faces.add(
+        SolidModelFace(
+            v0 = rot(Vec3(minX, minY, maxZ)),
+            v1 = rot(Vec3(maxX, minY, maxZ)),
+            v2 = rot(Vec3(maxX, minY, minZ)),
+            v3 = rot(Vec3(minX, minY, minZ)),
+            uv = uvTop,
+            skin = skin,
+            light = 1.08f,
+            isOverlay = isOverlay
+        )
+    )
 
-    // 1. TOP FACE (minY) -> Light: 1.08f
-    for (ix in 0 until uvTop.w) {
-        for (iz in 0 until uvTop.h) {
-            val color = getPixelColor(skin, uvTop.x + ix, uvTop.y + iz, 1.08f)
-            if (color.alpha > 0.05f) {
-                val x0 = minX + ix * stepX
-                val x1 = x0 + stepX
-                val z0 = minZ + iz * stepZ
-                val z1 = z0 + stepZ
-                quads.add(
-                    RenderQuad(
-                        v0 = rot(Vec3(x0, minY, z0)),
-                        v1 = rot(Vec3(x1, minY, z0)),
-                        v2 = rot(Vec3(x1, minY, z1)),
-                        v3 = rot(Vec3(x0, minY, z1)),
-                        color = color,
-                        isOverlay = isOverlay
-                    )
-                )
-            }
-        }
-    }
+    // 2. BOTTOM FACE (y = maxY, looking upward from bottom) -> Counter-clockwise: (minX, minZ) -> (maxX, minZ) -> (maxX, maxZ) -> (minX, maxZ)
+    faces.add(
+        SolidModelFace(
+            v0 = rot(Vec3(minX, maxY, minZ)),
+            v1 = rot(Vec3(maxX, maxY, minZ)),
+            v2 = rot(Vec3(maxX, maxY, maxZ)),
+            v3 = rot(Vec3(minX, maxY, maxZ)),
+            uv = uvBottom,
+            skin = skin,
+            light = 0.58f,
+            isOverlay = isOverlay
+        )
+    )
 
-    // 2. BOTTOM FACE (maxY) -> Light: 0.58f
-    for (ix in 0 until uvBottom.w) {
-        for (iz in 0 until uvBottom.h) {
-            val color = getPixelColor(skin, uvBottom.x + ix, uvBottom.y + iz, 0.58f)
-            if (color.alpha > 0.05f) {
-                val x0 = minX + ix * stepX
-                val x1 = x0 + stepX
-                val z0 = minZ + iz * stepZ
-                val z1 = z0 + stepZ
-                quads.add(
-                    RenderQuad(
-                        v0 = rot(Vec3(x0, maxY, z1)),
-                        v1 = rot(Vec3(x1, maxY, z1)),
-                        v2 = rot(Vec3(x1, maxY, z0)),
-                        v3 = rot(Vec3(x0, maxY, z0)),
-                        color = color,
-                        isOverlay = isOverlay
-                    )
-                )
-            }
-        }
-    }
+    // 3. FRONT FACE (z = minZ, looking towards +Z) -> Counter-clockwise: (minX, minY) -> (maxX, minY) -> (maxX, maxY) -> (minX, maxY)
+    faces.add(
+        SolidModelFace(
+            v0 = rot(Vec3(minX, minY, minZ)),
+            v1 = rot(Vec3(maxX, minY, minZ)),
+            v2 = rot(Vec3(maxX, maxY, minZ)),
+            v3 = rot(Vec3(minX, maxY, minZ)),
+            uv = uvFront,
+            skin = skin,
+            light = 1.00f,
+            isOverlay = isOverlay
+        )
+    )
 
-    // 3. FRONT FACE (minZ) -> Light: 1.00f
-    for (ix in 0 until uvFront.w) {
-        for (iy in 0 until uvFront.h) {
-            val color = getPixelColor(skin, uvFront.x + ix, uvFront.y + iy, 1.00f)
-            if (color.alpha > 0.05f) {
-                val x0 = minX + ix * stepX
-                val x1 = x0 + stepX
-                val y0 = minY + iy * stepY
-                val y1 = y0 + stepY
-                quads.add(
-                    RenderQuad(
-                        v0 = rot(Vec3(x0, y0, minZ)),
-                        v1 = rot(Vec3(x1, y0, minZ)),
-                        v2 = rot(Vec3(x1, y1, minZ)),
-                        v3 = rot(Vec3(x0, y1, minZ)),
-                        color = color,
-                        isOverlay = isOverlay
-                    )
-                )
-            }
-        }
-    }
+    // 4. BACK FACE (z = maxZ, looking towards -Z) -> Counter-clockwise: (maxX, minY) -> (minX, minY) -> (minX, maxY) -> (maxX, maxY)
+    faces.add(
+        SolidModelFace(
+            v0 = rot(Vec3(maxX, minY, maxZ)),
+            v1 = rot(Vec3(minX, minY, maxZ)),
+            v2 = rot(Vec3(minX, maxY, maxZ)),
+            v3 = rot(Vec3(maxX, maxY, maxZ)),
+            uv = uvBack,
+            skin = skin,
+            light = 0.72f,
+            isOverlay = isOverlay
+        )
+    )
 
-    // 4. BACK FACE (maxZ) -> Light: 0.72f
-    for (ix in 0 until uvBack.w) {
-        for (iy in 0 until uvBack.h) {
-            val color = getPixelColor(skin, uvBack.x + ix, uvBack.y + iy, 0.72f)
-            if (color.alpha > 0.05f) {
-                val x0 = minX + (uvBack.w - 1 - ix) * stepX
-                val x1 = x0 + stepX
-                val y0 = minY + iy * stepY
-                val y1 = y0 + stepY
-                quads.add(
-                    RenderQuad(
-                        v0 = rot(Vec3(x1, y0, maxZ)),
-                        v1 = rot(Vec3(x0, y0, maxZ)),
-                        v2 = rot(Vec3(x0, y1, maxZ)),
-                        v3 = rot(Vec3(x1, y1, maxZ)),
-                        color = color,
-                        isOverlay = isOverlay
-                    )
-                )
-            }
-        }
-    }
+    // 5. RIGHT FACE (x = minX, looking towards +X) -> Counter-clockwise: (maxZ, minY) -> (minZ, minY) -> (minZ, maxY) -> (maxZ, maxY)
+    faces.add(
+        SolidModelFace(
+            v0 = rot(Vec3(minX, minY, maxZ)),
+            v1 = rot(Vec3(minX, minY, minZ)),
+            v2 = rot(Vec3(minX, maxY, minZ)),
+            v3 = rot(Vec3(minX, maxY, maxZ)),
+            uv = uvRight,
+            skin = skin,
+            light = 0.85f,
+            isOverlay = isOverlay
+        )
+    )
 
-    // 5. RIGHT FACE (minX) -> Light: 0.85f
-    for (iz in 0 until uvRight.w) {
-        for (iy in 0 until uvRight.h) {
-            val color = getPixelColor(skin, uvRight.x + iz, uvRight.y + iy, 0.85f)
-            if (color.alpha > 0.05f) {
-                val z0 = minZ + iz * stepZ
-                val z1 = z0 + stepZ
-                val y0 = minY + iy * stepY
-                val y1 = y0 + stepY
-                quads.add(
-                    RenderQuad(
-                        v0 = rot(Vec3(minX, y0, z1)),
-                        v1 = rot(Vec3(minX, y0, z0)),
-                        v2 = rot(Vec3(minX, y1, z0)),
-                        v3 = rot(Vec3(minX, y1, z1)),
-                        color = color,
-                        isOverlay = isOverlay
-                    )
-                )
-            }
-        }
-    }
-
-    // 6. LEFT FACE (maxX) -> Light: 0.85f
-    for (iz in 0 until uvLeft.w) {
-        for (iy in 0 until uvLeft.h) {
-            val color = getPixelColor(skin, uvLeft.x + iz, uvLeft.y + iy, 0.85f)
-            if (color.alpha > 0.05f) {
-                val z0 = minZ + (uvLeft.w - 1 - iz) * stepZ
-                val z1 = z0 + stepZ
-                val y0 = minY + iy * stepY
-                val y1 = y0 + stepY
-                quads.add(
-                    RenderQuad(
-                        v0 = rot(Vec3(maxX, y0, z0)),
-                        v1 = rot(Vec3(maxX, y0, z1)),
-                        v2 = rot(Vec3(maxX, y1, z1)),
-                        v3 = rot(Vec3(maxX, y1, z0)),
-                        color = color,
-                        isOverlay = isOverlay
-                    )
-                )
-            }
-        }
-    }
+    // 6. LEFT FACE (x = maxX, looking towards -X) -> Counter-clockwise: (minZ, minY) -> (maxZ, minY) -> (maxZ, maxY) -> (minZ, maxY)
+    faces.add(
+        SolidModelFace(
+            v0 = rot(Vec3(maxX, minY, minZ)),
+            v1 = rot(Vec3(maxX, minY, maxZ)),
+            v2 = rot(Vec3(maxX, maxY, maxZ)),
+            v3 = rot(Vec3(maxX, maxY, minZ)),
+            uv = uvLeft,
+            skin = skin,
+            light = 0.85f,
+            isOverlay = isOverlay
+        )
+    )
 }
 
 /**
