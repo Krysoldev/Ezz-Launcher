@@ -132,7 +132,7 @@ fun main() = application {
 
     Window(
         onCloseRequest = ::exitApplication,
-        title = "Ezz Launcher — Cross-Platform Minecraft Java Edition Launcher",
+        title = "Ezz Launcher",
         icon = painterResource("icon.png"),
         state = windowState
     ) {

@@ -39,7 +39,7 @@ compose.desktop {
             )
             packageName = "EzzLauncher"
             packageVersion = "1.0.0"
-            description = "Ezz Launcher — Cross-Platform Minecraft Java Edition Launcher"
+            description = "Ezz Launcher"
             vendor = "Ezz"
 
             windows {
