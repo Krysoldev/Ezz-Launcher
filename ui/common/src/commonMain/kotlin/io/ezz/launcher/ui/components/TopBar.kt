@@ -131,12 +131,6 @@ fun TopBar(
                 onClick = { viewModel.navigateTo(NavigationScreen.ACCOUNTS) }
             )
             TopNavTab(
-                label = "MODS",
-                icon = Icons.Default.Extension,
-                isSelected = currentScreen == NavigationScreen.MODS,
-                onClick = { viewModel.navigateTo(NavigationScreen.MODS) }
-            )
-            TopNavTab(
                 label = "SETTINGS",
                 icon = Icons.Default.Settings,
                 isSelected = currentScreen == NavigationScreen.SETTINGS,

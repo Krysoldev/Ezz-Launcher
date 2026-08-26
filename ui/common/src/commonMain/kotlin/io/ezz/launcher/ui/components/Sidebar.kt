@@ -68,7 +68,6 @@ fun Sidebar(
     val navItems = listOf(
         NavItem(NavigationScreen.HOME, "Home", Icons.Default.Home),
         NavItem(NavigationScreen.INSTANCES, "Instances", Icons.Default.Apps),
-        NavItem(NavigationScreen.MODS, "Mods", Icons.Default.Extension),
         NavItem(NavigationScreen.ACCOUNTS, "Accounts", Icons.Default.AccountCircle),
         NavItem(NavigationScreen.PROFILES, "Profiles", Icons.Default.Tune),
         NavItem(NavigationScreen.SETTINGS, "Settings", Icons.Default.Settings),
