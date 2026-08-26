@@ -176,13 +176,14 @@ class LaunchEngine(
             emit(LaunchEvent.LogReceived("Launch Arguments  : ${sanitizedCommand.joinToString(" ")}", isError = false))
             emit(LaunchEvent.LogReceived("============================================================", isError = false))
 
-            // Launch process
-            emit(LaunchEvent.StateChanged(ProcessState.Running()))
+            // Preparing to start process
+            emit(LaunchEvent.StateChanged(ProcessState.Preparing("Starting Minecraft Java Process...", 0.99f)))
 
             processLauncher.launch(launchCommand, workingDir).collect { event ->
                 when (event) {
                     is ProcessEvent.Started -> {
-                        emit(LaunchEvent.StateChanged(ProcessState.Running(event.pid)))
+                        val processStartedAt = System.currentTimeMillis()
+                        emit(LaunchEvent.StateChanged(ProcessState.Running(processId = event.pid, startedAt = processStartedAt)))
                         emit(LaunchEvent.LogReceived("=== Process Started (PID: ${event.pid}) ===", isError = false))
                     }
                     is ProcessEvent.LogOutput -> {

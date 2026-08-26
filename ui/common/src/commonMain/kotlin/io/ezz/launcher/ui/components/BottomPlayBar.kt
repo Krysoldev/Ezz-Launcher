@@ -57,6 +57,8 @@ fun BottomPlayBar(
     val selectedInstance by viewModel.selectedInstance.collectAsState()
     val selectedAccount by viewModel.accountRepository.selectedAccount.collectAsState()
     val processState by viewModel.processState.collectAsState()
+    val tickerTime by viewModel.tickerTime.collectAsState()
+    val runtimeFormatted = selectedInstance?.let { viewModel.getInstanceRuntimeFormatted(it.id) }
 
     Surface(
         modifier = modifier
@@ -230,7 +232,7 @@ fun BottomPlayBar(
                     when (val state = processState) {
                         is ProcessState.Running -> {
                             EzzButton(
-                                text = "STOP (${state.processId ?: "ACTIVE"})",
+                                text = "STOP (${runtimeFormatted ?: "00:00:00"})",
                                 onClick = { viewModel.stopInstance() },
                                 variant = EzzButtonVariant.DANGER,
                                 size = EzzButtonSize.LARGE,

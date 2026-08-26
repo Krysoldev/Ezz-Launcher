@@ -106,6 +106,7 @@ fun main() = application {
 
     val localModScanner = io.ezz.launcher.core.minecraft.mods.LocalModScanner(pathProvider)
     val skinManager = io.ezz.launcher.core.minecraft.skin.MinecraftSkinManager(pathProvider, httpClient)
+    val processSessionTracker = io.ezz.launcher.core.runtime.process.ProcessSessionTracker(pathProvider)
 
     val viewModel = AppViewModel(
         instanceRepository = instanceRepository,
@@ -128,6 +129,7 @@ fun main() = application {
         featureFlagRepository = featureFlagRepository,
         localModScanner = localModScanner,
         skinManager = skinManager,
+        processSessionTracker = processSessionTracker,
         platformBridge = platformBridge
     )
 

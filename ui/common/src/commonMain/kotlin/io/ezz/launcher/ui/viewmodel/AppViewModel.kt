@@ -36,9 +36,11 @@ import io.ezz.launcher.core.storage.supabase.SupabaseClient
 import io.ezz.launcher.core.storage.supabase.SupabaseMinecraftVersionDto
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import io.ezz.launcher.ui.platform.DefaultPlatformBridge
 import io.ezz.launcher.ui.platform.PlatformBridge
@@ -98,6 +100,7 @@ class AppViewModel(
     val featureFlagRepository: FeatureFlagRepository? = null,
     val localModScanner: io.ezz.launcher.core.minecraft.mods.LocalModScanner? = null,
     val skinManager: io.ezz.launcher.core.minecraft.skin.MinecraftSkinManager? = null,
+    val processSessionTracker: io.ezz.launcher.core.runtime.process.ProcessSessionTracker? = null,
     val platformBridge: PlatformBridge = DefaultPlatformBridge(),
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main)
 ) {
@@ -108,6 +111,9 @@ class AppViewModel(
             pathProvider = pathProvider,
             httpClient = io.ezz.launcher.core.network.client.HttpClientFactory.create()
         )
+
+    val sessionTracker: io.ezz.launcher.core.runtime.process.ProcessSessionTracker =
+        processSessionTracker ?: io.ezz.launcher.core.runtime.process.ProcessSessionTracker(pathProvider)
 
     private val _currentScreen = MutableStateFlow(NavigationScreen.HOME)
     val currentScreen: StateFlow<NavigationScreen> = _currentScreen.asStateFlow()
@@ -120,6 +126,14 @@ class AppViewModel(
 
     private val _processState = MutableStateFlow<ProcessState>(ProcessState.Idle)
     val processState: StateFlow<ProcessState> = _processState.asStateFlow()
+
+    // Multi-instance real-time runtime tracking (instanceId -> InstanceRuntimeSession)
+    private val _runningSessions = MutableStateFlow<Map<String, io.ezz.launcher.core.model.runtime.InstanceRuntimeSession>>(emptyMap())
+    val runningSessions: StateFlow<Map<String, io.ezz.launcher.core.model.runtime.InstanceRuntimeSession>> = _runningSessions.asStateFlow()
+
+    // High-performance 1-second UI clock ticker
+    private val _tickerTime = MutableStateFlow(System.currentTimeMillis())
+    val tickerTime: StateFlow<Long> = _tickerTime.asStateFlow()
 
     private val _logs = MutableStateFlow<List<ConsoleLogEntry>>(emptyList())
     val logs: StateFlow<List<ConsoleLogEntry>> = _logs.asStateFlow()
@@ -185,6 +199,43 @@ class AppViewModel(
     val microsoftLoginProgress = MutableStateFlow<MicrosoftLoginProgress?>(null)
 
     init {
+        // Start 1-second live ticker
+        scope.launch(Dispatchers.Default) {
+            while (isActive) {
+                delay(1000L)
+                _tickerTime.value = System.currentTimeMillis()
+            }
+        }
+
+        // Recover alive Minecraft processes on launcher restart
+        scope.launch(Dispatchers.IO) {
+            try {
+                val recovered = sessionTracker.recoverActiveSessions()
+                if (recovered.isNotEmpty()) {
+                    val map = _runningSessions.value.toMutableMap()
+                    recovered.forEach { session ->
+                        map[session.instanceId] = session
+                        ProcessHandle.of(session.processId).ifPresent { handle ->
+                            handle.onExit().thenAccept {
+                                scope.launch {
+                                    handleProcessExited(session.instanceId, 0)
+                                }
+                            }
+                        }
+                    }
+                    _runningSessions.value = map
+
+                    val currentSel = _selectedInstance.value
+                    if (currentSel != null && map.containsKey(currentSel.id)) {
+                        val sess = map[currentSel.id]!!
+                        _processState.value = ProcessState.Running(sess.processId, sess.startedAt)
+                    }
+                }
+            } catch (e: Throwable) {
+                println("Note: process session recovery notice: ${e.message}")
+            }
+        }
+
         scope.launch {
             try {
                 pathProvider.initializeDirectories()
@@ -224,8 +275,57 @@ class AppViewModel(
         }
     }
 
+    fun isInstanceRunning(instanceId: String): Boolean {
+        return _runningSessions.value.containsKey(instanceId)
+    }
+
+    fun getInstanceRuntimeSeconds(instanceId: String): Long? {
+        val session = _runningSessions.value[instanceId] ?: return null
+        val now = _tickerTime.value
+        val elapsed = (now - session.startedAt) / 1000L
+        return elapsed.coerceAtLeast(0L)
+    }
+
+    fun getInstanceRuntimeFormatted(instanceId: String): String? {
+        val seconds = getInstanceRuntimeSeconds(instanceId) ?: return null
+        return io.ezz.launcher.core.model.runtime.formatRuntime(seconds)
+    }
+
+    private fun handleProcessExited(instanceId: String, exitCode: Int) {
+        _runningSessions.value = _runningSessions.value - instanceId
+        scope.launch(Dispatchers.IO) {
+            sessionTracker.unregisterSession(instanceId)
+        }
+        if (_selectedInstance.value?.id == instanceId) {
+            _processState.value = ProcessState.Exited(exitCode)
+        }
+        _logs.value = _logs.value + ConsoleLogEntry(message = "=== Instance $instanceId Process Exited (Exit Code $exitCode) ===", isError = exitCode != 0)
+    }
+
+    fun stopInstance(instanceId: String? = _selectedInstance.value?.id) {
+        val targetId = instanceId ?: _selectedInstance.value?.id ?: return
+        val session = _runningSessions.value[targetId]
+        if (session != null) {
+            sessionTracker.stopProcess(session.processId)
+            _runningSessions.value = _runningSessions.value - targetId
+            scope.launch(Dispatchers.IO) {
+                sessionTracker.unregisterSession(targetId)
+            }
+            if (_selectedInstance.value?.id == targetId) {
+                _processState.value = ProcessState.Idle
+            }
+            _logs.value = _logs.value + ConsoleLogEntry(message = "=== Minecraft Process Terminated by User ===")
+        }
+    }
+
     fun selectInstance(instance: Instance) {
         _selectedInstance.value = instance
+        val session = _runningSessions.value[instance.id]
+        if (session != null) {
+            _processState.value = ProcessState.Running(session.processId, session.startedAt)
+        } else if (_processState.value is ProcessState.Running) {
+            _processState.value = ProcessState.Idle
+        }
         refreshMods(instance.id)
     }
 
@@ -523,14 +623,32 @@ class AppViewModel(
                                 }
                                 is ProcessState.Running -> {
                                     activeDownloadState.value = null
+                                    val startedAt = if (state.startedAt > 0L) state.startedAt else System.currentTimeMillis()
+                                    val session = io.ezz.launcher.core.model.runtime.InstanceRuntimeSession(
+                                        instanceId = targetInstance.id,
+                                        processId = state.processId ?: 0L,
+                                        startedAt = startedAt
+                                    )
+                                    _runningSessions.value = _runningSessions.value + (targetInstance.id to session)
+                                    scope.launch(Dispatchers.IO) {
+                                        sessionTracker.registerSession(targetInstance.id, state.processId ?: 0L, startedAt)
+                                    }
                                     _logs.value = _logs.value + ConsoleLogEntry(message = "=== Process started (PID: ${state.processId}) ===")
                                 }
                                 is ProcessState.Exited -> {
                                     activeDownloadState.value = null
+                                    _runningSessions.value = _runningSessions.value - targetInstance.id
+                                    scope.launch(Dispatchers.IO) {
+                                        sessionTracker.unregisterSession(targetInstance.id)
+                                    }
                                     _logs.value = _logs.value + ConsoleLogEntry(message = "=== Process exited with code ${state.exitCode} ===")
                                 }
                                 is ProcessState.Failed -> {
                                     activeDownloadState.value = null
+                                    _runningSessions.value = _runningSessions.value - targetInstance.id
+                                    scope.launch(Dispatchers.IO) {
+                                        sessionTracker.unregisterSession(targetInstance.id)
+                                    }
                                     _logs.value = _logs.value + ConsoleLogEntry(message = "=== Launch Failed: ${state.error.message} ===", isError = true)
                                     launchErrorDialogData.value = LaunchErrorData(
                                         instanceName = targetInstance.name,

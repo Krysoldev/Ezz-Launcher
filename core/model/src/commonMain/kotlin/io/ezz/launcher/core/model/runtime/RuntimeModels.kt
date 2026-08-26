@@ -11,10 +11,31 @@ data class JavaRuntime(
     val is64Bit: Boolean = true
 )
 
+@Serializable
+data class InstanceRuntimeSession(
+    val instanceId: String,
+    val processId: Long,
+    val startedAt: Long
+)
+
+/**
+ * Formats a duration in seconds into HH:MM:SS format (e.g. 00:00:05, 00:23:41, 01:14:09).
+ */
+fun formatRuntime(seconds: Long): String {
+    val totalSecs = seconds.coerceAtLeast(0L)
+    val hours = totalSecs / 3600
+    val minutes = (totalSecs % 3600) / 60
+    val secs = totalSecs % 60
+    return "${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}"
+}
+
 sealed interface ProcessState {
     data object Idle : ProcessState
     data class Preparing(val stage: String, val progress: Float? = null) : ProcessState
-    data class Running(val processId: Long? = null) : ProcessState
+    data class Running(
+        val processId: Long? = null,
+        val startedAt: Long = 0L
+    ) : ProcessState
     data class Exited(val exitCode: Int, val crashReport: String? = null) : ProcessState
     data class Failed(val error: LaunchError) : ProcessState
 }

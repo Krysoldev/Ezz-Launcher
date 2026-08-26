@@ -100,11 +100,14 @@ fun InstancesScreen(
         }
     }
 
+    val tickerTime by viewModel.tickerTime.collectAsState()
+    val runningSessions by viewModel.runningSessions.collectAsState()
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF050505))
-            .padding(26.dp)
+            .background(Color(0xFF0A0A0A))
+            .padding(24.dp)
     ) {
         // Header Row
         Row(
@@ -224,9 +227,14 @@ fun InstancesScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(filteredInstances, key = { it.id }) { instance ->
+                    val isInstRunning = viewModel.isInstanceRunning(instance.id)
+                    val instRuntime = if (isInstRunning) viewModel.getInstanceRuntimeFormatted(instance.id) else null
+
                     InstanceGridCard(
                         instance = instance,
                         isSelected = instance.id == selectedInstance?.id,
+                        isRunning = isInstRunning,
+                        runtimeFormatted = instRuntime,
                         onSelect = { viewModel.selectInstance(instance) },
                         onPlay = {
                             viewModel.selectInstance(instance)
@@ -252,6 +260,8 @@ fun InstancesScreen(
 private fun InstanceGridCard(
     instance: Instance,
     isSelected: Boolean,
+    isRunning: Boolean = false,
+    runtimeFormatted: String? = null,
     onSelect: () -> Unit,
     onPlay: () -> Unit,
     onManageMods: () -> Unit,
@@ -361,13 +371,40 @@ private fun InstanceGridCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    EzzButton(
-                        text = "Launch",
-                        icon = Icons.Default.PlayArrow,
-                        onClick = onPlay,
-                        variant = if (isSelected) EzzButtonVariant.PRIMARY else EzzButtonVariant.SECONDARY,
-                        size = EzzButtonSize.SMALL
-                    )
+                    if (isRunning) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFF161616))
+                                .border(1.dp, Color(0xFF10B981).copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF10B981))
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = runtimeFormatted ?: "00:00:00",
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    } else {
+                        EzzButton(
+                            text = "Launch",
+                            icon = Icons.Default.PlayArrow,
+                            onClick = onPlay,
+                            variant = if (isSelected) EzzButtonVariant.PRIMARY else EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.SMALL
+                        )
+                    }
 
                     if (instance.loaderType == LoaderType.FABRIC) {
                         EzzButton(
