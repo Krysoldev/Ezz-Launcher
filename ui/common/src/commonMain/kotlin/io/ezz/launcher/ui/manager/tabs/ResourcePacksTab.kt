@@ -681,11 +681,11 @@ private fun ResourcePackBrowseCard(
                 verticalAlignment = Alignment.Top
             ) {
                 ModrinthAsyncImage(
-                    url = hit.iconUrl,
+                    url = hit.previewImageUrl,
                     imageLoader = viewModel.imageLoader,
                     modifier = Modifier.size(54.dp),
                     placeholderIcon = Icons.Default.Palette,
-                    contentScale = ContentScale.Fit
+                    contentScale = ContentScale.Crop
                 )
 
                 Column(

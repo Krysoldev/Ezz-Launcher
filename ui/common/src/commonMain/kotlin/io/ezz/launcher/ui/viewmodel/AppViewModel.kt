@@ -1099,6 +1099,29 @@ class AppViewModel(
         }
     }
 
+    // CUSTOM ICONS
+    fun changeInstanceCustomIcon(instanceId: String, file: java.io.File) {
+        scope.launch {
+            try {
+                val updated = instanceManager.setCustomIcon(instanceId, file)
+                _selectedInstance.value = updated
+            } catch (e: Throwable) {
+                _errorMessage.value = "Failed to update icon: ${e.message}"
+            }
+        }
+    }
+
+    fun removeInstanceCustomIcon(instanceId: String) {
+        scope.launch {
+            try {
+                val updated = instanceManager.removeCustomIcon(instanceId)
+                _selectedInstance.value = updated
+            } catch (e: Throwable) {
+                _errorMessage.value = "Failed to remove icon: ${e.message}"
+            }
+        }
+    }
+
     // ==========================================================
     // MODRINTH SEARCH & PAGINATION (ISOLATED SERVICES)
     // ==========================================================

@@ -44,8 +44,14 @@ data class ModrinthProjectHit(
     @SerialName("latest_version") val latestVersion: String? = null,
     val author: String = "",
     @SerialName("display_categories") val displayCategories: List<String> = emptyList(),
-    val gallery: List<String> = emptyList()
-)
+    val gallery: List<String> = emptyList(),
+    @SerialName("featured_gallery") val featuredGallery: String? = null
+) {
+    val previewImageUrl: String?
+        get() = iconUrl?.takeIf { it.isNotBlank() }
+            ?: featuredGallery?.takeIf { it.isNotBlank() }
+            ?: gallery.firstOrNull()?.takeIf { it.isNotBlank() }
+}
 
 /**
  * Version metadata from Modrinth API (/v2/project/{id}/version or /v2/version/{id}).

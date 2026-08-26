@@ -129,25 +129,85 @@ fun InstanceSettingsTab(
             }
         }
 
-        // Section 1: General
-        SettingsCard(title = "General Settings") {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Instance Name", color = colors.textSecondary, fontSize = 13.sp)
-                TextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = colors.surface,
-                        unfocusedContainerColor = colors.surface,
-                        focusedTextColor = colors.textPrimary,
-                        unfocusedTextColor = colors.textPrimary,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent
-                    ),
-                    singleLine = true
-                )
+        // Section 1: INSTANCE IDENTITY & CUSTOM LOGO
+        SettingsCard(title = "INSTANCE IDENTITY") {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Name
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Instance Name", color = colors.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    TextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = colors.surface,
+                            unfocusedContainerColor = colors.surface,
+                            focusedTextColor = colors.textPrimary,
+                            unfocusedTextColor = colors.textPrimary,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent
+                        ),
+                        singleLine = true
+                    )
+                }
+
+                // Custom Icon
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Instance Icon", color = colors.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(18.dp)
+                    ) {
+                        // Live Icon Preview
+                        io.ezz.launcher.ui.components.InstanceArtworkIcon(
+                            instance = instance,
+                            size = 80.dp
+                        )
+
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Button(
+                                    onClick = {
+                                        val picked = viewModel.platformBridge.pickImageFile("Select Instance Icon (PNG, JPG, WEBP)")
+                                        if (picked != null && picked.exists()) {
+                                            viewModel.changeInstanceCustomIcon(instance.id, picked)
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color.White,
+                                        contentColor = Color.Black
+                                    ),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text("CHANGE ICON", fontWeight = FontWeight.Black, fontSize = 11.sp, letterSpacing = 0.5.sp)
+                                }
+
+                                if (!instance.customIconPath.isNullOrBlank()) {
+                                    androidx.compose.material3.OutlinedButton(
+                                        onClick = {
+                                            viewModel.removeInstanceCustomIcon(instance.id)
+                                        },
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = Color(0xFFEF5350)
+                                        ),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF5350).copy(alpha = 0.5f)),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text("REMOVE ICON", fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 0.5.sp)
+                                    }
+                                }
+                            }
+
+                            Text(
+                                text = "Supported formats: PNG, JPG, JPEG, WEBP. Icon is copied locally and persists offline.",
+                                color = Color(0xFF777777),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
             }
         }
 

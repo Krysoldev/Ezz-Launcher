@@ -1,8 +1,8 @@
 package io.ezz.launcher.ui.components
 
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -24,21 +24,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import io.ezz.launcher.ui.image.ModrinthImageLoader
-import io.ezz.launcher.ui.theme.EzzTheme
 
 /**
  * Reusable asynchronous image loader for Modrinth project icons and preview covers.
  * - Checks persistent local disk cache and memory cache.
  * - Shows a sleek dark shimmer skeleton during initial load.
+ * - Smooth 200ms opacity fade-in transition when loaded.
  * - Displays a high-contrast fallback icon if the image fails or is unavailable.
  */
 @Composable
@@ -48,7 +48,7 @@ fun ModrinthAsyncImage(
     modifier: Modifier = Modifier,
     placeholderIcon: ImageVector = Icons.Default.Extension,
     contentDescription: String? = null,
-    contentScale: ContentScale = ContentScale.Fit,
+    contentScale: ContentScale = ContentScale.Crop,
     shape: Shape = RoundedCornerShape(8.dp)
 ) {
     var bitmap by remember(url) { mutableStateOf(imageLoader.getImageBitmap(url)) }
@@ -65,6 +65,12 @@ fun ModrinthAsyncImage(
         }
     }
 
+    val imageAlpha by animateFloatAsState(
+        targetValue = if (bitmap != null) 1f else 0f,
+        animationSpec = tween(durationMillis = 200),
+        label = "ImageFadeIn"
+    )
+
     Box(
         modifier = modifier
             .clip(shape)
@@ -78,17 +84,19 @@ fun ModrinthAsyncImage(
             Image(
                 bitmap = currentBitmap,
                 contentDescription = contentDescription,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .alpha(imageAlpha),
                 contentScale = contentScale,
-                filterQuality = FilterQuality.Medium
+                filterQuality = FilterQuality.High
             )
         } else if (isLoading) {
             val transition = rememberInfiniteTransition(label = "ImageShimmer")
             val alpha by transition.animateFloat(
-                initialValue = 0.3f,
-                targetValue = 0.7f,
+                initialValue = 0.25f,
+                targetValue = 0.65f,
                 animationSpec = infiniteRepeatable(
-                    animation = tween(800),
+                    animation = tween(750),
                     repeatMode = RepeatMode.Reverse
                 ),
                 label = "ShimmerAlpha"
@@ -99,18 +107,12 @@ fun ModrinthAsyncImage(
                     .background(Color(0xFF222222).copy(alpha = alpha))
             )
         } else {
-            // Fallback icon
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = placeholderIcon,
-                    contentDescription = contentDescription,
-                    tint = Color(0xFF666666),
-                    modifier = Modifier.size(24.dp)
-                )
-            }
+            Icon(
+                imageVector = placeholderIcon,
+                contentDescription = contentDescription,
+                tint = Color(0xFF444444),
+                modifier = Modifier.size(24.dp)
+            )
         }
     }
 }

@@ -310,22 +310,13 @@ private fun InstanceGridCard(
 
             // Body: Icon + Title + RAM
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (isSelected) Color(0xFF242424) else Color(0xFF161616)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.SportsEsports,
-                        contentDescription = null,
-                        tint = if (isSelected) Color.White else Color(0xFF888888),
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
+                io.ezz.launcher.ui.components.InstanceArtworkIcon(
+                    instance = instance,
+                    size = 44.dp,
+                    showBadge = false
+                )
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(14.dp))
 
                 Column {
                     Text(

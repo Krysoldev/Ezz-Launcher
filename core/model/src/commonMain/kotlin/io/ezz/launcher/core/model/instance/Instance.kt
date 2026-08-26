@@ -25,5 +25,6 @@ data class Instance(
     val windowHeight: Int = 720,
     val createdAt: Long = 0L,
     val lastPlayedAt: Long? = null,
-    val totalPlayTimeSeconds: Long = 0L
+    val totalPlayTimeSeconds: Long = 0L,
+    val customIconPath: String? = null
 )

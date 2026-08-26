@@ -709,4 +709,37 @@ class LocalInstanceManager(
             }
         }
     }
+
+    // ==========================================
+    // 9. CUSTOM INSTANCE ICONS
+    // ==========================================
+
+    suspend fun setCustomIcon(instanceId: String, sourceFile: File): Instance = withContext(dispatcher) {
+        val instanceDir = pathProvider.getInstanceDirectory(instanceId).toFile()
+        if (!instanceDir.exists()) instanceDir.mkdirs()
+
+        val targetFile = File(instanceDir, "icon.png")
+        sourceFile.copyTo(targetFile, overwrite = true)
+
+        val instance = instanceRepository.getInstance(instanceId) ?: throw IllegalStateException("Instance $instanceId not found")
+        val updated = instance.copy(customIconPath = targetFile.absolutePath)
+        instanceRepository.updateInstance(updated)
+        instanceRepository.loadAll()
+        updated
+    }
+
+    suspend fun removeCustomIcon(instanceId: String): Instance = withContext(dispatcher) {
+        val instanceDir = pathProvider.getInstanceDirectory(instanceId).toFile()
+        val targetFile = File(instanceDir, "icon.png")
+        if (targetFile.exists()) {
+            targetFile.delete()
+        }
+
+        val instance = instanceRepository.getInstance(instanceId) ?: throw IllegalStateException("Instance $instanceId not found")
+        val updated = instance.copy(customIconPath = null)
+        instanceRepository.updateInstance(updated)
+        instanceRepository.loadAll()
+        updated
+    }
 }
+

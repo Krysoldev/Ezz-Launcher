@@ -735,11 +735,11 @@ private fun ModBrowseCard(
                 verticalAlignment = Alignment.Top
             ) {
                 ModrinthAsyncImage(
-                    url = hit.iconUrl,
+                    url = hit.previewImageUrl,
                     imageLoader = viewModel.imageLoader,
                     modifier = Modifier.size(52.dp),
                     placeholderIcon = Icons.Default.Extension,
-                    contentScale = ContentScale.Fit
+                    contentScale = ContentScale.Crop
                 )
 
                 Column(

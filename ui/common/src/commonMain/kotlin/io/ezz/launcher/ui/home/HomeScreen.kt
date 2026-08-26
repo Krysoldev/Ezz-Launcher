@@ -315,98 +315,111 @@ private fun HeroBannerSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left Hero Info
-            Column(
+            // Left Hero Info with Instance Artwork
+            Row(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.Center
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 if (instance != null) {
-                    val javaReq = io.ezz.launcher.core.minecraft.version.JavaCompatibility.getRequiredJavaMajorVersion(instance.minecraftVersion)
-                    val isRunning = processState is ProcessState.Running || startedAt != null
-
-                    if (isRunning && startedAt != null) {
-                        RuntimeDisplay(
-                            startedAt = startedAt,
-                            showPrefix = true,
-                            prefixText = "RUNTIME",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    } else {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF888888))
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "READY • JAVA $javaReq • $accountName",
-                                color = Color(0xFFA0A0A0),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = instance.name,
-                        color = Color.White,
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Black,
-                        maxLines = 1
+                    io.ezz.launcher.ui.components.InstanceArtworkIcon(
+                        instance = instance,
+                        size = 72.dp
                     )
+                }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    if (instance != null) {
+                        val javaReq = io.ezz.launcher.core.minecraft.version.JavaCompatibility.getRequiredJavaMajorVersion(instance.minecraftVersion)
+                        val isRunning = processState is ProcessState.Running || startedAt != null
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        EzzLoaderBadge(loaderType = instance.loaderType)
-                        EzzBadge(
-                            text = "MC ${instance.minecraftVersion}",
-                            variant = EzzBadgeVariant.NEUTRAL
+                        if (isRunning && startedAt != null) {
+                            RuntimeDisplay(
+                                startedAt = startedAt,
+                                showPrefix = true,
+                                prefixText = "RUNTIME",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF888888))
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "READY • JAVA $javaReq • $accountName",
+                                    color = Color(0xFFA0A0A0),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = instance.name,
+                            color = Color.White,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Black,
+                            maxLines = 1
                         )
-                        EzzBadge(
-                            text = "${instance.maxMemoryMb / 1024} GB RAM",
-                            variant = EzzBadgeVariant.NEUTRAL
-                        )
-                        if (instance.loaderType == LoaderType.FABRIC && modCount > 0) {
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            EzzLoaderBadge(loaderType = instance.loaderType)
                             EzzBadge(
-                                text = "$modCount Mods",
-                                variant = EzzBadgeVariant.PRIMARY
+                                text = "MC ${instance.minecraftVersion}",
+                                variant = EzzBadgeVariant.NEUTRAL
                             )
+                            EzzBadge(
+                                text = "${instance.maxMemoryMb / 1024} GB RAM",
+                                variant = EzzBadgeVariant.NEUTRAL
+                            )
+                            if (instance.loaderType == LoaderType.FABRIC && modCount > 0) {
+                                EzzBadge(
+                                    text = "$modCount Mods",
+                                    variant = EzzBadgeVariant.PRIMARY
+                                )
+                            }
                         }
+                    } else {
+                        Text(
+                            text = "WELCOME BACK",
+                            color = Color(0xFF888888),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.2.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = accountName,
+                            color = Color.White,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Black
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "No Minecraft instance selected. Create or select an instance to start playing.",
+                            color = Color(0xFFA0A0A0),
+                            fontSize = 13.sp
+                        )
                     }
-                } else {
-                    Text(
-                        text = "WELCOME BACK",
-                        color = Color(0xFF888888),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.2.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Text(
-                        text = accountName,
-                        color = Color.White,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Black
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Text(
-                        text = "Create your first Minecraft Java Edition instance to start playing.",
-                        color = Color(0xFFA0A0A0),
-                        fontSize = 12.5.sp
-                    )
                 }
             }
 
@@ -579,20 +592,11 @@ private fun InstanceCompactCard(
         ) {
             // Icon & Details
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (isSelected) Color(0xFF222222) else Color(0xFF161616)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.SportsEsports,
-                        contentDescription = null,
-                        tint = if (isSelected) Color.White else Color(0xFF888888),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                io.ezz.launcher.ui.components.InstanceArtworkIcon(
+                    instance = instance,
+                    size = 38.dp,
+                    showBadge = false
+                )
 
                 Spacer(modifier = Modifier.width(12.dp))
 

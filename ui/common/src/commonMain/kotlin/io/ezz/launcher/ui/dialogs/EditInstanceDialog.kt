@@ -100,7 +100,16 @@ fun EditInstanceDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        io.ezz.launcher.ui.components.InstanceArtworkIcon(
+                            instance = instance,
+                            size = 46.dp,
+                            showBadge = false
+                        )
+
                         Column {
                             Text(
                                 text = "Configure ${instance.name}",
