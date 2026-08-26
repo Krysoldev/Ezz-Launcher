@@ -2,6 +2,7 @@ package io.ezz.launcher.ui.dialogs
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -10,6 +11,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,7 +33,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
@@ -40,13 +41,15 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.VideogameAsset
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -86,7 +89,6 @@ import io.ezz.launcher.core.minecraft.version.VersionSortOrder
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LoaderType
 import io.ezz.launcher.core.model.minecraft.VersionSummary
-import io.ezz.launcher.core.model.runtime.JavaRuntime
 import io.ezz.launcher.ui.components.EzzBadge
 import io.ezz.launcher.ui.components.EzzBadgeVariant
 import io.ezz.launcher.ui.components.EzzIconButton
@@ -99,10 +101,8 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 /**
- * Ezz Launcher — Create Instance V3
- * Complete ground-up rebuild featuring the full Mojang Java release version catalog,
- * semantic version grouping & search, dynamic loaders, smart Java & RAM, live preview,
- * and multi-stage creation pipeline.
+ * Ezz Launcher — Create Instance Studio (Redesigned from Scratch)
+ * Studio-grade, ultra-clean 2-pane Minecraft Java Edition creation experience.
  */
 @Composable
 fun CreateInstanceDialog(
@@ -122,101 +122,73 @@ fun CreateInstanceDialog(
     val settings by viewModel.settingsRepository.settings.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
-    // 1. Instance Identity
+    // 1. Instance Identity State
     var name by remember { mutableStateOf("") }
     var isUserCustomName by remember { mutableStateOf(false) }
     var customIconFile by remember { mutableStateOf<File?>(null) }
 
-    // 2. Version Filter State
-    var selectedCategory by remember { mutableStateOf("RELEASE") } // "RELEASE", "SNAPSHOT", "BETA", "ALPHA", "ALL"
+    // 2. Minecraft Version Catalog State
+    var versionTab by remember { mutableStateOf("RELEASES") } // "RELEASES", "SNAPSHOTS", "LEGACY", "ALL"
     var versionSearchQuery by remember { mutableStateOf("") }
-    var expandedGroupPrefix by remember { mutableStateOf<String?>("1.21") }
 
-    // Resolve current source version list based on active tab
-    val currentSourceVersions = remember(selectedCategory, availableReleases, snapshotVersions, betaVersions, alphaVersions, allVersions) {
-        when (selectedCategory) {
-            "RELEASE" -> availableReleases
-            "SNAPSHOT" -> snapshotVersions
-            "BETA" -> betaVersions
-            "ALPHA" -> alphaVersions
+    val activeVersionSource = remember(versionTab, availableReleases, snapshotVersions, betaVersions, alphaVersions, allVersions) {
+        when (versionTab) {
+            "RELEASES" -> availableReleases
+            "SNAPSHOTS" -> snapshotVersions
+            "LEGACY" -> betaVersions + alphaVersions
             "ALL" -> allVersions
             else -> availableReleases
         }
     }
 
-    // Filter by search query (instant local search across official metadata)
-    val filteredVersions = remember(currentSourceVersions, versionSearchQuery) {
+    val filteredVersions = remember(activeVersionSource, versionSearchQuery) {
         val q = versionSearchQuery.trim().lowercase()
-        val list = if (q.isBlank()) {
-            currentSourceVersions
-        } else {
-            currentSourceVersions.filter { it.id.lowercase().contains(q) }
-        }
+        val list = if (q.isBlank()) activeVersionSource else activeVersionSource.filter { it.id.lowercase().contains(q) }
         MinecraftVersionComparator.sort(list, VersionSortOrder.NEWEST_FIRST)
     }
 
-    // Group filtered versions by major.minor prefix (e.g. "1.21", "1.20", "1.12", "1.8", "Beta 1.7")
-    val groupedVersions = remember(filteredVersions) {
-        filteredVersions.groupBy { ver ->
-            val id = ver.id
-            when {
-                id.startsWith("1.") -> {
-                    val parts = id.split(".")
-                    if (parts.size >= 2) "${parts[0]}.${parts[1]}" else id
-                }
-                id.startsWith("b1.") || id.startsWith("b") -> "Beta"
-                id.startsWith("a1.") || id.startsWith("a") -> "Alpha"
-                id.contains("w") -> "Snapshot ${id.take(3)}"
-                else -> "Other"
-            }
-        }
-    }
-
-    // Selected Minecraft Version (Defaults to latest official release e.g. 1.21.4)
+    // Currently Selected Minecraft Version
     var selectedMcVersion by remember(availableReleases, latestReleaseId) {
         mutableStateOf(latestReleaseId.ifBlank { availableReleases.firstOrNull()?.id ?: "1.21.4" })
     }
 
-    // 3. Mod Loader Selection
+    // 3. Mod Loader Selection State
     var selectedLoader by remember { mutableStateOf(LoaderType.VANILLA) }
-
-    // Fabric Loader State
     var fabricLoaders by remember { mutableStateOf<List<String>>(emptyList()) }
     var selectedFabricLoader by remember { mutableStateOf<String?>(null) }
     var isLoadingFabricLoaders by remember { mutableStateOf(false) }
 
-    // OptiFine State
     var optifineVersions by remember { mutableStateOf<List<OptiFineVersionOption>>(emptyList()) }
     var selectedOptiFineVersion by remember { mutableStateOf<String?>(null) }
 
-    // 4. Java Runtime & RAM
+    // 4. Java Runtime & RAM State
     val requiredJavaMajor = remember(selectedMcVersion) {
         JavaCompatibility.getRequiredJavaMajorVersion(selectedMcVersion)
     }
     var selectedJavaPath by remember { mutableStateOf<String?>(null) }
     var maxRamMb by remember { mutableStateOf(settings.defaultMaxMemoryMb.toFloat().coerceIn(1024f, 16384f)) }
 
-    // 5. Advanced Settings
+    // 5. Advanced Settings State
     var isAdvancedExpanded by remember { mutableStateOf(false) }
     var windowWidth by remember { mutableStateOf(1280) }
     var windowHeight by remember { mutableStateOf(720) }
     var isFullscreen by remember { mutableStateOf(false) }
     var customJvmArgs by remember { mutableStateOf(settings.globalJvmArgs.joinToString(" ")) }
 
-    // 6. Creation Progress & Success States
-    var creationStep by remember { mutableStateOf(0) } // 0: Idle, 1: Prep, 2: Metadata, 3: Loader, 4: Finalizing, 5: Done
+    // 6. Multi-stage Creation Pipeline State
+    var creationStep by remember { mutableStateOf(0) } // 0: Config, 1..4: Creating, 5: Success
     var creationProgressText by remember { mutableStateOf("") }
     var createdInstanceResult by remember { mutableStateOf<Instance?>(null) }
     var creationErrorMessage by remember { mutableStateOf<String?>(null) }
 
-    // Initial version refresh if list is empty
+    // Initial manifest load if empty
     LaunchedEffect(Unit) {
         if (availableReleases.isEmpty()) {
             viewModel.refreshAvailableVersions(forceRefresh = false)
         }
     }
 
-    // Auto-update instance name suggestions
+    // Intelligent default instance name auto-population
     LaunchedEffect(selectedMcVersion, selectedLoader) {
         if (!isUserCustomName) {
             val prefix = when (selectedLoader) {
@@ -228,7 +200,7 @@ fun CreateInstanceDialog(
         }
     }
 
-    // Dynamic Fabric Loader resolution from Fabric Meta API
+    // Dynamic Fabric Loader fetching
     LaunchedEffect(selectedMcVersion, selectedLoader) {
         if (selectedLoader == LoaderType.FABRIC) {
             isLoadingFabricLoaders = true
@@ -247,7 +219,7 @@ fun CreateInstanceDialog(
         }
     }
 
-    // Dynamic OptiFine discovery from verified catalog
+    // Dynamic OptiFine version fetching
     LaunchedEffect(selectedMcVersion, selectedLoader) {
         if (selectedLoader == LoaderType.OPTIFINE) {
             val opts = OptiFineCompatibilityValidator.getAvailableOptiFineVersions(selectedMcVersion)
@@ -265,31 +237,31 @@ fun CreateInstanceDialog(
     val isOptiFineIncompatible = selectedLoader == LoaderType.OPTIFINE && !OptiFineCompatibilityValidator.isVersionSupported(selectedMcVersion)
 
     val validationError = when {
-        isNameEmpty -> "Instance name cannot be empty"
-        hasInvalidFsChars -> "Instance name contains invalid characters (/ \\ : * ? \" < > |)"
-        isDuplicateName -> "An instance with this name already exists. Choose a unique name."
+        isNameEmpty -> "Instance name is required"
+        hasInvalidFsChars -> "Name contains invalid characters (/ \\ : * ? \" < > |)"
+        isDuplicateName -> "An instance with this name already exists"
         isFabricIncompatible -> "Fabric loader is not available for Minecraft $selectedMcVersion"
         isOptiFineIncompatible -> "OptiFine is not supported for Minecraft $selectedMcVersion"
         else -> null
     }
-    val isReadyToCreate = validationError == null && creationStep == 0
+    val isFormValid = validationError == null && creationStep == 0
 
     Dialog(onDismissRequest = { if (creationStep == 0 || creationStep == 5) onDismiss() }) {
         Box(
             modifier = Modifier
-                .widthIn(min = 880.dp, max = 1020.dp)
-                .heightIn(min = 600.dp, max = 740.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFF0C0C0C))
-                .border(1.dp, Color(0xFF262626), RoundedCornerShape(16.dp))
+                .widthIn(min = 960.dp, max = 1040.dp)
+                .heightIn(min = 640.dp, max = 720.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color(0xFF0A0A0A))
+                .border(1.dp, Color(0xFF222222), RoundedCornerShape(18.dp))
                 .padding(24.dp)
         ) {
             Crossfade(targetState = creationStep) { step ->
                 when {
-                    // Success View (Step 5)
+                    // Success View
                     step == 5 && createdInstanceResult != null -> {
                         val inst = createdInstanceResult!!
-                        SuccessCreationView(
+                        StudioSuccessView(
                             instance = inst,
                             customIconFile = customIconFile,
                             onPlayNow = {
@@ -306,9 +278,9 @@ fun CreateInstanceDialog(
                         )
                     }
 
-                    // Progress State (Step 1..4)
+                    // Progress View
                     step in 1..4 -> {
-                        CreationProgressView(
+                        StudioProgressView(
                             instanceName = trimmedName,
                             minecraftVersion = selectedMcVersion,
                             loaderType = selectedLoader,
@@ -322,28 +294,39 @@ fun CreateInstanceDialog(
                         )
                     }
 
-                    // Main Creation Form (Step 0)
+                    // Main 2-Pane Creation Studio
                     else -> {
                         Column(modifier = Modifier.fillMaxSize()) {
-                            // Dialog Header
+                            // Top Bar Header
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text(
-                                        text = "CREATE NEW INSTANCE",
-                                        color = Color.White,
-                                        fontSize = 18.sp,
-                                        fontWeight = FontWeight.Black,
-                                        letterSpacing = 0.8.sp
-                                    )
-                                    Text(
-                                        text = "Create a localized, isolated Minecraft Java Edition installation",
-                                        color = Color(0xFF888888),
-                                        fontSize = 12.sp
-                                    )
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color(0xFF1C1C1C)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.VideogameAsset, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                    }
+                                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                        Text(
+                                            text = "Create Instance",
+                                            color = Color.White,
+                                            fontSize = 17.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 0.4.sp
+                                        )
+                                        Text(
+                                            text = "Configure your isolated Minecraft Java Edition installation",
+                                            color = Color(0xFF777777),
+                                            fontSize = 11.5.sp
+                                        )
+                                    }
                                 }
 
                                 EzzIconButton(
@@ -356,36 +339,36 @@ fun CreateInstanceDialog(
 
                             Spacer(modifier = Modifier.height(16.dp))
 
-                            // 2-Column Responsive Body
+                            // 2-Pane Studio Body
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .weight(1f),
-                                horizontalArrangement = Arrangement.spacedBy(20.dp)
+                                horizontalArrangement = Arrangement.spacedBy(22.dp)
                             ) {
-                                // LEFT / MAIN COLUMN (~65%)
+                                // LEFT PANE (~64%): Configuration Sections
                                 val scrollState = rememberScrollState()
                                 Column(
                                     modifier = Modifier
-                                        .weight(0.66f)
+                                        .weight(0.64f)
                                         .fillMaxHeight()
                                         .verticalScroll(scrollState),
                                     verticalArrangement = Arrangement.spacedBy(14.dp)
                                 ) {
-                                    // SECTION 1: INSTANCE IDENTITY
-                                    V3SectionCard(title = "INSTANCE IDENTITY") {
+                                    // 1. IDENTITY & NAME
+                                    StudioCard(title = "INSTANCE IDENTITY") {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(16.dp)
                                         ) {
-                                            // Icon Picker Thumbnail Box
+                                            // Icon Box
                                             Box(
                                                 modifier = Modifier
-                                                    .size(64.dp)
-                                                    .clip(RoundedCornerShape(10.dp))
-                                                    .background(Color(0xFF161616))
-                                                    .border(1.dp, Color(0xFF333333), RoundedCornerShape(10.dp))
+                                                    .size(68.dp)
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .background(Color(0xFF141414))
+                                                    .border(1.dp, Color(0xFF333333), RoundedCornerShape(12.dp))
                                                     .clickable {
                                                         val picked = viewModel.platformBridge.pickImageFile("Select Instance Icon (PNG, JPG, WEBP)")
                                                         if (picked != null && picked.exists()) {
@@ -401,30 +384,30 @@ fun CreateInstanceDialog(
                                                         minecraftVersion = selectedMcVersion,
                                                         loaderType = selectedLoader
                                                     ),
-                                                    size = 64.dp,
+                                                    size = 68.dp,
                                                     customFile = customIconFile,
                                                     showBadge = false
                                                 )
                                             }
 
-                                            // Name Input + Upload Info
+                                            // Name input
                                             Column(
                                                 modifier = Modifier.weight(1f),
                                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                                             ) {
-                                                Text("Instance Name", color = Color(0xFFAAAAAA), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                Text("Name", color = Color(0xFF999999), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                                 TextField(
                                                     value = name,
                                                     onValueChange = {
                                                         name = it
                                                         isUserCustomName = true
                                                     },
-                                                    modifier = Modifier.fillMaxWidth().height(46.dp),
-                                                    placeholder = { Text("e.g. Survival SMP, PvP Modded", color = Color(0xFF555555), fontSize = 13.sp) },
-                                                    shape = RoundedCornerShape(6.dp),
+                                                    placeholder = { Text("e.g. My Survival, 1.21 Modded", color = Color(0xFF444444), fontSize = 13.sp) },
+                                                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                                                    shape = RoundedCornerShape(8.dp),
                                                     colors = TextFieldDefaults.colors(
-                                                        focusedContainerColor = Color(0xFF141414),
-                                                        unfocusedContainerColor = Color(0xFF141414),
+                                                        focusedContainerColor = Color(0xFF121212),
+                                                        unfocusedContainerColor = Color(0xFF121212),
                                                         focusedTextColor = Color.White,
                                                         unfocusedTextColor = Color.White,
                                                         focusedIndicatorColor = Color.Transparent,
@@ -432,15 +415,19 @@ fun CreateInstanceDialog(
                                                     ),
                                                     singleLine = true
                                                 )
-                                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
                                                     Text(
-                                                        text = if (customIconFile != null) "Custom Icon: ${customIconFile?.name}" else "Click icon square to upload custom PNG/JPG",
-                                                        color = Color(0xFF666666),
+                                                        text = if (customIconFile != null) "Icon: ${customIconFile?.name}" else "Click artwork square to upload custom icon",
+                                                        color = Color(0xFF555555),
                                                         fontSize = 10.sp
                                                     )
                                                     if (customIconFile != null) {
                                                         Text(
-                                                            text = "• Remove",
+                                                            text = "Reset Icon",
                                                             color = Color(0xFFEF5350),
                                                             fontSize = 10.sp,
                                                             fontWeight = FontWeight.Bold,
@@ -452,257 +439,32 @@ fun CreateInstanceDialog(
                                         }
                                     }
 
-                                    // SECTION 2: MINECRAFT VERSION SELECTOR (Official Mojang Catalog)
-                                    V3SectionCard(title = "MINECRAFT VERSION (OFFICIAL MOJANG CATALOG)") {
-                                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                            // Top Bar: Filter Tabs & Search
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                // Category Tabs
-                                                Row(
-                                                    modifier = Modifier
-                                                        .clip(RoundedCornerShape(6.dp))
-                                                        .background(Color(0xFF161616))
-                                                        .padding(2.dp),
-                                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                                                ) {
-                                                    listOf("RELEASE", "SNAPSHOT", "BETA", "ALPHA", "ALL").forEach { cat ->
-                                                        val isSelected = selectedCategory == cat
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .clip(RoundedCornerShape(4.dp))
-                                                                .background(if (isSelected) Color(0xFF2C2C2C) else Color.Transparent)
-                                                                .clickable { selectedCategory = cat }
-                                                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                                                        ) {
-                                                            Text(
-                                                                text = cat,
-                                                                color = if (isSelected) Color.White else Color(0xFF888888),
-                                                                fontSize = 10.5.sp,
-                                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                                            )
-                                                        }
-                                                    }
-                                                }
-
-                                                // Search Field
-                                                Box(
-                                                    modifier = Modifier
-                                                        .width(160.dp)
-                                                        .height(30.dp)
-                                                        .clip(RoundedCornerShape(6.dp))
-                                                        .background(Color(0xFF161616))
-                                                        .border(1.dp, Color(0xFF262626), RoundedCornerShape(6.dp))
-                                                        .padding(horizontal = 8.dp),
-                                                    contentAlignment = Alignment.CenterStart
-                                                ) {
-                                                    Row(
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                                    ) {
-                                                        Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF666666), modifier = Modifier.size(12.dp))
-                                                        TextField(
-                                                            value = versionSearchQuery,
-                                                            onValueChange = { versionSearchQuery = it },
-                                                            placeholder = { Text("Search versions...", color = Color(0xFF555555), fontSize = 11.sp) },
-                                                            colors = TextFieldDefaults.colors(
-                                                                focusedContainerColor = Color.Transparent,
-                                                                unfocusedContainerColor = Color.Transparent,
-                                                                focusedTextColor = Color.White,
-                                                                unfocusedTextColor = Color.White,
-                                                                focusedIndicatorColor = Color.Transparent,
-                                                                unfocusedIndicatorColor = Color.Transparent
-                                                            ),
-                                                            singleLine = true,
-                                                            modifier = Modifier.fillMaxWidth()
-                                                        )
-                                                    }
-                                                }
-                                            }
-
-                                            // Latest Release Quick Shortcut Banner
-                                            if (latestReleaseId.isNotBlank() && selectedCategory == "RELEASE" && versionSearchQuery.isBlank()) {
-                                                Row(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .clip(RoundedCornerShape(6.dp))
-                                                        .background(Color(0xFF182018))
-                                                        .border(1.dp, Color(0xFF2E4C2E), RoundedCornerShape(6.dp))
-                                                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(14.dp))
-                                                        Text("LATEST RELEASE: Minecraft $latestReleaseId", color = Color(0xFFA5D6A7), fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
-                                                    }
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .clip(RoundedCornerShape(4.dp))
-                                                            .background(Color(0xFF2E4C2E))
-                                                            .clickable { selectedMcVersion = latestReleaseId }
-                                                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                                                    ) {
-                                                        Text("Use Latest", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                                    }
-                                                }
-                                            }
-
-                                            // Grouped Version Catalog Scroll List
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .height(130.dp)
-                                                    .clip(RoundedCornerShape(6.dp))
-                                                    .background(Color(0xFF101010))
-                                                    .border(1.dp, Color(0xFF202020), RoundedCornerShape(6.dp))
-                                            ) {
-                                                if (isManifestLoading) {
-                                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color.White)
-                                                            Text("Loading official Mojang catalog...", color = Color(0xFF888888), fontSize = 11.sp)
-                                                        }
-                                                    }
-                                                } else if (manifestError != null && filteredVersions.isEmpty()) {
-                                                    Box(modifier = Modifier.fillMaxSize().padding(12.dp), contentAlignment = Alignment.Center) {
-                                                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                                            Text(manifestError ?: "Unable to load Minecraft versions.", color = Color(0xFFEF9A9A), fontSize = 11.sp)
-                                                            Button(
-                                                                onClick = { viewModel.refreshAvailableVersions(forceRefresh = true) },
-                                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A1515), contentColor = Color.White),
-                                                                shape = RoundedCornerShape(4.dp),
-                                                                modifier = Modifier.height(28.dp)
-                                                            ) {
-                                                                Text("RETRY", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                                            }
-                                                        }
-                                                    }
-                                                } else if (filteredVersions.isEmpty()) {
-                                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                                        Text("No Minecraft versions match '$versionSearchQuery'", color = Color(0xFF666666), fontSize = 11.sp)
-                                                    }
-                                                } else {
-                                                    LazyColumn(modifier = Modifier.fillMaxSize().padding(4.dp)) {
-                                                        groupedVersions.forEach { (groupKey, versionsInGroup) ->
-                                                            val isGroupExpanded = expandedGroupPrefix == groupKey || versionSearchQuery.isNotBlank() || groupedVersions.size <= 2
-
-                                                            // Group Header Item
-                                                            item(key = "header_$groupKey") {
-                                                                Row(
-                                                                    modifier = Modifier
-                                                                        .fillMaxWidth()
-                                                                        .clip(RoundedCornerShape(4.dp))
-                                                                        .background(Color(0xFF181818))
-                                                                        .clickable {
-                                                                            expandedGroupPrefix = if (expandedGroupPrefix == groupKey) null else groupKey
-                                                                        }
-                                                                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                                    verticalAlignment = Alignment.CenterVertically
-                                                                ) {
-                                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                                                        Icon(
-                                                                            imageVector = if (isGroupExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                                                            contentDescription = null,
-                                                                            tint = Color(0xFF888888),
-                                                                            modifier = Modifier.size(14.dp)
-                                                                        )
-                                                                        Text(
-                                                                            text = if (groupKey.startsWith("1.")) "Minecraft $groupKey" else groupKey,
-                                                                            color = Color(0xFFCCCCCC),
-                                                                            fontSize = 11.sp,
-                                                                            fontWeight = FontWeight.Bold
-                                                                        )
-                                                                        Text(
-                                                                            text = "(${versionsInGroup.size})",
-                                                                            color = Color(0xFF666666),
-                                                                            fontSize = 10.sp
-                                                                        )
-                                                                    }
-                                                                }
-                                                            }
-
-                                                            // Group Children Items
-                                                            if (isGroupExpanded) {
-                                                                items(versionsInGroup, key = { it.id }) { ver ->
-                                                                    val isSelected = selectedMcVersion == ver.id
-                                                                    val reqJava = JavaCompatibility.getRequiredJavaMajorVersion(ver.id)
-                                                                    Row(
-                                                                        modifier = Modifier
-                                                                            .fillMaxWidth()
-                                                                            .clip(RoundedCornerShape(4.dp))
-                                                                            .background(if (isSelected) Color(0xFF262626) else Color.Transparent)
-                                                                            .clickable { selectedMcVersion = ver.id }
-                                                                            .padding(start = 24.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
-                                                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                                                        verticalAlignment = Alignment.CenterVertically
-                                                                    ) {
-                                                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                                                            Text(
-                                                                                text = ver.id,
-                                                                                color = if (isSelected) Color.White else Color(0xFFBBBBBB),
-                                                                                fontSize = 12.sp,
-                                                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                                                            )
-                                                                            if (ver.id == latestReleaseId) {
-                                                                                Box(
-                                                                                    modifier = Modifier
-                                                                                        .clip(RoundedCornerShape(3.dp))
-                                                                                        .background(Color(0xFF1E281E))
-                                                                                        .padding(horizontal = 4.dp, vertical = 1.dp)
-                                                                                ) {
-                                                                                    Text("LATEST", color = Color(0xFF4CAF50), fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
-                                                                                }
-                                                                            }
-                                                                        }
-
-                                                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                                            Text("Java $reqJava", color = Color(0xFF666666), fontSize = 10.sp)
-                                                                            Text(ver.releaseTime.take(10), color = Color(0xFF555555), fontSize = 10.sp)
-                                                                            if (isSelected) {
-                                                                                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // SECTION 3: MOD LOADER SELECTION
-                                    V3SectionCard(title = "MOD LOADER") {
+                                    // 2. MOD LOADER CARDS
+                                    StudioCard(title = "MOD ENGINE") {
                                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                                             ) {
-                                                V3LoaderCard(
-                                                    title = "VANILLA",
-                                                    subtitle = "Official Minecraft",
+                                                StudioLoaderCard(
+                                                    title = "Vanilla",
+                                                    description = "Official Clean Minecraft",
                                                     icon = Icons.Default.VideogameAsset,
                                                     isSelected = selectedLoader == LoaderType.VANILLA,
                                                     onClick = { selectedLoader = LoaderType.VANILLA },
                                                     modifier = Modifier.weight(1f)
                                                 )
-                                                V3LoaderCard(
-                                                    title = "FABRIC",
-                                                    subtitle = "Lightweight Mods",
+                                                StudioLoaderCard(
+                                                    title = "Fabric",
+                                                    description = "Lightweight Modding",
                                                     icon = Icons.Default.Extension,
                                                     isSelected = selectedLoader == LoaderType.FABRIC,
                                                     onClick = { selectedLoader = LoaderType.FABRIC },
                                                     modifier = Modifier.weight(1f)
                                                 )
-                                                V3LoaderCard(
-                                                    title = "OPTIFINE",
-                                                    subtitle = "Shaders & FPS",
+                                                StudioLoaderCard(
+                                                    title = "OptiFine",
+                                                    description = "Shaders & Performance",
                                                     icon = Icons.Default.Layers,
                                                     isSelected = selectedLoader == LoaderType.OPTIFINE,
                                                     onClick = { selectedLoader = LoaderType.OPTIFINE },
@@ -710,26 +472,26 @@ fun CreateInstanceDialog(
                                                 )
                                             }
 
-                                            // Loader Sub-configuration
+                                            // Sub-option details for Loader
                                             if (selectedLoader == LoaderType.FABRIC) {
                                                 Row(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .clip(RoundedCornerShape(6.dp))
+                                                        .clip(RoundedCornerShape(8.dp))
                                                         .background(Color(0xFF141414))
-                                                        .border(1.dp, Color(0xFF242424), RoundedCornerShape(6.dp))
-                                                        .padding(10.dp),
+                                                        .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
+                                                        .padding(horizontal = 12.dp, vertical = 8.dp),
                                                     horizontalArrangement = Arrangement.SpaceBetween,
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Text("Fabric Loader Version", color = Color(0xFFAAAAAA), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    Text("Fabric Loader Version", color = Color(0xFF888888), fontSize = 11.sp, fontWeight = FontWeight.Medium)
                                                     if (isLoadingFabricLoaders) {
                                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                                             CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 1.5.dp, color = Color.White)
-                                                            Text("Resolving compatible loader...", color = Color(0xFF888888), fontSize = 11.sp)
+                                                            Text("Fetching...", color = Color(0xFF666666), fontSize = 11.sp)
                                                         }
                                                     } else if (fabricLoaders.isEmpty()) {
-                                                        Text("No compatible Fabric loader for $selectedMcVersion", color = Color(0xFFEF5350), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                        Text("No compatible loader found", color = Color(0xFFEF5350), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                                     } else {
                                                         Text(
                                                             text = selectedFabricLoader ?: "Latest Stable",
@@ -744,14 +506,14 @@ fun CreateInstanceDialog(
                                                 Row(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .clip(RoundedCornerShape(6.dp))
+                                                        .clip(RoundedCornerShape(8.dp))
                                                         .background(Color(0xFF141414))
-                                                        .border(1.dp, Color(0xFF242424), RoundedCornerShape(6.dp))
-                                                        .padding(10.dp),
+                                                        .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
+                                                        .padding(horizontal = 12.dp, vertical = 8.dp),
                                                     horizontalArrangement = Arrangement.SpaceBetween,
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Text("OptiFine Version", color = Color(0xFFAAAAAA), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    Text("OptiFine Edition", color = Color(0xFF888888), fontSize = 11.sp, fontWeight = FontWeight.Medium)
                                                     if (!isSupported) {
                                                         Text("Not compatible with $selectedMcVersion", color = Color(0xFFEF5350), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                                     } else {
@@ -767,9 +529,192 @@ fun CreateInstanceDialog(
                                         }
                                     }
 
-                                    // SECTION 4: RUNTIME (JAVA & RAM)
-                                    V3SectionCard(title = "JAVA RUNTIME & RAM") {
-                                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                                    // 3. MINECRAFT VERSION BROWSER
+                                    StudioCard(title = "MINECRAFT VERSION (OFFICIAL MOJANG)") {
+                                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                            // Tab bar & Search
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                // Category Tabs
+                                                Row(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(6.dp))
+                                                        .background(Color(0xFF141414))
+                                                        .padding(2.dp),
+                                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                ) {
+                                                    listOf("RELEASES", "SNAPSHOTS", "LEGACY", "ALL").forEach { tab ->
+                                                        val isSelected = versionTab == tab
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .clip(RoundedCornerShape(4.dp))
+                                                                .background(if (isSelected) Color(0xFF262626) else Color.Transparent)
+                                                                .clickable { versionTab = tab }
+                                                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = tab,
+                                                                color = if (isSelected) Color.White else Color(0xFF777777),
+                                                                fontSize = 10.sp,
+                                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
+                                                // Search Input
+                                                Box(
+                                                    modifier = Modifier
+                                                        .width(150.dp)
+                                                        .height(28.dp)
+                                                        .clip(RoundedCornerShape(6.dp))
+                                                        .background(Color(0xFF141414))
+                                                        .border(1.dp, Color(0xFF242424), RoundedCornerShape(6.dp))
+                                                        .padding(horizontal = 8.dp),
+                                                    contentAlignment = Alignment.CenterStart
+                                                ) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                    ) {
+                                                        Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF555555), modifier = Modifier.size(12.dp))
+                                                        TextField(
+                                                            value = versionSearchQuery,
+                                                            onValueChange = { versionSearchQuery = it },
+                                                            placeholder = { Text("Filter...", color = Color(0xFF444444), fontSize = 11.sp) },
+                                                            colors = TextFieldDefaults.colors(
+                                                                focusedContainerColor = Color.Transparent,
+                                                                unfocusedContainerColor = Color.Transparent,
+                                                                focusedTextColor = Color.White,
+                                                                unfocusedTextColor = Color.White,
+                                                                focusedIndicatorColor = Color.Transparent,
+                                                                unfocusedIndicatorColor = Color.Transparent
+                                                            ),
+                                                            singleLine = true,
+                                                            modifier = Modifier.fillMaxWidth()
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            // Latest Release Quick Banner
+                                            if (latestReleaseId.isNotBlank() && versionTab == "RELEASES" && versionSearchQuery.isBlank()) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clip(RoundedCornerShape(6.dp))
+                                                        .background(Color(0xFF121B12))
+                                                        .border(1.dp, Color(0xFF233B23), RoundedCornerShape(6.dp))
+                                                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(12.dp))
+                                                        Text("Latest Release: Minecraft $latestReleaseId", color = Color(0xFFA5D6A7), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    }
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .clip(RoundedCornerShape(4.dp))
+                                                            .background(Color(0xFF233B23))
+                                                            .clickable { selectedMcVersion = latestReleaseId }
+                                                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                                                    ) {
+                                                        Text("Use Latest", color = Color.White, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
+                                                    }
+                                                }
+                                            }
+
+                                            // Scrollable Version Catalog
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(130.dp)
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(Color(0xFF0F0F0F))
+                                                    .border(1.dp, Color(0xFF1E1E1E), RoundedCornerShape(8.dp))
+                                            ) {
+                                                if (isManifestLoading) {
+                                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color.White)
+                                                            Text("Loading official version manifest...", color = Color(0xFF777777), fontSize = 11.sp)
+                                                        }
+                                                    }
+                                                } else if (manifestError != null && filteredVersions.isEmpty()) {
+                                                    Box(modifier = Modifier.fillMaxSize().padding(10.dp), contentAlignment = Alignment.Center) {
+                                                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                            Text(manifestError ?: "Unable to fetch versions", color = Color(0xFFEF9A9A), fontSize = 11.sp)
+                                                            Button(
+                                                                onClick = { viewModel.refreshAvailableVersions(forceRefresh = true) },
+                                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A1515), contentColor = Color.White),
+                                                                shape = RoundedCornerShape(4.dp),
+                                                                modifier = Modifier.height(26.dp)
+                                                            ) {
+                                                                Text("Retry", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                            }
+                                                        }
+                                                    }
+                                                } else if (filteredVersions.isEmpty()) {
+                                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                                        Text("No versions match '$versionSearchQuery'", color = Color(0xFF555555), fontSize = 11.sp)
+                                                    }
+                                                } else {
+                                                    LazyColumn(modifier = Modifier.fillMaxSize().padding(4.dp)) {
+                                                        items(filteredVersions, key = { it.id }) { ver ->
+                                                            val isSelected = selectedMcVersion == ver.id
+                                                            val reqJava = JavaCompatibility.getRequiredJavaMajorVersion(ver.id)
+                                                            Row(
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth()
+                                                                    .clip(RoundedCornerShape(6.dp))
+                                                                    .background(if (isSelected) Color(0xFF222222) else Color.Transparent)
+                                                                    .border(1.dp, if (isSelected) Color(0xFF444444) else Color.Transparent, RoundedCornerShape(6.dp))
+                                                                    .clickable { selectedMcVersion = ver.id }
+                                                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                                verticalAlignment = Alignment.CenterVertically
+                                                            ) {
+                                                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                                    Text(
+                                                                        text = ver.id,
+                                                                        color = if (isSelected) Color.White else Color(0xFFBBBBBB),
+                                                                        fontSize = 12.sp,
+                                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                                                    )
+                                                                    if (ver.id == latestReleaseId) {
+                                                                        Box(
+                                                                            modifier = Modifier
+                                                                                .clip(RoundedCornerShape(3.dp))
+                                                                                .background(Color(0xFF1E281E))
+                                                                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                                                                        ) {
+                                                                            Text("LATEST", color = Color(0xFF4CAF50), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                                                        }
+                                                                    }
+                                                                }
+
+                                                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                                    Text("Java $reqJava", color = Color(0xFF555555), fontSize = 10.sp)
+                                                                    Text(ver.releaseTime.take(10), color = Color(0xFF444444), fontSize = 10.sp)
+                                                                    if (isSelected) {
+                                                                        Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // 4. RUNTIME (JAVA & RAM)
+                                    StudioCard(title = "JAVA RUNTIME & RAM") {
+                                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                             // Java Info Row
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
@@ -777,90 +722,101 @@ fun CreateInstanceDialog(
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Column {
-                                                    Text("Recommended Java Requirement", color = Color(0xFFAAAAAA), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                                    Text("Java $requiredJavaMajor (${JavaCompatibility.getJavaRequirementDescription(requiredJavaMajor)})", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                    Text("Java Environment", color = Color(0xFF888888), fontSize = 10.sp)
+                                                    Text("Recommended: Java $requiredJavaMajor (${JavaCompatibility.getJavaRequirementDescription(requiredJavaMajor)})", color = Color.White, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
                                                 }
                                                 Box(
                                                     modifier = Modifier
                                                         .clip(RoundedCornerShape(4.dp))
                                                         .background(Color(0xFF1E281E))
-                                                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
                                                 ) {
-                                                    Text("AUTO-RESOLVED", color = Color(0xFF4CAF50), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                                    Text("AUTO-RESOLVED", color = Color(0xFF4CAF50), fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
                                                 }
                                             }
 
                                             // Installed Java Runtime Quick Chips
                                             if (detectedJavaRuntimes.isNotEmpty()) {
-                                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                    Text("Installed Java Runtimes", color = Color(0xFF888888), fontSize = 10.sp)
-                                                    Row(
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    val isAuto = selectedJavaPath == null
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .clip(RoundedCornerShape(4.dp))
+                                                            .background(if (isAuto) Color(0xFF262626) else Color(0xFF141414))
+                                                            .border(1.dp, if (isAuto) Color.White else Color(0xFF222222), RoundedCornerShape(4.dp))
+                                                            .clickable { selectedJavaPath = null }
+                                                            .padding(horizontal = 8.dp, vertical = 4.dp)
                                                     ) {
-                                                        val isAuto = selectedJavaPath == null
+                                                        Text("Auto (Java $requiredJavaMajor)", color = if (isAuto) Color.White else Color(0xFF777777), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                    }
+
+                                                    detectedJavaRuntimes.take(3).forEach { rt ->
+                                                        val isSelected = selectedJavaPath == rt.path
+                                                        val isCompatible = JavaCompatibility.isJavaVersionCompatible(rt.majorVersion, requiredJavaMajor)
                                                         Box(
                                                             modifier = Modifier
                                                                 .clip(RoundedCornerShape(4.dp))
-                                                                .background(if (isAuto) Color(0xFF282828) else Color(0xFF141414))
-                                                                .border(1.dp, if (isAuto) Color.White else Color(0xFF262626), RoundedCornerShape(4.dp))
-                                                                .clickable { selectedJavaPath = null }
+                                                                .background(if (isSelected) Color(0xFF262626) else Color(0xFF141414))
+                                                                .border(1.dp, if (isSelected) Color.White else Color(0xFF222222), RoundedCornerShape(4.dp))
+                                                                .clickable { selectedJavaPath = rt.path }
                                                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                                                         ) {
-                                                            Text("Auto (Java $requiredJavaMajor)", color = if (isAuto) Color.White else Color(0xFF888888), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                                        }
-
-                                                        detectedJavaRuntimes.take(3).forEach { rt ->
-                                                            val isSelected = selectedJavaPath == rt.path
-                                                            val isCompatible = JavaCompatibility.isJavaVersionCompatible(rt.majorVersion, requiredJavaMajor)
-                                                            Box(
-                                                                modifier = Modifier
-                                                                    .clip(RoundedCornerShape(4.dp))
-                                                                    .background(if (isSelected) Color(0xFF282828) else Color(0xFF141414))
-                                                                    .border(1.dp, if (isSelected) Color.White else Color(0xFF262626), RoundedCornerShape(4.dp))
-                                                                    .clickable { selectedJavaPath = rt.path }
-                                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                                                            ) {
-                                                                Text(
-                                                                    "Java ${rt.majorVersion}${if (isCompatible) " ✓" else ""}",
-                                                                    color = if (isSelected) Color.White else if (isCompatible) Color(0xFFB0BEC5) else Color(0xFF78909C),
-                                                                    fontSize = 10.sp,
-                                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                                                )
-                                                            }
+                                                            Text(
+                                                                "Java ${rt.majorVersion}${if (isCompatible) " ✓" else ""}",
+                                                                color = if (isSelected) Color.White else if (isCompatible) Color(0xFFB0BEC5) else Color(0xFF78909C),
+                                                                fontSize = 10.sp,
+                                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                            )
                                                         }
                                                     }
                                                 }
                                             }
 
-                                            // RAM Allocation Slider + Smart Preset Button
+                                            // RAM Allocation with Quick Presets & Slider
                                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth(),
                                                     horizontalArrangement = Arrangement.SpaceBetween,
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                                        Text("Memory Allocation (RAM)", color = Color(0xFFAAAAAA), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .clip(RoundedCornerShape(3.dp))
-                                                                .background(Color(0xFF202020))
-                                                                .clickable {
-                                                                    maxRamMb = if (selectedLoader == LoaderType.VANILLA) 2048f else 4096f
-                                                                }
-                                                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                                                        ) {
-                                                            Text("Recommended", color = Color(0xFFCCCCCC), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                                        }
-                                                    }
+                                                    Text("RAM Allocation", color = Color(0xFF888888), fontSize = 11.sp, fontWeight = FontWeight.Medium)
                                                     Text(
-                                                        text = "${maxRamMb.toInt()} MB (${maxRamMb.toInt() / 1024} GB RAM)",
+                                                        text = "${maxRamMb.toInt()} MB (${maxRamMb.toInt() / 1024} GB)",
                                                         color = Color.White,
                                                         fontSize = 12.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         fontFamily = FontFamily.Monospace
                                                     )
+                                                }
+
+                                                // Quick Presets Row
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    listOf(2048 to "2 GB", 4096 to "4 GB", 6144 to "6 GB", 8192 to "8 GB", 12288 to "12 GB").forEach { (mb, label) ->
+                                                        val isSelected = maxRamMb.toInt() == mb
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .weight(1f)
+                                                                .clip(RoundedCornerShape(4.dp))
+                                                                .background(if (isSelected) Color(0xFF262626) else Color(0xFF141414))
+                                                                .border(1.dp, if (isSelected) Color(0xFF444444) else Color(0xFF222222), RoundedCornerShape(4.dp))
+                                                                .clickable { maxRamMb = mb.toFloat() }
+                                                                .padding(vertical = 4.dp),
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            Text(
+                                                                text = label,
+                                                                color = if (isSelected) Color.White else Color(0xFF777777),
+                                                                fontSize = 10.sp,
+                                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                                            )
+                                                        }
+                                                    }
                                                 }
 
                                                 Slider(
@@ -878,16 +834,16 @@ fun CreateInstanceDialog(
                                         }
                                     }
 
-                                    // SECTION 5: ADVANCED OPTIONS (Collapsible Accordion)
+                                    // 5. ADVANCED OPTIONS (Accordion)
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(Color(0xFF111111))
-                                            .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(Color(0xFF101010))
+                                            .border(1.dp, Color(0xFF202020), RoundedCornerShape(10.dp))
                                             .padding(12.dp)
                                     ) {
-                                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
@@ -899,13 +855,13 @@ fun CreateInstanceDialog(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                                 ) {
-                                                    Icon(Icons.Default.Tune, contentDescription = null, tint = Color(0xFF888888), modifier = Modifier.size(14.dp))
-                                                    Text("ADVANCED SETTINGS", color = Color(0xFFCCCCCC), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp)
+                                                    Icon(Icons.Default.Tune, contentDescription = null, tint = Color(0xFF777777), modifier = Modifier.size(13.dp))
+                                                    Text("ADVANCED SETTINGS", color = Color(0xFFBBBBBB), fontSize = 10.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
                                                 }
                                                 Icon(
                                                     imageVector = if (isAdvancedExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                                                     contentDescription = null,
-                                                    tint = Color(0xFF888888),
+                                                    tint = Color(0xFF777777),
                                                     modifier = Modifier.size(16.dp)
                                                 )
                                             }
@@ -916,23 +872,23 @@ fun CreateInstanceDialog(
                                                 exit = shrinkVertically() + fadeOut()
                                             ) {
                                                 Column(
-                                                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                                                    modifier = Modifier.padding(top = 8.dp)
+                                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                                    modifier = Modifier.padding(top = 6.dp)
                                                 ) {
                                                     // Window Resolution
                                                     Row(
                                                         modifier = Modifier.fillMaxWidth(),
                                                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                                                     ) {
-                                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                            Text("Window Width", color = Color(0xFF888888), fontSize = 10.sp)
+                                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                                            Text("Width", color = Color(0xFF777777), fontSize = 10.sp)
                                                             TextField(
                                                                 value = windowWidth.toString(),
                                                                 onValueChange = { windowWidth = it.toIntOrNull() ?: 1280 },
-                                                                modifier = Modifier.fillMaxWidth().height(42.dp),
+                                                                modifier = Modifier.fillMaxWidth().height(40.dp),
                                                                 colors = TextFieldDefaults.colors(
-                                                                    focusedContainerColor = Color(0xFF181818),
-                                                                    unfocusedContainerColor = Color(0xFF181818),
+                                                                    focusedContainerColor = Color(0xFF161616),
+                                                                    unfocusedContainerColor = Color(0xFF161616),
                                                                     focusedTextColor = Color.White,
                                                                     unfocusedTextColor = Color.White,
                                                                     focusedIndicatorColor = Color.Transparent,
@@ -941,15 +897,15 @@ fun CreateInstanceDialog(
                                                                 singleLine = true
                                                             )
                                                         }
-                                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                            Text("Window Height", color = Color(0xFF888888), fontSize = 10.sp)
+                                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                                            Text("Height", color = Color(0xFF777777), fontSize = 10.sp)
                                                             TextField(
                                                                 value = windowHeight.toString(),
                                                                 onValueChange = { windowHeight = it.toIntOrNull() ?: 720 },
-                                                                modifier = Modifier.fillMaxWidth().height(42.dp),
+                                                                modifier = Modifier.fillMaxWidth().height(40.dp),
                                                                 colors = TextFieldDefaults.colors(
-                                                                    focusedContainerColor = Color(0xFF181818),
-                                                                    unfocusedContainerColor = Color(0xFF181818),
+                                                                    focusedContainerColor = Color(0xFF161616),
+                                                                    unfocusedContainerColor = Color(0xFF161616),
                                                                     focusedTextColor = Color.White,
                                                                     unfocusedTextColor = Color.White,
                                                                     focusedIndicatorColor = Color.Transparent,
@@ -966,7 +922,7 @@ fun CreateInstanceDialog(
                                                         horizontalArrangement = Arrangement.SpaceBetween,
                                                         verticalAlignment = Alignment.CenterVertically
                                                     ) {
-                                                        Text("Launch in Fullscreen Mode", color = Color(0xFFCCCCCC), fontSize = 11.sp)
+                                                        Text("Launch in Fullscreen Mode", color = Color(0xFFBBBBBB), fontSize = 11.sp)
                                                         EzzToggle(
                                                             checked = isFullscreen,
                                                             onCheckedChange = { isFullscreen = it }
@@ -974,16 +930,16 @@ fun CreateInstanceDialog(
                                                     }
 
                                                     // Custom JVM Args
-                                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                        Text("Custom JVM Arguments", color = Color(0xFF888888), fontSize = 10.sp)
+                                                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                                        Text("Custom JVM Arguments", color = Color(0xFF777777), fontSize = 10.sp)
                                                         TextField(
                                                             value = customJvmArgs,
                                                             onValueChange = { customJvmArgs = it },
-                                                            placeholder = { Text("e.g. -XX:+UseG1GC", color = Color(0xFF555555), fontSize = 11.sp) },
-                                                            modifier = Modifier.fillMaxWidth().height(42.dp),
+                                                            placeholder = { Text("e.g. -XX:+UseG1GC", color = Color(0xFF444444), fontSize = 11.sp) },
+                                                            modifier = Modifier.fillMaxWidth().height(40.dp),
                                                             colors = TextFieldDefaults.colors(
-                                                                focusedContainerColor = Color(0xFF181818),
-                                                                unfocusedContainerColor = Color(0xFF181818),
+                                                                focusedContainerColor = Color(0xFF161616),
+                                                                unfocusedContainerColor = Color(0xFF161616),
                                                                 focusedTextColor = Color.White,
                                                                 unfocusedTextColor = Color.White,
                                                                 focusedIndicatorColor = Color.Transparent,
@@ -998,72 +954,73 @@ fun CreateInstanceDialog(
                                     }
                                 }
 
-                                // RIGHT COLUMN (~34%): Live Instance Preview & Create CTA
+                                // RIGHT PANE (~36%): Hero Live Instance Preview
                                 Column(
                                     modifier = Modifier
-                                        .weight(0.34f)
+                                        .weight(0.36f)
                                         .fillMaxHeight(),
                                     verticalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                         Text(
-                                            text = "LIVE INSTANCE PREVIEW",
-                                            color = Color(0xFF777777),
-                                            fontSize = 11.sp,
+                                            text = "LIVE PREVIEW",
+                                            color = Color(0xFF666666),
+                                            fontSize = 10.5.sp,
                                             fontWeight = FontWeight.Bold,
                                             letterSpacing = 0.8.sp
                                         )
 
-                                        // Real-Time Live Preview Card
+                                        // Hero Preview Card
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .clip(RoundedCornerShape(10.dp))
+                                                .clip(RoundedCornerShape(12.dp))
                                                 .background(
                                                     Brush.verticalGradient(
-                                                        colors = listOf(Color(0xFF181818), Color(0xFF0F0F0F))
+                                                        colors = listOf(Color(0xFF161616), Color(0xFF0D0D0D))
                                                     )
                                                 )
-                                                .border(1.dp, Color(0xFF2C2C2C), RoundedCornerShape(10.dp))
-                                                .padding(16.dp)
+                                                .border(1.dp, Color(0xFF262626), RoundedCornerShape(12.dp))
+                                                .padding(18.dp)
                                         ) {
-                                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                                // Icon + Name
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                                ) {
-                                                    InstanceArtworkIcon(
-                                                        instance = Instance(
-                                                            id = "preview_instance",
-                                                            name = if (name.isBlank()) "Minecraft $selectedMcVersion" else name,
-                                                            minecraftVersion = selectedMcVersion,
-                                                            loaderType = selectedLoader
-                                                        ),
-                                                        size = 56.dp,
-                                                        customFile = customIconFile
-                                                    )
+                                            Column(
+                                                verticalArrangement = Arrangement.spacedBy(14.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                // Center Artwork Icon
+                                                InstanceArtworkIcon(
+                                                    instance = Instance(
+                                                        id = "preview_hero",
+                                                        name = if (name.isBlank()) "Minecraft $selectedMcVersion" else name,
+                                                        minecraftVersion = selectedMcVersion,
+                                                        loaderType = selectedLoader
+                                                    ),
+                                                    size = 72.dp,
+                                                    customFile = customIconFile,
+                                                    showBadge = true
+                                                )
 
-                                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                                        Text(
-                                                            text = if (name.isBlank()) "New Instance" else name,
-                                                            color = Color.White,
-                                                            fontSize = 15.sp,
-                                                            fontWeight = FontWeight.Bold,
-                                                            maxLines = 1
-                                                        )
-                                                        Text(
-                                                            text = "Minecraft $selectedMcVersion",
-                                                            color = Color(0xFFAAAAAA),
-                                                            fontSize = 11.sp
-                                                        )
-                                                    }
+                                                // Title & Subtitle
+                                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                                    Text(
+                                                        text = if (name.isBlank()) "New Instance" else name,
+                                                        color = Color.White,
+                                                        fontSize = 16.sp,
+                                                        fontWeight = FontWeight.Black,
+                                                        maxLines = 1
+                                                    )
+                                                    Text(
+                                                        text = "Minecraft $selectedMcVersion",
+                                                        color = Color(0xFF888888),
+                                                        fontSize = 11.5.sp
+                                                    )
                                                 }
 
-                                                // Badges Row
+                                                // Dynamic Badges Row
                                                 Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
                                                 ) {
                                                     EzzBadge(
                                                         text = selectedLoader.name,
@@ -1078,7 +1035,7 @@ fun CreateInstanceDialog(
                                                         variant = EzzBadgeVariant.NEUTRAL
                                                     )
                                                     EzzBadge(
-                                                        text = "${maxRamMb.toInt() / 1024} GB RAM",
+                                                        text = "${maxRamMb.toInt() / 1024} GB",
                                                         variant = EzzBadgeVariant.NEUTRAL
                                                     )
                                                 }
@@ -1087,40 +1044,39 @@ fun CreateInstanceDialog(
                                                 Column(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .clip(RoundedCornerShape(6.dp))
-                                                        .background(Color(0xFF0A0A0A))
-                                                        .border(1.dp, Color(0xFF1C1C1C), RoundedCornerShape(6.dp))
+                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .background(Color(0xFF080808))
+                                                        .border(1.dp, Color(0xFF1A1A1A), RoundedCornerShape(8.dp))
                                                         .padding(10.dp),
-                                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                                    verticalArrangement = Arrangement.spacedBy(5.dp)
                                                 ) {
-                                                    PreviewMetaRow("Target Version", selectedMcVersion)
-                                                    PreviewMetaRow("Loader Type", selectedLoader.name)
+                                                    StudioMetaRow("Engine", selectedLoader.name)
                                                     if (selectedLoader == LoaderType.FABRIC && selectedFabricLoader != null) {
-                                                        PreviewMetaRow("Fabric Loader", selectedFabricLoader ?: "")
+                                                        StudioMetaRow("Fabric Loader", selectedFabricLoader ?: "")
                                                     } else if (selectedLoader == LoaderType.OPTIFINE && selectedOptiFineVersion != null) {
-                                                        PreviewMetaRow("OptiFine", selectedOptiFineVersion ?: "")
+                                                        StudioMetaRow("OptiFine", selectedOptiFineVersion ?: "")
                                                     }
-                                                    PreviewMetaRow("Local Path", "instances/${trimmedName.ifBlank { "new_instance" }}")
-                                                    PreviewMetaRow("Custom Icon", if (customIconFile != null) "Yes (${customIconFile?.extension?.uppercase()})" else "Default (Ezz 3D)")
+                                                    StudioMetaRow("RAM Limit", "${maxRamMb.toInt()} MB")
+                                                    StudioMetaRow("Local Path", "instances/${trimmedName.ifBlank { "new_instance" }}")
                                                 }
                                             }
                                         }
 
-                                        // Validation & Readiness Status
+                                        // Status / Validation Alert Box
                                         if (validationError != null) {
                                             Box(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .clip(RoundedCornerShape(6.dp))
-                                                    .background(Color(0xFF2A1515))
-                                                    .border(1.dp, Color(0xFFEF5350).copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-                                                    .padding(10.dp)
+                                                    .background(Color(0xFF261212))
+                                                    .border(1.dp, Color(0xFFEF5350).copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                                                    .padding(horizontal = 10.dp, vertical = 8.dp)
                                             ) {
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                                 ) {
-                                                    Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFEF5350), modifier = Modifier.size(14.dp))
+                                                    Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFEF5350), modifier = Modifier.size(13.dp))
                                                     Text(validationError, color = Color(0xFFEF9A9A), fontSize = 11.sp, fontWeight = FontWeight.Medium)
                                                 }
                                             }
@@ -1129,22 +1085,22 @@ fun CreateInstanceDialog(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .clip(RoundedCornerShape(6.dp))
-                                                    .background(Color(0xFF142214))
-                                                    .border(1.dp, Color(0xFF4CAF50).copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-                                                    .padding(10.dp)
+                                                    .background(Color(0xFF111E11))
+                                                    .border(1.dp, Color(0xFF4CAF50).copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                                                    .padding(horizontal = 10.dp, vertical = 8.dp)
                                             ) {
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                                 ) {
-                                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(14.dp))
-                                                    Text("READY TO CREATE", color = Color(0xFFA5D6A7), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+                                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(13.dp))
+                                                    Text("Configuration ready to launch", color = Color(0xFFA5D6A7), fontSize = 11.sp, fontWeight = FontWeight.Medium)
                                                 }
                                             }
                                         }
                                     }
 
-                                    // Action Buttons Footer
+                                    // Bottom Action Buttons
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -1154,31 +1110,27 @@ fun CreateInstanceDialog(
                                             onClick = onDismiss,
                                             modifier = Modifier.weight(1f).height(44.dp),
                                             shape = RoundedCornerShape(8.dp),
-                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFAAAAAA)),
-                                            border = BorderStroke(1.dp, Color(0xFF333333))
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF888888)),
+                                            border = BorderStroke(1.dp, Color(0xFF282828))
                                         ) {
                                             Text("Cancel", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                         }
 
                                         Button(
                                             onClick = {
-                                                if (isReadyToCreate) {
+                                                if (isFormValid) {
                                                     coroutineScope.launch {
                                                         try {
                                                             creationStep = 1
-                                                            creationProgressText = "Preparing isolated instance directory..."
-                                                            delay(350)
-
-                                                            creationStep = 2
-                                                            creationProgressText = "Fetching official metadata for $selectedMcVersion..."
+                                                            creationProgressText = "Preparing isolated directory..."
                                                             delay(300)
 
+                                                            creationStep = 2
+                                                            creationProgressText = "Resolving Minecraft $selectedMcVersion manifest..."
+                                                            delay(250)
+
                                                             creationStep = 3
-                                                            creationProgressText = when (selectedLoader) {
-                                                                LoaderType.FABRIC -> "Resolving Fabric loader..."
-                                                                LoaderType.OPTIFINE -> "Verifying OptiFine profile..."
-                                                                LoaderType.VANILLA -> "Configuring official client profile..."
-                                                            }
+                                                            creationProgressText = "Configuring ${selectedLoader.name} engine..."
                                                             delay(250)
 
                                                             val finalLoaderVersion = when (selectedLoader) {
@@ -1188,7 +1140,7 @@ fun CreateInstanceDialog(
                                                             }
 
                                                             creationStep = 4
-                                                            creationProgressText = "Finalizing instance registration..."
+                                                            creationProgressText = "Registering instance locally..."
 
                                                             viewModel.createInstance(
                                                                 name = trimmedName,
@@ -1221,14 +1173,14 @@ fun CreateInstanceDialog(
                                                     }
                                                 }
                                             },
-                                            enabled = isReadyToCreate,
-                                            modifier = Modifier.weight(1.4f).height(44.dp),
+                                            enabled = isFormValid,
+                                            modifier = Modifier.weight(1.5f).height(44.dp),
                                             shape = RoundedCornerShape(8.dp),
                                             colors = ButtonDefaults.buttonColors(
                                                 containerColor = Color.White,
                                                 contentColor = Color.Black,
-                                                disabledContainerColor = Color(0xFF222222),
-                                                disabledContentColor = Color(0xFF666666)
+                                                disabledContainerColor = Color(0xFF1E1E1E),
+                                                disabledContentColor = Color(0xFF555555)
                                             )
                                         ) {
                                             Text("CREATE INSTANCE", fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
@@ -1245,7 +1197,7 @@ fun CreateInstanceDialog(
 }
 
 @Composable
-private fun CreationProgressView(
+private fun StudioProgressView(
     instanceName: String,
     minecraftVersion: String,
     loaderType: LoaderType,
@@ -1258,47 +1210,47 @@ private fun CreationProgressView(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.widthIn(max = 480.dp)
+            modifier = Modifier.widthIn(max = 440.dp)
         ) {
             if (errorMessage != null) {
-                Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFEF5350), modifier = Modifier.size(44.dp))
-                Text("Creation Failed", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFEF5350), modifier = Modifier.size(42.dp))
+                Text("Creation Failed", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                 Text(errorMessage, color = Color(0xFFEF9A9A), fontSize = 12.sp)
                 Button(
                     onClick = onRetry,
                     colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("BACK TO CONFIGURATION", fontWeight = FontWeight.Bold)
+                    Text("Back to Configuration", fontWeight = FontWeight.Bold)
                 }
             } else {
-                CircularProgressIndicator(modifier = Modifier.size(48.dp), strokeWidth = 3.dp, color = Color.White)
-                Text("Creating $instanceName...", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
-                Text("Minecraft $minecraftVersion • ${loaderType.name}", color = Color(0xFF888888), fontSize = 12.sp)
+                CircularProgressIndicator(modifier = Modifier.size(44.dp), strokeWidth = 3.dp, color = Color.White)
+                Text("Creating $instanceName...", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Black, letterSpacing = 0.4.sp)
+                Text("Minecraft $minecraftVersion • ${loaderType.name}", color = Color(0xFF777777), fontSize = 12.sp)
 
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF141414))
-                        .border(1.dp, Color(0xFF262626), RoundedCornerShape(8.dp))
+                        .background(Color(0xFF121212))
+                        .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
                         .padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    ProgressStepRow("1. Preparing instance directory", isDone = currentStep > 1, isActive = currentStep == 1)
-                    ProgressStepRow("2. Resolving official version manifest", isDone = currentStep > 2, isActive = currentStep == 2)
-                    ProgressStepRow("3. Configuring ${loaderType.name} loader engine", isDone = currentStep > 3, isActive = currentStep == 3)
-                    ProgressStepRow("4. Finalizing local registration", isDone = currentStep > 4, isActive = currentStep == 4)
+                    StudioProgressStepRow("1. Preparing instance directory", isDone = currentStep > 1, isActive = currentStep == 1)
+                    StudioProgressStepRow("2. Resolving official version manifest", isDone = currentStep > 2, isActive = currentStep == 2)
+                    StudioProgressStepRow("3. Configuring ${loaderType.name} loader engine", isDone = currentStep > 3, isActive = currentStep == 3)
+                    StudioProgressStepRow("4. Finalizing local registration", isDone = currentStep > 4, isActive = currentStep == 4)
                 }
 
-                Text(progressText, color = Color(0xFFAAAAAA), fontSize = 11.sp)
+                Text(progressText, color = Color(0xFF888888), fontSize = 11.sp)
             }
         }
     }
 }
 
 @Composable
-private fun ProgressStepRow(label: String, isDone: Boolean, isActive: Boolean) {
+private fun StudioProgressStepRow(label: String, isDone: Boolean, isActive: Boolean) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1306,20 +1258,20 @@ private fun ProgressStepRow(label: String, isDone: Boolean, isActive: Boolean) {
     ) {
         Text(
             text = label,
-            color = if (isDone || isActive) Color.White else Color(0xFF666666),
+            color = if (isDone || isActive) Color.White else Color(0xFF555555),
             fontSize = 11.5.sp,
             fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal
         )
         if (isDone) {
-            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(14.dp))
+            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(13.dp))
         } else if (isActive) {
-            CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 1.5.dp, color = Color.White)
+            CircularProgressIndicator(modifier = Modifier.size(11.dp), strokeWidth = 1.5.dp, color = Color.White)
         }
     }
 }
 
 @Composable
-private fun SuccessCreationView(
+private fun StudioSuccessView(
     instance: Instance,
     customIconFile: File?,
     onPlayNow: () -> Unit,
@@ -1330,7 +1282,7 @@ private fun SuccessCreationView(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.widthIn(max = 480.dp)
+            modifier = Modifier.widthIn(max = 440.dp)
         ) {
             InstanceArtworkIcon(
                 instance = instance,
@@ -1339,15 +1291,15 @@ private fun SuccessCreationView(
                 showBadge = true
             )
 
-            Text("INSTANCE CREATED SUCCESSFULLY", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black, letterSpacing = 0.8.sp)
+            Text("INSTANCE CREATED SUCCESSFULLY", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Black, letterSpacing = 0.6.sp)
             Text(
                 text = "${instance.name} is ready with Minecraft ${instance.minecraftVersion} (${instance.loaderType.name})",
-                color = Color(0xFFAAAAAA),
+                color = Color(0xFF888888),
                 fontSize = 12.sp
             )
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Button(
@@ -1367,7 +1319,7 @@ private fun SuccessCreationView(
                     modifier = Modifier.weight(1f).height(44.dp),
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                    border = BorderStroke(1.dp, Color(0xFF444444))
+                    border = BorderStroke(1.dp, Color(0xFF333333))
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -1379,8 +1331,8 @@ private fun SuccessCreationView(
                     onClick = onDone,
                     modifier = Modifier.height(44.dp),
                     shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFAAAAAA)),
-                    border = BorderStroke(1.dp, Color(0xFF262626))
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF888888)),
+                    border = BorderStroke(1.dp, Color(0xFF222222))
                 ) {
                     Text("DONE", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
@@ -1390,22 +1342,22 @@ private fun SuccessCreationView(
 }
 
 @Composable
-private fun V3SectionCard(
+private fun StudioCard(
     title: String,
     content: @Composable () -> Unit
 ) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF131313))
-            .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color(0xFF111111))
+            .border(1.dp, Color(0xFF202020), RoundedCornerShape(10.dp))
             .padding(14.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = title,
-                color = Color(0xFFAAAAAA),
+                color = Color(0xFF888888),
                 fontSize = 10.5.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.6.sp
@@ -1416,23 +1368,26 @@ private fun V3SectionCard(
 }
 
 @Composable
-private fun V3LoaderCard(
+private fun StudioLoaderCard(
     title: String,
-    subtitle: String,
+    description: String,
     icon: ImageVector,
     isSelected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val bg by animateColorAsState(if (isSelected) Color(0xFF222222) else Color(0xFF131313))
+    val borderCol by animateColorAsState(if (isSelected) Color.White else Color(0xFF222222))
+
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (isSelected) Color(0xFF202020) else Color(0xFF101010))
-            .border(1.dp, if (isSelected) Color.White else Color(0xFF242424), RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(8.dp))
+            .background(bg)
+            .border(1.dp, borderCol, RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
             .padding(10.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1441,8 +1396,8 @@ private fun V3LoaderCard(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = if (isSelected) Color.White else Color(0xFF777777),
-                    modifier = Modifier.size(16.dp)
+                    tint = if (isSelected) Color.White else Color(0xFF666666),
+                    modifier = Modifier.size(15.dp)
                 )
                 if (isSelected) {
                     Box(
@@ -1457,11 +1412,11 @@ private fun V3LoaderCard(
                 text = title,
                 color = if (isSelected) Color.White else Color(0xFF999999),
                 fontSize = 11.sp,
-                fontWeight = FontWeight.Black
+                fontWeight = FontWeight.Bold
             )
             Text(
-                text = subtitle,
-                color = Color(0xFF666666),
+                text = description,
+                color = Color(0xFF555555),
                 fontSize = 9.5.sp,
                 maxLines = 1
             )
@@ -1470,13 +1425,13 @@ private fun V3LoaderCard(
 }
 
 @Composable
-private fun PreviewMetaRow(label: String, value: String) {
+private fun StudioMetaRow(label: String, value: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, color = Color(0xFF777777), fontSize = 10.sp)
+        Text(text = label, color = Color(0xFF666666), fontSize = 10.sp)
         Text(text = value, color = Color(0xFFCCCCCC), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
     }
 }
