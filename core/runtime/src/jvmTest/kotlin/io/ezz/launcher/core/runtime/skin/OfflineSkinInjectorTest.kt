@@ -177,4 +177,73 @@ class OfflineSkinInjectorTest {
         assertEquals(3, OfflineSkinInjector.resolvePackFormat("1.12.2"))
         assertEquals(1, OfflineSkinInjector.resolvePackFormat("1.8.9"))
     }
+
+    @Test
+    fun testFabricModJarCreationAndOnlineCleanup() {
+        val fabricInstance = Instance(
+            id = "test-fabric-inst",
+            name = "Fabric 1.21.1",
+            minecraftVersion = "1.21.1",
+            loaderType = LoaderType.FABRIC
+        )
+
+        val offlineAccount = OfflineAccount(
+            id = "offline-fabric-acc",
+            username = "KrysolDev",
+            uuid = "offline-uuid-999"
+        )
+
+        val skin = VaultSkin(
+            id = "skin-fabric",
+            name = "My Skin (1)",
+            fileName = "my_skin.png",
+            modelType = SkinModelType.STEVE
+        )
+
+        val skinBytes = "REAL_FABRIC_SKIN_BYTES".toByteArray()
+
+        val result = OfflineSkinInjector.applyVaultSkin(
+            instance = fabricInstance,
+            account = offlineAccount,
+            skin = skin,
+            skinBytes = skinBytes,
+            pathProvider = pathProvider,
+            fileSystem = fileSystem
+        )
+
+        assertTrue(result.applied)
+        assertNotNull(result.fabricModJarPath)
+        assertTrue(fileSystem.exists(result.fabricModJarPath!!))
+
+        val modZip = ZipFile(result.fabricModJarPath!!.toFile())
+        assertTrue(modZip.getEntry("fabric.mod.json") != null)
+        assertTrue(modZip.getEntry("assets/minecraft/textures/entity/player/wide/steve.png") != null)
+        modZip.close()
+
+        val gameDir = pathProvider.getInstanceGameDirectory(fabricInstance.id)
+        assertTrue(fileSystem.exists(gameDir.resolve(".ezz").resolve("active_skin.json")))
+        assertTrue(fileSystem.exists(gameDir.resolve(".ezz").resolve("active_skin.png")))
+
+        // Test Online account cleanup
+        val onlineAccount = MicrosoftAccount(
+            id = "online-acc",
+            username = "OfficialDev",
+            uuid = "online-uuid-1",
+            msaRefreshToken = "rt",
+            mcAccessToken = "at",
+            expiresAt = System.currentTimeMillis() + 3600000L
+        )
+
+        val onlineResult = OfflineSkinInjector.applyVaultSkin(
+            instance = fabricInstance,
+            account = onlineAccount,
+            skin = skin,
+            skinBytes = skinBytes,
+            pathProvider = pathProvider,
+            fileSystem = fileSystem
+        )
+
+        assertFalse(onlineResult.applied)
+        assertFalse(fileSystem.exists(result.fabricModJarPath!!), "Fabric mod jar should be removed for online accounts")
+    }
 }
