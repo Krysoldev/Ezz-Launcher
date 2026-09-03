@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ezz Launcher — The Ultimate Minecraft Platform & Cloud Wardrobe</title>
+    <meta name="description" content="Centralized Ezz Accounts, Minecraft Profiles, 3D Cloud Skin Wardrobe, and Next-Gen Minecraft Launcher." />
+    <!-- Google Fonts: Outfit & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <!-- Top Navigation Bar -->
+      <header class="navbar">
+        <div class="nav-container">
+          <a href="#home" class="brand">
+            <div class="brand-badge">EZZ</div>
+            <span class="brand-title">LAUNCHER</span>
+          </a>
+
+          <nav class="nav-links">
+            <a href="#home" class="nav-link active" data-page="home">Home</a>
+            <a href="#features" class="nav-link" data-page="features">Features</a>
+            <a href="#skins" class="nav-link" data-page="skins">Skin Studio</a>
+            <a href="#dashboard" class="nav-link auth-required" data-page="dashboard">Dashboard</a>
+          </nav>
+
+          <div class="nav-actions" id="nav-actions">
+            <!-- Dynamically populated based on auth status -->
+            <a href="#login" class="btn btn-secondary">Sign In</a>
+            <a href="#register" class="btn btn-primary">Create Account</a>
+          </div>
+        </div>
+      </header>
+
+      <!-- Main Dynamic Content Container -->
+      <main id="main-content"></main>
+
+      <!-- Global Toast Container -->
+      <div id="toast-container" class="toast-container"></div>
+
+      <!-- Footer -->
+      <footer class="footer">
+        <div class="footer-content">
+          <div class="footer-brand">
+            <div class="brand">
+              <div class="brand-badge">EZZ</div>
+              <span class="brand-title">LAUNCHER</span>
+            </div>
+            <p class="footer-desc">The open, decentralized Minecraft ecosystem with unified profiles, cloud skins, and high-performance launching.</p>
+          </div>
+          <div class="footer-links">
+            <div class="footer-col">
+              <h4>Navigation</h4>
+              <a href="#home">Home</a>
+              <a href="#skins">Skin Studio</a>
+              <a href="#dashboard">Dashboard</a>
+            </div>
+            <div class="footer-col">
+              <h4>Platform</h4>
+              <a href="https://ezzlauncher.dpdns.org" target="_blank" rel="noopener noreferrer">Cloudflare Domain</a>
+              <a href="#home" class="download-trigger">Download Client</a>
+            </div>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <p>© 2026 Ezz Launcher. Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.</p>
+        </div>
+      </footer>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

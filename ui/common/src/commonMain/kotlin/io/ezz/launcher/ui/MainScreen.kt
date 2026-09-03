@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -38,17 +39,19 @@ import io.ezz.launcher.ui.components.EzzButtonSize
 import io.ezz.launcher.ui.components.EzzButtonVariant
 import io.ezz.launcher.ui.components.EzzToastHost
 import io.ezz.launcher.ui.components.LaunchErrorDialog
-import io.ezz.launcher.ui.components.TopBar
+import io.ezz.launcher.ui.components.Sidebar
 import io.ezz.launcher.ui.console.ConsoleScreen
 import io.ezz.launcher.ui.dialogs.AddOfflineAccountDialog
 import io.ezz.launcher.ui.dialogs.CreateInstanceDialog
 import io.ezz.launcher.ui.dialogs.EditInstanceDialog
-import io.ezz.launcher.ui.dialogs.MicrosoftLoginDialog
+import io.ezz.launcher.ui.dialogs.ExportModpackDialog
+import io.ezz.launcher.ui.dialogs.ImportModpackDialog
+import io.ezz.launcher.ui.dialogs.MicrosoftAuthModal
+import io.ezz.launcher.ui.dialogs.ModrinthModpackBrowserDialog
 import io.ezz.launcher.ui.dialogs.QuickSearchDialog
 import io.ezz.launcher.ui.home.HomeScreen
 import io.ezz.launcher.ui.instances.InstancesScreen
 import io.ezz.launcher.ui.manager.InstanceManagerScreen
-import io.ezz.launcher.ui.mods.ModsScreen
 import io.ezz.launcher.ui.profiles.ProfilesScreen
 import io.ezz.launcher.ui.servers.ServersScreen
 import io.ezz.launcher.ui.settings.SettingsScreen
@@ -67,9 +70,15 @@ fun MainScreen(
 
     val showCreateInstance by viewModel.showCreateInstanceDialog.collectAsState()
     val showEditInstance by viewModel.showEditInstanceDialog.collectAsState()
+    val showModpackBrowser by viewModel.showModpackBrowserDialog.collectAsState()
+    val showImportModpack by viewModel.showImportModpackDialog.collectAsState()
+    val showExportModpack by viewModel.showExportModpackDialog.collectAsState()
+    val pendingMrpackFile by viewModel.pendingMrpackFile.collectAsState()
     val showAddOfflineAccount by viewModel.showAddOfflineAccountDialog.collectAsState()
     val showMicrosoftLogin by viewModel.showMicrosoftLoginDialog.collectAsState()
     val showSearchDialog by viewModel.showSearchDialog.collectAsState()
+    val accounts by viewModel.accountRepository.accounts.collectAsState()
+    val selectedAccount by viewModel.accountRepository.selectedAccount.collectAsState()
 
     EzzTheme {
         val colors = EzzTheme.colors
@@ -79,14 +88,25 @@ fun MainScreen(
                 .fillMaxSize()
                 .background(colors.background)
         ) {
-            // Main App Shell: TopBar Navigation Header + Active Content Screen
-            Column(modifier = Modifier.fillMaxSize()) {
-                TopBar(viewModel = viewModel)
+            // Main App Shell: Left Sidebar + Screen Content Area
+            Row(modifier = Modifier.fillMaxSize()) {
+                Sidebar(
+                    currentScreen = currentScreen,
+                    onNavigate = { screen -> viewModel.navigateTo(screen) },
+                    account = selectedAccount,
+                    accounts = accounts,
+                    onSelectAccount = { acc -> viewModel.selectAccount(acc) },
+                    skinManager = viewModel.skinService
+                )
 
-                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                     AnimatedContent(
                         targetState = currentScreen,
-                        transitionSpec = { fadeIn() togetherWith fadeOut() },
+                        transitionSpec = {
+                            (androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(180)) +
+                             androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(180)) { 8 })
+                                .togetherWith(androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(140)))
+                        },
                         label = "MainScreenTransition"
                     ) { screen ->
                         when (screen) {
@@ -94,10 +114,14 @@ fun MainScreen(
                             NavigationScreen.INSTANCES -> InstancesScreen(viewModel = viewModel)
                             NavigationScreen.VAULT -> io.ezz.launcher.ui.vault.VaultScreen(viewModel = viewModel)
                             NavigationScreen.ACCOUNTS -> AccountsScreen(viewModel = viewModel)
-                            NavigationScreen.MODS -> ModsScreen(viewModel = viewModel)
+                            NavigationScreen.MODS -> InstancesScreen(viewModel = viewModel)
+                            NavigationScreen.RESOURCE_PACKS -> io.ezz.launcher.ui.packs.ResourcePacksScreen(viewModel = viewModel)
+                            NavigationScreen.SHADERS -> io.ezz.launcher.ui.shaders.ShadersScreen(viewModel = viewModel)
+                            NavigationScreen.WORLDS -> io.ezz.launcher.ui.worlds.WorldsScreen(viewModel = viewModel)
+                            NavigationScreen.SCREENSHOTS -> io.ezz.launcher.ui.screenshots.ScreenshotsScreen(viewModel = viewModel)
+                            NavigationScreen.SETTINGS -> SettingsScreen(viewModel = viewModel)
                             NavigationScreen.SERVERS -> ServersScreen(viewModel = viewModel)
                             NavigationScreen.PROFILES -> ProfilesScreen(viewModel = viewModel)
-                            NavigationScreen.SETTINGS -> SettingsScreen(viewModel = viewModel)
                             NavigationScreen.CONSOLE -> ConsoleScreen(viewModel = viewModel)
                             NavigationScreen.INSTANCE_MANAGER -> InstanceManagerScreen(viewModel = viewModel)
                         }
@@ -160,6 +184,29 @@ fun MainScreen(
                 )
             }
 
+            if (showModpackBrowser) {
+                ModrinthModpackBrowserDialog(
+                    viewModel = viewModel,
+                    onDismiss = { viewModel.showModpackBrowserDialog.value = false }
+                )
+            }
+
+            if (showImportModpack) {
+                ImportModpackDialog(
+                    viewModel = viewModel,
+                    initialFile = pendingMrpackFile,
+                    onDismiss = { viewModel.closeImportModpack() }
+                )
+            }
+
+            if (showExportModpack != null) {
+                ExportModpackDialog(
+                    instance = showExportModpack!!,
+                    viewModel = viewModel,
+                    onDismiss = { viewModel.showExportModpackDialog.value = null }
+                )
+            }
+
             if (showAddOfflineAccount) {
                 AddOfflineAccountDialog(
                     onDismiss = { viewModel.showAddOfflineAccountDialog.value = false },
@@ -171,9 +218,18 @@ fun MainScreen(
             }
 
             if (showMicrosoftLogin) {
-                MicrosoftLoginDialog(
+                MicrosoftAuthModal(
                     viewModel = viewModel,
                     onDismiss = { viewModel.cancelMicrosoftLogin() }
+                )
+            }
+
+            val activeModInstallProject by viewModel.activeModInstallProject.collectAsState()
+            if (activeModInstallProject != null) {
+                io.ezz.launcher.ui.dialogs.InstallModDialog(
+                    project = activeModInstallProject!!,
+                    viewModel = viewModel,
+                    onDismiss = { viewModel.closeModInstaller() }
                 )
             }
 

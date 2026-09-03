@@ -29,6 +29,7 @@ private data class AccountMetadataRecord(
     val avatarUrl: String? = null,
     val skinUrl: String? = null,
     val skinModel: String? = null,
+    val skinHash: String? = null,
     val createdAt: Long = 0L,
     val lastUsedAt: Long? = null
 )
@@ -70,36 +71,46 @@ class LocalMinecraftAccountRepository(
     init {
         val initialPayload = readPayloadFromDisk()
         val initialAccounts = initialPayload.accounts.map { record ->
-            if (record.type == AccountType.MICROSOFT) {
-                MicrosoftAccount(
-                    id = record.id,
-                    username = record.username,
-                    uuid = record.uuid,
-                    msaRefreshToken = "",
-                    mcAccessToken = "",
-                    expiresAt = 0L,
-                    avatarUrl = record.avatarUrl,
-                    skinUrl = record.skinUrl,
-                    skinModel = record.skinModel,
-                    createdAt = record.createdAt,
-                    lastUsedAt = record.lastUsedAt
-                )
-            } else {
-                OfflineAccount(
-                    id = record.id,
-                    username = record.username,
-                    uuid = record.uuid,
-                    createdAt = record.createdAt,
-                    lastUsedAt = record.lastUsedAt,
-                    avatarUrl = record.avatarUrl,
-                    skinUrl = record.skinUrl,
-                    skinModel = record.skinModel
-                )
+            when (record.type) {
+                AccountType.MICROSOFT -> {
+                    MicrosoftAccount(
+                        id = record.id,
+                        username = record.username,
+                        uuid = record.uuid,
+                        msaRefreshToken = "",
+                        mcAccessToken = "",
+                        expiresAt = 0L,
+                        avatarUrl = record.avatarUrl,
+                        skinUrl = record.skinUrl,
+                        skinModel = record.skinModel,
+                        skinHash = record.skinHash,
+                        createdAt = record.createdAt,
+                        lastUsedAt = record.lastUsedAt
+                    )
+                }
+                AccountType.OFFLINE -> {
+                    OfflineAccount(
+                        id = record.id,
+                        username = record.username,
+                        uuid = record.uuid,
+                        createdAt = record.createdAt,
+                        lastUsedAt = record.lastUsedAt,
+                        avatarUrl = record.avatarUrl,
+                        skinUrl = record.skinUrl,
+                        skinModel = record.skinModel,
+                        skinHash = record.skinHash
+                    )
+                }
             }
         }
         _accounts.value = initialAccounts
         val selected = initialAccounts.find { it.id == initialPayload.selectedAccountId } ?: initialAccounts.firstOrNull()
         _selectedAccount.value = selected
+    }
+
+    companion object {
+        @Volatile
+        var isStartupPhase: Boolean = false
     }
 
     private fun readPayloadFromDisk(): AccountsStoragePayload {
@@ -131,54 +142,62 @@ class LocalMinecraftAccountRepository(
     }
 
     private suspend fun readLocalAccounts(): List<Account> {
-        val payload = readPayloadFromDisk()
-        var records = payload.accounts
-
-        // Legacy migration check
-        if (records.isEmpty()) {
+        // Only perform legacy migration if accounts.json DOES NOT exist yet on disk
+        if (!fileSystem.exists(accountsFile)) {
             try {
                 val legacyRaw = secureVault.getString("local_saved_accounts")
                 if (!legacyRaw.isNullOrBlank()) {
                     val legacyRecords = json.decodeFromString<List<AccountMetadataRecord>>(legacyRaw)
                     if (legacyRecords.isNotEmpty()) {
-                        records = legacyRecords
-                        savePayloadToDisk(AccountsStoragePayload(selectedAccountId = secureVault.getString("selected_account_id"), accounts = records))
+                        val legacySelected = secureVault.getString("selected_account_id")
+                        savePayloadToDisk(AccountsStoragePayload(selectedAccountId = legacySelected, accounts = legacyRecords))
+                        println("[ACCOUNT_MIGRATION] Migrated ${legacyRecords.size} legacy account(s) to accounts.json")
                     }
                 }
+                // Once checked or migrated, clear the legacy key so deleted accounts are never resurrected
+                secureVault.remove("local_saved_accounts")
             } catch (e: Exception) {
                 // Ignore legacy parse error
             }
         }
 
+        val payload = readPayloadFromDisk()
+        val records = payload.accounts
+
         return records.map { record ->
-            if (record.type == AccountType.MICROSOFT) {
-                val msaRefresh = secureVault.getString("msa_refresh_${record.id}") ?: ""
-                val mcAccess = secureVault.getString("mc_access_${record.id}") ?: ""
-                val expiresAt = secureVault.getString("mc_expires_${record.id}")?.toLongOrNull() ?: 0L
-                MicrosoftAccount(
-                    id = record.id,
-                    username = record.username,
-                    uuid = record.uuid,
-                    avatarUrl = record.avatarUrl,
-                    skinUrl = record.skinUrl,
-                    skinModel = record.skinModel,
-                    msaRefreshToken = msaRefresh,
-                    mcAccessToken = mcAccess,
-                    expiresAt = expiresAt,
-                    createdAt = record.createdAt,
-                    lastUsedAt = record.lastUsedAt
-                )
-            } else {
-                OfflineAccount(
-                    id = record.id,
-                    username = record.username,
-                    uuid = record.uuid,
-                    createdAt = record.createdAt,
-                    lastUsedAt = record.lastUsedAt,
-                    avatarUrl = record.avatarUrl,
-                    skinUrl = record.skinUrl,
-                    skinModel = record.skinModel
-                )
+            when (record.type) {
+                AccountType.MICROSOFT -> {
+                    val msaRefresh = secureVault.getString("msa_refresh_${record.id}") ?: ""
+                    val mcAccess = secureVault.getString("mc_access_${record.id}") ?: ""
+                    val expiresAt = secureVault.getString("mc_expires_${record.id}")?.toLongOrNull() ?: 0L
+                    MicrosoftAccount(
+                        id = record.id,
+                        username = record.username,
+                        uuid = record.uuid,
+                        avatarUrl = record.avatarUrl,
+                        skinUrl = record.skinUrl,
+                        skinModel = record.skinModel,
+                        skinHash = record.skinHash,
+                        msaRefreshToken = msaRefresh,
+                        mcAccessToken = mcAccess,
+                        expiresAt = expiresAt,
+                        createdAt = record.createdAt,
+                        lastUsedAt = record.lastUsedAt
+                    )
+                }
+                AccountType.OFFLINE -> {
+                    OfflineAccount(
+                        id = record.id,
+                        username = record.username,
+                        uuid = record.uuid,
+                        createdAt = record.createdAt,
+                        lastUsedAt = record.lastUsedAt,
+                        avatarUrl = record.avatarUrl,
+                        skinUrl = record.skinUrl,
+                        skinModel = record.skinModel,
+                        skinHash = record.skinHash
+                    )
+                }
             }
         }
     }
@@ -193,6 +212,7 @@ class LocalMinecraftAccountRepository(
                 avatarUrl = account.avatarUrl,
                 skinUrl = account.skinUrl,
                 skinModel = account.skinModel,
+                skinHash = account.skinHash,
                 createdAt = account.createdAt,
                 lastUsedAt = account.lastUsedAt
             )
@@ -209,7 +229,7 @@ class LocalMinecraftAccountRepository(
             val selectedId = payload.selectedAccountId ?: secureVault.getString("selected_account_id")
             _selectedAccount.value = loaded.find { it.id == selectedId } ?: loaded.firstOrNull()
 
-            println("[ACCOUNT_LOADED] Loaded ${loaded.size} local account(s). Selected: ${_selectedAccount.value?.username ?: "None"}")
+            println("[ACCOUNT_LOAD] Loaded ${loaded.size} local account(s). Selected: ${_selectedAccount.value?.username ?: "None"}")
             loaded
         }
     }
@@ -218,37 +238,77 @@ class LocalMinecraftAccountRepository(
         _accounts.value.find { it.id == id } ?: readLocalAccounts().find { it.id == id }
     }
 
-    override suspend fun saveAccount(account: Account): Unit = withContext(dispatcher) {
+    override suspend fun saveAccount(account: Account, source: String?): Unit = withContext(dispatcher) {
         mutex.withLock {
-            if (account is MicrosoftAccount) {
-                if (account.msaRefreshToken.isNotBlank()) {
-                    secureVault.putString("msa_refresh_${account.id}", account.msaRefreshToken)
+            // Read current persistent list from disk
+            val diskAccounts = readLocalAccounts()
+
+            // Locate existing account by stable identity:
+            // 1. Direct ID match
+            // 2. For Microsoft: matching Minecraft profile UUID (case-insensitive) or MSAL account ID
+            // 3. For Offline: matching offline UUID or case-insensitive username
+            val existingIndex = diskAccounts.indexOfFirst { existing ->
+                existing.id == account.id ||
+                (account is MicrosoftAccount && existing is MicrosoftAccount &&
+                    (existing.uuid.equals(account.uuid, ignoreCase = true) ||
+                     (account.msalAccountId != null && existing.msalAccountId == account.msalAccountId))) ||
+                (account is OfflineAccount && existing is OfflineAccount &&
+                    (existing.uuid == account.uuid || existing.username.equals(account.username, ignoreCase = true)))
+            }
+
+            val targetAccount: Account
+            val isUpdate = existingIndex != -1
+
+            if (isUpdate) {
+                val existing = diskAccounts[existingIndex]
+                targetAccount = when (account) {
+                    is MicrosoftAccount -> account.copy(
+                        id = existing.id,
+                        createdAt = if (existing.createdAt > 0L) existing.createdAt else account.createdAt
+                    )
+                    is OfflineAccount -> account.copy(
+                        id = existing.id,
+                        createdAt = if (existing.createdAt > 0L) existing.createdAt else account.createdAt
+                    )
                 }
-                if (account.mcAccessToken.isNotBlank()) {
-                    secureVault.putString("mc_access_${account.id}", account.mcAccessToken)
+                println("[ACCOUNT_UPDATE] source=${source ?: "Internal"}, account='${targetAccount.username}' (${targetAccount.type}, id=${targetAccount.id})")
+            } else {
+                targetAccount = account
+                if (isStartupPhase) {
+                    System.err.println("[ACCOUNT_CREATE_ERROR] ERROR: ACCOUNT CREATED DURING STARTUP! Source: ${source ?: "Unknown"}, Account: '${account.username}'")
                 }
-                if (account.expiresAt > 0L) {
-                    secureVault.putString("mc_expires_${account.id}", account.expiresAt.toString())
+                println("[ACCOUNT_CREATE] source=${source ?: "Internal"}, account='${targetAccount.username}' (${targetAccount.type}, id=${targetAccount.id})")
+            }
+
+            if (targetAccount is MicrosoftAccount) {
+                if (targetAccount.msaRefreshToken.isNotBlank()) {
+                    secureVault.putString("msa_refresh_${targetAccount.id}", targetAccount.msaRefreshToken)
+                }
+                if (targetAccount.mcAccessToken.isNotBlank()) {
+                    secureVault.putString("mc_access_${targetAccount.id}", targetAccount.mcAccessToken)
+                }
+                if (targetAccount.expiresAt > 0L) {
+                    secureVault.putString("mc_expires_${targetAccount.id}", targetAccount.expiresAt.toString())
                 }
             }
 
-            // Always read the latest persistent list from disk to guarantee no overwrites
-            val diskAccounts = readLocalAccounts()
-            val currentList = diskAccounts.filter { it.id != account.id } + account
+            val currentList = if (isUpdate) {
+                diskAccounts.mapIndexed { idx, item -> if (idx == existingIndex) targetAccount else item }
+            } else {
+                diskAccounts + targetAccount
+            }
             _accounts.value = currentList
 
             val currentSelected = _selectedAccount.value
-            val targetSelectedId = if (currentSelected == null || currentSelected.id == account.id) {
-                _selectedAccount.value = account
-                account.id
+            val targetSelectedId = if (currentSelected == null || currentSelected.id == targetAccount.id) {
+                _selectedAccount.value = targetAccount
+                targetAccount.id
             } else {
                 currentSelected.id
             }
 
             persistAccountsState(currentList, targetSelectedId)
             secureVault.putString("selected_account_id", targetSelectedId)
-
-            println("[ACCOUNT_CREATED] Saved account '${account.username}' (${account.type}). Total accounts: ${currentList.size}")
         }
     }
 
@@ -258,7 +318,7 @@ class LocalMinecraftAccountRepository(
                 _selectedAccount.value = null
                 secureVault.remove("selected_account_id")
                 persistAccountsState(_accounts.value, null)
-                println("[ACCOUNT_SELECTED] Account deselected.")
+                println("[ACCOUNT_SELECT] Account deselected.")
                 return@withLock
             }
 
@@ -276,13 +336,14 @@ class LocalMinecraftAccountRepository(
             secureVault.putString("selected_account_id", id)
             persistAccountsState(updatedList, id)
 
-            println("[ACCOUNT_SELECTED] Active account set to '${updatedAccount.username}' (${updatedAccount.type})")
+            println("[ACCOUNT_SELECT] Active account set to '${updatedAccount.username}' (${updatedAccount.type})")
         }
     }
 
     override suspend fun removeAccount(id: String): Unit = withContext(dispatcher) {
         mutex.withLock {
             val diskAccounts = readLocalAccounts()
+            val target = diskAccounts.find { it.id == id }
             val updated = diskAccounts.filter { it.id != id }
             _accounts.value = updated
 
@@ -304,8 +365,9 @@ class LocalMinecraftAccountRepository(
             secureVault.remove("msa_refresh_$id")
             secureVault.remove("mc_access_$id")
             secureVault.remove("mc_expires_$id")
+            secureVault.remove("local_saved_accounts")
 
-            println("[ACCOUNT_REMOVED] Removed account id: $id. Remaining: ${updated.size}")
+            println("[ACCOUNT_DELETE] Removed account '${target?.username ?: id}' (${target?.type ?: "Unknown"}). Remaining: ${updated.size}")
         }
     }
 }

@@ -10,7 +10,6 @@ import io.ezz.launcher.core.storage.path.DefaultPathProvider
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import java.io.File
-import java.util.zip.ZipFile
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -39,7 +38,7 @@ class OfflineSkinManagerTest {
     }
 
     @Test
-    fun testSyncOfflineSkin_FabricBuildsIsolatedLocalMod() {
+    fun testSyncOfflineSkin_ProfileKeyedCacheWithoutModInjection() {
         val instance = Instance(
             id = "test-instance-fabric",
             name = "Fabric 1.21.11",
@@ -72,63 +71,16 @@ class OfflineSkinManagerTest {
             fileSystem = fileSystem
         )
 
+        val profileCacheDir = pathProvider.cacheDirectory.resolve("profiles").resolve(account.uuid)
+
+        // Verify profile-keyed cache created
+        assertTrue(fileSystem.exists(profileCacheDir.resolve("profile.json")))
+        assertTrue(fileSystem.exists(profileCacheDir.resolve("skins").resolve("abc123hash.png")))
+
+        // Verify NO Ezz mod was installed into mods/
         val gameDir = pathProvider.getInstanceGameDirectory(instance.id)
-
-        // Verify active skin metadata and raw png in .ezz/
-        assertTrue(fileSystem.exists(gameDir.resolve(".ezz").resolve("active_skin.json")))
-        assertTrue(fileSystem.exists(gameDir.resolve(".ezz").resolve("active_skin.png")))
-
-        // Verify Fabric local-player-only mod JAR was created in mods/
         val modJar = gameDir.resolve("mods").resolve("ezz_vault_skin.jar")
-        assertTrue(fileSystem.exists(modJar))
-
-        val zip = ZipFile(modJar.toFile())
-        assertTrue(zip.getEntry("fabric.mod.json") != null)
-        assertTrue(zip.getEntry("ezz_vault_skin.mixins.json") != null)
-        assertTrue(zip.getEntry("io/ezz/vaultskin/EzzVaultSkinClient.class") != null)
-        assertTrue(zip.getEntry("io/ezz/vaultskin/EzzSkinRuntime.class") != null)
-        assertTrue(zip.getEntry("io/ezz/vaultskin/mixin/AbstractClientPlayerMixin.class") != null)
-        assertTrue(zip.getEntry("io/ezz/vaultskin/mixin/PlayerListEntryMixin.class") != null)
-        assertTrue(zip.getEntry("assets/ezz/textures/skins/abc123hash.png") != null)
-        zip.close()
-    }
-
-    @Test
-    fun testSyncOfflineSkin_VanillaDoesNotInjectMod() {
-        val instance = Instance(
-            id = "test-instance-vanilla",
-            name = "Vanilla 1.21.4",
-            minecraftVersion = "1.21.4",
-            loaderType = LoaderType.VANILLA
-        )
-
-        val account = OfflineAccount(
-            id = "offline-acc-2",
-            username = "KrysolDev",
-            uuid = "offline-uuid-5678"
-        )
-
-        val skin = VaultSkin(
-            id = "skin-2",
-            name = "PvP Skin",
-            fileName = "pvp.png",
-            fileHash = "pvphash",
-            modelType = SkinModelType.ALEX
-        )
-
-        OfflineSkinManager.syncOfflineSkin(
-            instance = instance,
-            account = account,
-            skin = skin,
-            skinBytes = "PNG_BYTES".toByteArray(),
-            pathProvider = pathProvider,
-            fileSystem = fileSystem
-        )
-
-        val gameDir = pathProvider.getInstanceGameDirectory(instance.id)
-        assertTrue(fileSystem.exists(gameDir.resolve(".ezz").resolve("active_skin.json")))
-        val modJar = gameDir.resolve("mods").resolve("ezz_vault_skin.jar")
-        assertFalse(fileSystem.exists(modJar), "Vanilla instance must not have mod JAR")
+        assertFalse(fileSystem.exists(modJar), "Must NOT install Ezz skin mod into mods/")
     }
 
     @Test

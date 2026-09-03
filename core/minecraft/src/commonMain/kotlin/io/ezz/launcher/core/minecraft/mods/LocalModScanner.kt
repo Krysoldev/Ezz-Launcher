@@ -1,6 +1,8 @@
 package io.ezz.launcher.core.minecraft.mods
 
 import io.ezz.launcher.core.model.instance.ModMetadata
+import io.ezz.launcher.core.model.instance.LocalMod
+import io.ezz.launcher.core.model.instance.toLocalMod
 import io.ezz.launcher.core.storage.path.PathProvider
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -56,75 +58,6 @@ class LocalModScanner(
         }.sortedBy { it.name.lowercase() }
     }
 
-    private fun parseModFile(instanceId: String, file: File): ModMetadata {
-        val isEnabled = !file.name.endsWith(".disabled", ignoreCase = true)
-        val cleanName = file.name.removeSuffix(".disabled").removeSuffix(".jar")
-        var modId = cleanName.lowercase().replace(" ", "-")
-        var modName = cleanName
-        var version = "1.0.0"
-        var description = "Minecraft Mod"
-        var loader = "FABRIC"
-        val authors = mutableListOf<String>()
-
-        ZipFile(file).use { zip ->
-            // 1. Try fabric.mod.json / quilt.mod.json
-            val fabricEntry = zip.getEntry("fabric.mod.json") ?: zip.getEntry("quilt.mod.json")
-            if (fabricEntry != null) {
-                loader = "FABRIC"
-                val content = zip.getInputStream(fabricEntry).bufferedReader().use { it.readText() }
-                try {
-                    val jsonObj = json.parseToJsonElement(content).jsonObject
-                    modId = jsonObj["id"]?.jsonPrimitive?.content ?: modId
-                    modName = jsonObj["name"]?.jsonPrimitive?.content ?: modName
-                    version = jsonObj["version"]?.jsonPrimitive?.content ?: version
-                    description = jsonObj["description"]?.jsonPrimitive?.content ?: description
-                    jsonObj["authors"]?.jsonArray?.forEach { elem ->
-                        if (elem is kotlinx.serialization.json.JsonPrimitive) {
-                            authors.add(elem.content)
-                        } else if (elem is kotlinx.serialization.json.JsonObject) {
-                            elem["name"]?.jsonPrimitive?.content?.let { n -> authors.add(n) }
-                        }
-                    }
-                } catch (e: Exception) {
-                    // Ignore json parse error
-                }
-            } else {
-                // 2. Try mcmod.info (Forge legacy)
-                val mcmodEntry = zip.getEntry("mcmod.info")
-                if (mcmodEntry != null) {
-                    loader = "FORGE"
-                    val content = zip.getInputStream(mcmodEntry).bufferedReader().use { it.readText() }
-                    try {
-                        val arr = json.parseToJsonElement(content).jsonArray
-                        val first = arr.firstOrNull()?.jsonObject
-                        if (first != null) {
-                            modId = first["modid"]?.jsonPrimitive?.content ?: modId
-                            modName = first["name"]?.jsonPrimitive?.content ?: modName
-                            version = first["version"]?.jsonPrimitive?.content ?: version
-                            description = first["description"]?.jsonPrimitive?.content ?: description
-                        }
-                    } catch (e: Exception) {
-                        // Ignore
-                    }
-                }
-            }
-            Unit
-        }
-
-        return ModMetadata(
-            id = modId,
-            instanceId = instanceId,
-            name = modName,
-            version = version,
-            fileName = file.name,
-            loader = loader,
-            description = description,
-            authors = authors,
-            fileSize = file.length(),
-            enabled = isEnabled
-        )
-    }
-
     suspend fun toggleMod(instanceId: String, fileName: String, enable: Boolean): String? = withContext(dispatcher) {
         val modsDir = pathProvider.getInstanceDirectory(instanceId).resolve(".minecraft").resolve("mods").toFile()
         val currentFile = File(modsDir, fileName)
@@ -145,6 +78,10 @@ class LocalModScanner(
     }
 
     suspend fun deleteMod(instanceId: String, fileName: String): Boolean = withContext(dispatcher) {
+        if (fileName.startsWith("ezz-skin-mod", ignoreCase = true) || fileName.contains("ezzskin", ignoreCase = true)) {
+            println("[LocalModScanner] Prevented deletion of protected launcher-integrated mod: $fileName")
+            return@withContext false
+        }
         val modsDir = pathProvider.getInstanceDirectory(instanceId).resolve(".minecraft").resolve("mods").toFile()
         val file = File(modsDir, fileName)
         if (file.exists()) {
@@ -160,5 +97,130 @@ class LocalModScanner(
         val target = File(modsDir, sourcePath.fileName.toString()).toPath()
         Files.copy(sourcePath, target, StandardCopyOption.REPLACE_EXISTING)
         true
+    }
+
+    companion object {
+        private val jsonParser = Json { ignoreUnknownKeys = true; isLenient = true }
+
+        fun scanSingleMod(file: File, instanceId: String = ""): LocalMod {
+            return parseModFile(instanceId, file).toLocalMod()
+        }
+
+        fun parseModFile(instanceId: String, file: File): ModMetadata {
+            val isEnabled = !file.name.endsWith(".disabled", ignoreCase = true)
+            val cleanName = file.name.removeSuffix(".disabled").removeSuffix(".jar")
+            var modId = cleanName.lowercase().replace(" ", "-")
+            var modName = cleanName
+            var version = "1.0.0"
+            var description = "Minecraft Mod"
+            var loader = "FABRIC"
+            val authors = mutableListOf<String>()
+            val dependencies = mutableMapOf<String, String>()
+            val breaks = mutableMapOf<String, String>()
+            val conflicts = mutableMapOf<String, String>()
+
+            try {
+                ZipFile(file).use { zip ->
+                    // 1. Try fabric.mod.json / quilt.mod.json
+                    val fabricEntry = zip.getEntry("fabric.mod.json") ?: zip.getEntry("quilt.mod.json")
+                    if (fabricEntry != null) {
+                        loader = "FABRIC"
+                        val content = zip.getInputStream(fabricEntry).bufferedReader().use { it.readText() }
+                        try {
+                            val jsonObj = jsonParser.parseToJsonElement(content).jsonObject
+                            modId = jsonObj["id"]?.jsonPrimitive?.content ?: modId
+                            modName = jsonObj["name"]?.jsonPrimitive?.content ?: modName
+                            version = jsonObj["version"]?.jsonPrimitive?.content ?: version
+                            description = jsonObj["description"]?.jsonPrimitive?.content ?: description
+                            jsonObj["authors"]?.jsonArray?.forEach { elem ->
+                                if (elem is kotlinx.serialization.json.JsonPrimitive) {
+                                    authors.add(elem.content)
+                                } else if (elem is kotlinx.serialization.json.JsonObject) {
+                                    elem["name"]?.jsonPrimitive?.content?.let { n -> authors.add(n) }
+                                }
+                            }
+                            jsonObj["depends"]?.let { elem ->
+                                if (elem is kotlinx.serialization.json.JsonObject) {
+                                    elem.forEach { (k, v) ->
+                                        val constraint = when (v) {
+                                            is kotlinx.serialization.json.JsonPrimitive -> v.content
+                                            is kotlinx.serialization.json.JsonArray -> v.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }.joinToString(" ")
+                                            else -> "*"
+                                        }
+                                        dependencies[k.lowercase()] = constraint
+                                    }
+                                }
+                            }
+                            jsonObj["breaks"]?.let { elem ->
+                                if (elem is kotlinx.serialization.json.JsonObject) {
+                                    elem.forEach { (k, v) ->
+                                        val constraint = when (v) {
+                                            is kotlinx.serialization.json.JsonPrimitive -> v.content
+                                            is kotlinx.serialization.json.JsonArray -> v.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }.joinToString(" ")
+                                            else -> "*"
+                                        }
+                                        breaks[k.lowercase()] = constraint
+                                    }
+                                }
+                            }
+                            jsonObj["conflicts"]?.let { elem ->
+                                if (elem is kotlinx.serialization.json.JsonObject) {
+                                    elem.forEach { (k, v) ->
+                                        val constraint = when (v) {
+                                            is kotlinx.serialization.json.JsonPrimitive -> v.content
+                                            is kotlinx.serialization.json.JsonArray -> v.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }.joinToString(" ")
+                                            else -> "*"
+                                        }
+                                        conflicts[k.lowercase()] = constraint
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            // Ignore parsing error
+                        }
+                        Unit
+                    } else {
+                        // 2. Try mcmod.info (Forge legacy)
+                        val mcmodEntry = zip.getEntry("mcmod.info")
+                        if (mcmodEntry != null) {
+                            loader = "FORGE"
+                            val content = zip.getInputStream(mcmodEntry).bufferedReader().use { it.readText() }
+                            try {
+                                val arr = jsonParser.parseToJsonElement(content).jsonArray
+                                val first = arr.firstOrNull()?.jsonObject
+                                if (first != null) {
+                                    modId = first["modid"]?.jsonPrimitive?.content ?: modId
+                                    modName = first["name"]?.jsonPrimitive?.content ?: modName
+                                    version = first["version"]?.jsonPrimitive?.content ?: version
+                                    description = first["description"]?.jsonPrimitive?.content ?: description
+                                }
+                            } catch (e: Exception) {
+                                // Ignore
+                            }
+                        }
+                        Unit
+                    }
+                    Unit
+                }
+            } catch (e: Throwable) {
+                // Ignore zip read errors
+            }
+
+            return ModMetadata(
+                id = modId,
+                instanceId = instanceId,
+                name = modName,
+                version = version,
+                fileName = file.name,
+                loader = loader,
+                description = description,
+                authors = authors,
+                fileSize = file.length(),
+                enabled = isEnabled,
+                dependencies = dependencies,
+                breaks = breaks,
+                conflicts = conflicts
+            )
+        }
     }
 }

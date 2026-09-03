@@ -20,10 +20,7 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -36,7 +33,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.ezz.launcher.core.model.instance.LocalWorld
-import io.ezz.launcher.ui.theme.EzzTheme
+import io.ezz.launcher.ui.components.EzzButton
+import io.ezz.launcher.ui.components.EzzButtonSize
+import io.ezz.launcher.ui.components.EzzButtonVariant
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -48,19 +47,18 @@ fun WorldBackupRestoreDialog(
     viewModel: AppViewModel,
     onDismiss: () -> Unit
 ) {
-    val colors = EzzTheme.colors
     val backups by viewModel.worldBackupsList.collectAsState()
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.History, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(22.dp))
+                Icon(Icons.Default.History, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                 Text(
                     text = "Backups for '${world.name}'",
-                    color = colors.textPrimary,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 18.sp
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp
                 )
             }
         },
@@ -71,16 +69,14 @@ fun WorldBackupRestoreDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("${backups.size} backup archive(s)", color = colors.textMuted, fontSize = 13.sp)
-                    Button(
+                    Text("${backups.size} backup archive(s)", color = Color(0xFF94A3B8), fontSize = 12.sp)
+                    EzzButton(
+                        text = "Create Backup Now",
                         onClick = { viewModel.backupWorld(world.folderName) },
-                        shape = RoundedCornerShape(6.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = colors.surfaceLight, contentColor = colors.textPrimary)
-                    ) {
-                        Icon(Icons.Default.Archive, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Create Backup Now", fontSize = 12.sp)
-                    }
+                        icon = Icons.Default.Archive,
+                        variant = EzzButtonVariant.SECONDARY,
+                        size = EzzButtonSize.SMALL
+                    )
                 }
 
                 if (backups.isEmpty()) {
@@ -89,25 +85,25 @@ fun WorldBackupRestoreDialog(
                             .fillMaxWidth()
                             .height(140.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(colors.cardBackground)
-                            .border(1.dp, colors.border, RoundedCornerShape(8.dp)),
+                            .background(Color(0xFF141720))
+                            .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("No previous backups found for this world", color = colors.textMuted, fontSize = 13.sp)
+                        Text("No previous backups found for this world", color = Color(0xFF94A3B8), fontSize = 13.sp)
                     }
                 } else {
                     LazyColumn(
-                        modifier = Modifier.fillMaxWidth().height(220.dp),
+                        modifier = Modifier.fillMaxWidth().height(240.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(backups, key = { it.filePath }) { bkp ->
-                            val dateStr = SimpleDateFormat("MMM d, yyyy HH:mm:ss", Locale.getDefault()).format(Date(bkp.createdAt))
+                            val dateStr = SimpleDateFormat("MMM d, yyyy • HH:mm:ss", Locale.getDefault()).format(Date(bkp.createdAt))
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(colors.cardBackground)
-                                    .border(1.dp, colors.border, RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF141720))
+                                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp))
                                     .padding(12.dp)
                             ) {
                                 Row(
@@ -116,19 +112,17 @@ fun WorldBackupRestoreDialog(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                        Text(text = dateStr, color = colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                        Text(text = "${bkp.sizeBytes / 1024 / 1024} MB • ${bkp.fileName}", color = colors.textMuted, fontSize = 11.sp)
+                                        Text(text = dateStr, color = Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                                        Text(text = "${bkp.sizeBytes / 1024 / 1024} MB • ${bkp.fileName}", color = Color(0xFF94A3B8), fontSize = 11.sp)
                                     }
 
-                                    Button(
+                                    EzzButton(
+                                        text = "Restore",
                                         onClick = { viewModel.restoreWorldBackup(bkp.filePath, world.folderName) },
-                                        shape = RoundedCornerShape(6.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = colors.accent, contentColor = Color.Black)
-                                    ) {
-                                        Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(14.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Restore", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
+                                        icon = Icons.Default.Restore,
+                                        variant = EzzButtonVariant.PRIMARY,
+                                        size = EzzButtonSize.SMALL
+                                    )
                                 }
                             }
                         }
@@ -137,11 +131,14 @@ fun WorldBackupRestoreDialog(
             }
         },
         confirmButton = {
-            Button(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) {
-                Text("Close")
-            }
+            EzzButton(
+                text = "Close",
+                onClick = onDismiss,
+                variant = EzzButtonVariant.SECONDARY,
+                size = EzzButtonSize.SMALL
+            )
         },
-        containerColor = colors.surface,
+        containerColor = Color(0xFF101318),
         shape = RoundedCornerShape(12.dp)
     )
 }

@@ -10,6 +10,9 @@ import io.ezz.launcher.core.model.instance.LocalScreenshot
 import io.ezz.launcher.core.model.instance.LocalShaderPack
 import io.ezz.launcher.core.model.instance.LocalWorld
 import io.ezz.launcher.core.model.instance.LocalWorldBackup
+import io.ezz.launcher.core.model.instance.LogLine
+import io.ezz.launcher.core.model.instance.LogReadResult
+import io.ezz.launcher.core.model.instance.LogSeverityLevel
 import io.ezz.launcher.core.storage.path.PathProvider
 import io.ezz.launcher.core.storage.repository.InstanceRepository
 import kotlinx.coroutines.CoroutineDispatcher
@@ -19,6 +22,14 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import io.ezz.launcher.core.model.instance.LoaderType
+import io.ezz.launcher.core.model.modrinth.ModrinthIndex
+import io.ezz.launcher.core.network.client.HttpClientFactory
+import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.http.isSuccess
+import io.ktor.utils.io.core.isEmpty
+import io.ktor.utils.io.core.readBytes
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -104,7 +115,18 @@ class LocalInstanceManager(
         }.sortedBy { it.name.lowercase() }
     }
 
+    private fun getIconsCacheDir(category: String): File {
+        val dir = pathProvider.cacheDirectory.resolve("icons").resolve(category).toFile()
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
     private fun parseMod(file: File): LocalMod {
+        val cached = IncrementalModIndexer.getCached(file)
+        if (cached != null) {
+            return cached
+        }
+
         val isEnabled = !file.name.endsWith(".disabled", ignoreCase = true)
         val cleanName = file.name.removeSuffix(".disabled").removeSuffix(".jar")
         var modId = cleanName.lowercase().replace(" ", "-")
@@ -113,6 +135,10 @@ class LocalInstanceManager(
         var description = "Minecraft Mod"
         var loader = "FABRIC"
         var author: String? = null
+        var iconPath: String? = null
+        val dependencies = mutableMapOf<String, String>()
+        val breaks = mutableMapOf<String, String>()
+        val conflicts = mutableMapOf<String, String>()
 
         try {
             ZipFile(file).use { zip ->
@@ -131,6 +157,71 @@ class LocalInstanceManager(
                         else if (elem is kotlinx.serialization.json.JsonObject) elem["name"]?.jsonPrimitive?.content?.let { authorsList.add(it) }
                     }
                     if (authorsList.isNotEmpty()) author = authorsList.joinToString(", ")
+
+                    jsonObj["depends"]?.let { elem ->
+                        if (elem is kotlinx.serialization.json.JsonObject) {
+                            elem.forEach { (k, v) ->
+                                val constraint = when (v) {
+                                    is kotlinx.serialization.json.JsonPrimitive -> v.content
+                                    is kotlinx.serialization.json.JsonArray -> v.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }.joinToString(" ")
+                                    else -> "*"
+                                }
+                                dependencies[k.lowercase()] = constraint
+                            }
+                        }
+                    }
+                    jsonObj["breaks"]?.let { elem ->
+                        if (elem is kotlinx.serialization.json.JsonObject) {
+                            elem.forEach { (k, v) ->
+                                val constraint = when (v) {
+                                    is kotlinx.serialization.json.JsonPrimitive -> v.content
+                                    is kotlinx.serialization.json.JsonArray -> v.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }.joinToString(" ")
+                                    else -> "*"
+                                }
+                                breaks[k.lowercase()] = constraint
+                            }
+                        }
+                    }
+                    jsonObj["conflicts"]?.let { elem ->
+                        if (elem is kotlinx.serialization.json.JsonObject) {
+                            elem.forEach { (k, v) ->
+                                val constraint = when (v) {
+                                    is kotlinx.serialization.json.JsonPrimitive -> v.content
+                                    is kotlinx.serialization.json.JsonArray -> v.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }.joinToString(" ")
+                                    else -> "*"
+                                }
+                                conflicts[k.lowercase()] = constraint
+                            }
+                        }
+                    }
+
+                    // Extract mod icon from fabric.mod.json
+                    val iconEntryName = when (val iconElem = jsonObj["icon"]) {
+                        is kotlinx.serialization.json.JsonPrimitive -> iconElem.content
+                        is kotlinx.serialization.json.JsonObject -> iconElem["128"]?.jsonPrimitive?.content
+                            ?: iconElem["64"]?.jsonPrimitive?.content
+                            ?: iconElem["32"]?.jsonPrimitive?.content
+                            ?: iconElem["16"]?.jsonPrimitive?.content
+                            ?: iconElem.values.firstOrNull()?.jsonPrimitive?.content
+                        else -> null
+                    } ?: "assets/$modId/icon.png"
+
+                    val iconZipEntry = zip.getEntry(iconEntryName)
+                        ?: zip.getEntry("assets/$modId/icon.png")
+                        ?: zip.getEntry("icon.png")
+                        ?: zip.getEntry("pack.png")
+
+                    if (iconZipEntry != null) {
+                        val iconCacheFile = File(getIconsCacheDir("mods"), "${modId}.png")
+                        if (!iconCacheFile.exists() || iconCacheFile.length() == 0L) {
+                            zip.getInputStream(iconZipEntry).use { input ->
+                                iconCacheFile.outputStream().use { output -> input.copyTo(output) }
+                            }
+                        }
+                        if (iconCacheFile.exists() && iconCacheFile.length() > 0) {
+                            iconPath = iconCacheFile.absolutePath
+                        }
+                    }
                 } else {
                     val mcmodEntry = zip.getEntry("mcmod.info")
                     if (mcmodEntry != null) {
@@ -145,13 +236,26 @@ class LocalInstanceManager(
                             description = first["description"]?.jsonPrimitive?.content ?: description
                         }
                     }
+
+                    val iconZipEntry = zip.getEntry("icon.png") ?: zip.getEntry("pack.png") ?: zip.getEntry("logo.png")
+                    if (iconZipEntry != null) {
+                        val iconCacheFile = File(getIconsCacheDir("mods"), "${modId}.png")
+                        if (!iconCacheFile.exists() || iconCacheFile.length() == 0L) {
+                            zip.getInputStream(iconZipEntry).use { input ->
+                                iconCacheFile.outputStream().use { output -> input.copyTo(output) }
+                            }
+                        }
+                        if (iconCacheFile.exists() && iconCacheFile.length() > 0) {
+                            iconPath = iconCacheFile.absolutePath
+                        }
+                    }
                 }
             }
         } catch (_: Throwable) {
             // Fallback to filename
         }
 
-        return LocalMod(
+        val parsed = LocalMod(
             id = modId,
             name = modName,
             version = version,
@@ -160,8 +264,14 @@ class LocalInstanceManager(
             loader = loader,
             enabled = isEnabled,
             author = author,
-            description = description
+            description = description,
+            iconPath = iconPath,
+            dependencies = dependencies,
+            breaks = breaks,
+            conflicts = conflicts
         )
+        IncrementalModIndexer.put(file, parsed)
+        return parsed
     }
 
     suspend fun toggleMod(instanceId: String, fileName: String, enable: Boolean): Boolean = withContext(dispatcher) {
@@ -179,6 +289,10 @@ class LocalInstanceManager(
     }
 
     suspend fun deleteMod(instanceId: String, fileName: String): Boolean = withContext(dispatcher) {
+        if (fileName.startsWith("ezz-skin-mod", ignoreCase = true) || fileName.contains("ezzskin", ignoreCase = true)) {
+            println("[LocalInstanceManager] Prevented delete of protected system mod: $fileName")
+            return@withContext false
+        }
         val modsDir = File(getGameDir(instanceId), "mods")
         val file = File(modsDir, fileName)
         if (file.exists()) file.delete() else false
@@ -207,9 +321,10 @@ class LocalInstanceManager(
         var packName = cleanName
         var description: String? = null
         var packFormat: Int? = null
+        var iconPath: String? = null
 
         try {
-            if (file.isFile && file.name.endsWith(".zip", ignoreCase = true)) {
+            if (file.isFile && (file.name.endsWith(".zip", ignoreCase = true) || file.name.endsWith(".zip.disabled", ignoreCase = true))) {
                 ZipFile(file).use { zip ->
                     val mcmeta = zip.getEntry("pack.mcmeta")
                     if (mcmeta != null) {
@@ -217,6 +332,19 @@ class LocalInstanceManager(
                         val obj = json.parseToJsonElement(content).jsonObject["pack"]?.jsonObject
                         description = obj?.get("description")?.jsonPrimitive?.content
                         packFormat = obj?.get("pack_format")?.jsonPrimitive?.content?.toIntOrNull()
+                    }
+
+                    val iconEntry = zip.getEntry("pack.png") ?: zip.getEntry("icon.png")
+                    if (iconEntry != null) {
+                        val iconCacheFile = File(getIconsCacheDir("resourcepacks"), "${cleanName}.png")
+                        if (!iconCacheFile.exists() || iconCacheFile.length() == 0L) {
+                            zip.getInputStream(iconEntry).use { input ->
+                                iconCacheFile.outputStream().use { output -> input.copyTo(output) }
+                            }
+                        }
+                        if (iconCacheFile.exists() && iconCacheFile.length() > 0) {
+                            iconPath = iconCacheFile.absolutePath
+                        }
                     }
                 }
             } else if (file.isDirectory) {
@@ -227,6 +355,11 @@ class LocalInstanceManager(
                     description = obj?.get("description")?.jsonPrimitive?.content
                     packFormat = obj?.get("pack_format")?.jsonPrimitive?.content?.toIntOrNull()
                 }
+
+                val iconFile = File(file, "pack.png").takeIf { it.exists() } ?: File(file, "icon.png").takeIf { it.exists() }
+                if (iconFile != null) {
+                    iconPath = iconFile.absolutePath
+                }
             }
         } catch (_: Throwable) {}
 
@@ -236,7 +369,8 @@ class LocalInstanceManager(
             description = description,
             packFormat = packFormat,
             enabled = isEnabled,
-            fileSize = if (file.isFile) file.length() else 0L
+            fileSize = if (file.isFile) file.length() else 0L,
+            iconPath = iconPath
         )
     }
 
@@ -275,11 +409,38 @@ class LocalInstanceManager(
         files.map { file ->
             val isEnabled = !file.name.endsWith(".disabled", ignoreCase = true)
             val cleanName = file.name.removeSuffix(".disabled").removeSuffix(".zip")
+            var iconPath: String? = null
+
+            try {
+                if (file.isFile && (file.name.endsWith(".zip", ignoreCase = true) || file.name.endsWith(".zip.disabled", ignoreCase = true))) {
+                    ZipFile(file).use { zip ->
+                        val iconEntry = zip.getEntry("pack.png") ?: zip.getEntry("icon.png")
+                        if (iconEntry != null) {
+                            val iconCacheFile = File(getIconsCacheDir("shaders"), "${cleanName}.png")
+                            if (!iconCacheFile.exists() || iconCacheFile.length() == 0L) {
+                                zip.getInputStream(iconEntry).use { input ->
+                                    iconCacheFile.outputStream().use { output -> input.copyTo(output) }
+                                }
+                            }
+                            if (iconCacheFile.exists() && iconCacheFile.length() > 0) {
+                                iconPath = iconCacheFile.absolutePath
+                            }
+                        }
+                    }
+                } else if (file.isDirectory) {
+                    val iconFile = File(file, "pack.png").takeIf { it.exists() } ?: File(file, "icon.png").takeIf { it.exists() }
+                    if (iconFile != null) {
+                        iconPath = iconFile.absolutePath
+                    }
+                }
+            } catch (_: Throwable) {}
+
             LocalShaderPack(
                 fileName = file.name,
                 name = cleanName,
                 enabled = isEnabled,
-                fileSize = if (file.isFile) file.length() else 0L
+                fileSize = if (file.isFile) file.length() else 0L,
+                iconPath = iconPath
             )
         }.sortedBy { it.name.lowercase() }
     }
@@ -318,7 +479,7 @@ class LocalInstanceManager(
             var size = 0L
             folder.walkTopDown().forEach { size += it.length() }
             val iconFile = File(folder, "icon.png")
-            val iconPath = if (iconFile.exists()) iconFile.absolutePath else null
+            val iconPath = if (iconFile.exists() && iconFile.length() > 0) iconFile.absolutePath else null
 
             LocalWorld(
                 folderName = folder.name,
@@ -496,16 +657,91 @@ class LocalInstanceManager(
         entries.sortedByDescending { it.lastModified }
     }
 
-    suspend fun readLogContent(filePath: String): String = withContext(dispatcher) {
+    suspend fun readLogResult(filePath: String, maxLines: Int = 5000): LogReadResult = withContext(dispatcher) {
         val file = File(filePath)
-        if (!file.exists()) return@withContext "Log file does not exist."
-        try {
-            val text = file.readText()
-            // Mask sensitive tokens / auth URLs
-            maskSensitiveTokens(text)
-        } catch (e: Throwable) {
-            "Error reading log file: ${e.message}"
+        if (!file.exists() || !file.isFile) {
+            return@withContext LogReadResult(
+                fileName = file.name,
+                filePath = filePath,
+                lines = emptyList(),
+                totalSizeBytes = 0L,
+                isTruncated = false
+            )
         }
+
+        try {
+            val totalSize = file.length()
+            val linesQueue = java.util.ArrayDeque<String>(maxLines)
+            var totalLineCount = 0
+
+            file.useLines { sequence ->
+                for (rawLine in sequence) {
+                    totalLineCount++
+                    if (linesQueue.size == maxLines) {
+                        linesQueue.removeFirst()
+                    }
+                    linesQueue.addLast(rawLine)
+                }
+            }
+
+            var errCount = 0
+            var warnCount = 0
+            var infoCount = 0
+            val startLineNumber = (totalLineCount - linesQueue.size + 1).coerceAtLeast(1)
+
+            val parsedLines = linesQueue.mapIndexed { idx, rawText ->
+                val masked = maskSensitiveTokens(rawText)
+                val level = when {
+                    masked.contains("ERROR", ignoreCase = true) || masked.contains("FATAL", ignoreCase = true) || masked.contains("Exception", ignoreCase = true) -> {
+                        errCount++
+                        LogSeverityLevel.ERROR
+                    }
+                    masked.contains("WARN", ignoreCase = true) -> {
+                        warnCount++
+                        LogSeverityLevel.WARN
+                    }
+                    masked.contains("DEBUG", ignoreCase = true) || masked.contains("TRACE", ignoreCase = true) -> {
+                        LogSeverityLevel.DEBUG
+                    }
+                    else -> {
+                        infoCount++
+                        LogSeverityLevel.INFO
+                    }
+                }
+
+                LogLine(
+                    lineNumber = startLineNumber + idx,
+                    text = masked,
+                    level = level
+                )
+            }
+
+            LogReadResult(
+                fileName = file.name,
+                filePath = filePath,
+                lines = parsedLines,
+                totalSizeBytes = totalSize,
+                isTruncated = totalLineCount > maxLines,
+                errorCount = errCount,
+                warnCount = warnCount,
+                infoCount = infoCount
+            )
+        } catch (e: Throwable) {
+            LogReadResult(
+                fileName = file.name,
+                filePath = filePath,
+                lines = listOf(LogLine(1, "Error reading log file: ${e.message}", LogSeverityLevel.ERROR)),
+                totalSizeBytes = if (file.exists()) file.length() else 0L,
+                isTruncated = false,
+                errorCount = 1
+            )
+        }
+    }
+
+    suspend fun readLogContent(filePath: String): String = withContext(dispatcher) {
+        val result = readLogResult(filePath, maxLines = 10000)
+        if (result.lines.isEmpty()) return@withContext "No log content available."
+        result.lines.joinToString("\n") { it.text }
     }
 
     private fun maskSensitiveTokens(content: String): String {
@@ -629,44 +865,61 @@ class LocalInstanceManager(
         updated
     }
 
+    val mrpackManager: io.ezz.launcher.core.storage.mrpack.MrpackManager =
+        io.ezz.launcher.core.storage.mrpack.MrpackManager(pathProvider, instanceRepository, dispatcher)
+
+    // ==========================================
+    // 8. INSTANCE EXPORT (.mrpack)
+    // ==========================================
+
     suspend fun exportInstance(
         instance: Instance,
-        targetZip: File,
-        includeWorlds: Boolean = false
+        targetFile: File,
+        includeWorlds: Boolean = false,
+        onProgress: (String, Float) -> Unit = { _, _ -> }
     ): Boolean = withContext(dispatcher) {
-        try {
-            targetZip.parentFile?.mkdirs()
-            val gameDir = getGameDir(instance.id)
+        val options = io.ezz.launcher.core.model.modrinth.MrpackExportOptions(
+            customName = instance.name,
+            includeConfigs = true,
+            includeMods = true,
+            includeResourcePacks = true,
+            includeShaderPacks = true
+        )
+        val result = mrpackManager.exportMrpack(instance, targetFile, options, onProgress)
+        result.isSuccess
+    }
 
-            ZipOutputStream(FileOutputStream(targetZip)).use { zos ->
-                // Write instance.json descriptor
-                val metaJson = json.encodeToString(Instance.serializer(), instance)
-                zos.putNextEntry(ZipEntry("instance.json"))
-                zos.write(metaJson.toByteArray())
-                zos.closeEntry()
+    // ==========================================
+    // 8.5. INSTANCE IMPORT (.mrpack)
+    // ==========================================
 
-                // Write folders
-                val foldersToInclude = mutableListOf("mods", "resourcepacks", "shaderpacks", "config")
-                if (includeWorlds) foldersToInclude.add("saves")
+    suspend fun importInstance(
+        file: File,
+        preferredName: String? = null,
+        onProgress: (String, Float) -> Unit = { _, _ -> }
+    ): Result<Instance> = withContext(dispatcher) {
+        if (!file.exists()) {
+            return@withContext Result.failure(IllegalArgumentException("File does not exist: ${file.name}"))
+        }
 
-                foldersToInclude.forEach { folderName ->
-                    val folder = File(gameDir, folderName)
-                    if (folder.exists()) {
-                        folder.walkTopDown().forEach { file ->
-                            val relPath = "$folderName/${file.relativeTo(folder).path.replace('\\', '/')}"
-                            if (file.isFile) {
-                                zos.putNextEntry(ZipEntry(relPath))
-                                FileInputStream(file).use { it.copyTo(zos) }
-                                zos.closeEntry()
-                            }
-                        }
-                    }
-                }
-            }
-            true
-        } catch (e: Throwable) {
-            println("Instance export error: ${e.message}")
-            false
+        // Validate .mrpack format
+        val preview = mrpackManager.previewMrpack(file)
+        if (preview.isFailure) {
+            return@withContext Result.failure(preview.exceptionOrNull() ?: IllegalArgumentException("Invalid Modrinth modpack."))
+        }
+
+        mrpackManager.importMrpack(file, preferredName) { progress ->
+            onProgress(progress.message, progress.progress)
+        }
+    }
+
+    suspend fun importInstanceFromMrpack(
+        mrpackFile: File,
+        preferredName: String? = null,
+        onProgress: (String, Float) -> Unit = { _, _ -> }
+    ): Result<Instance> = withContext(dispatcher) {
+        mrpackManager.importMrpack(mrpackFile, preferredName) { progress ->
+            onProgress(progress.message, progress.progress)
         }
     }
 

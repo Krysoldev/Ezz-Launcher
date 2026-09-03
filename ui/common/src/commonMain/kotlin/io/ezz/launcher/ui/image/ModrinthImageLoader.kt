@@ -45,13 +45,25 @@ class ModrinthImageLoader(
         // 1. In-Memory Cache Hit
         memoryCache[url]?.let { return it }
 
-        // 2. Persistent Disk Cache Check
+        // 2. Direct Local File Check
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            val localFile = File(url)
+            if (localFile.exists() && localFile.length() > 0) {
+                val bitmap = ImageDecoder.decodeFile(localFile)
+                if (bitmap != null) {
+                    memoryCache[url] = bitmap
+                    return bitmap
+                }
+            }
+            return null
+        }
+
+        // 3. Persistent Disk Cache Check
         val diskFile = getDiskCacheFile(url)
         if (diskFile.exists() && diskFile.length() > 0) {
             val bitmap = ImageDecoder.decodeFile(diskFile)
             if (bitmap != null) {
                 memoryCache[url] = bitmap
-                println("[ModrinthImage] URL: $url | Cache: HIT | Local: ${diskFile.name} | Result: SUCCESS")
                 return bitmap
             } else {
                 // Corrupted cache file, discard
@@ -59,7 +71,7 @@ class ModrinthImageLoader(
             }
         }
 
-        // 3. Trigger async download if not already in-flight
+        // 4. Trigger async download if not already in-flight
         scope.launch {
             loadBitmap(url)
         }
@@ -76,13 +88,25 @@ class ModrinthImageLoader(
         // 1. Memory Cache
         memoryCache[url]?.let { return@withContext it }
 
-        // 2. Disk Cache
+        // 2. Direct Local File Check
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            val localFile = File(url)
+            if (localFile.exists() && localFile.length() > 0) {
+                val bitmap = ImageDecoder.decodeFile(localFile)
+                if (bitmap != null) {
+                    memoryCache[url] = bitmap
+                    return@withContext bitmap
+                }
+            }
+            return@withContext null
+        }
+
+        // 3. Disk Cache
         val diskFile = getDiskCacheFile(url)
         if (diskFile.exists() && diskFile.length() > 0) {
             val bitmap = ImageDecoder.decodeFile(diskFile)
             if (bitmap != null) {
                 memoryCache[url] = bitmap
-                println("[ModrinthImage] URL: $url | Cache: HIT | Local: ${diskFile.name} | Result: SUCCESS")
                 return@withContext bitmap
             } else {
                 diskFile.delete()

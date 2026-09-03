@@ -27,19 +27,29 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.ToggleOff
+import androidx.compose.material.icons.filled.ToggleOn
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -57,15 +67,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import okio.Path.Companion.toPath
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LocalMod
 import io.ezz.launcher.core.model.modrinth.ModrinthProjectHit
 import io.ezz.launcher.core.model.modrinth.ModUpdateCandidate
+import io.ezz.launcher.ui.components.EzzButton
+import io.ezz.launcher.ui.components.EzzButtonSize
+import io.ezz.launcher.ui.components.EzzButtonVariant
 import io.ezz.launcher.ui.components.ModrinthAsyncImage
 import io.ezz.launcher.ui.components.PaginationBar
-import io.ezz.launcher.ui.theme.EzzTheme
+import io.ezz.launcher.ui.manager.dialogs.ModInspectDialog
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 
 private enum class ModsSubTab(val title: String) {
@@ -83,6 +98,8 @@ fun ModsTab(
     var subTab by remember { mutableStateOf(ModsSubTab.INSTALLED) }
 
     val installedMods by viewModel.manageMods.collectAsState()
+    val missingDependencies by viewModel.missingDependencies.collectAsState()
+    val compatibilityConflicts by viewModel.compatibilityConflicts.collectAsState()
     val browseState by viewModel.modsBrowseState.collectAsState()
     val downloadingProject by viewModel.modrinthDownloadingProject.collectAsState()
     val downloadProgress by viewModel.modrinthDownloadProgress.collectAsState()
@@ -91,24 +108,28 @@ fun ModsTab(
 
     var localSearch by remember { mutableStateOf("") }
     var localFilter by remember { mutableStateOf("ALL") }
+    var inspectModHit by remember { mutableStateOf<ModrinthProjectHit?>(null) }
+
+    // Bulk selection state
+    var selectedModFiles by remember { mutableStateOf(setOf<String>()) }
 
     Column(
         modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Sub-Navigation Bar
+        // Top Toolbar: Sub-Tabs & Actions
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Sub-Tab Switcher
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF141414))
-                    .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp))
                     .padding(4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
@@ -123,7 +144,8 @@ fun ModsTab(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(if (isActive) Color(0xFF222222) else Color.Transparent)
+                            .background(if (isActive) Color(0xFF1A1E29) else Color.Transparent)
+                            .border(1.dp, if (isActive) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
                             .clickable {
                                 subTab = tab
                                 if (tab == ModsSubTab.BROWSE && browseState.items.isEmpty()) {
@@ -132,7 +154,7 @@ fun ModsTab(
                                     viewModel.checkForModUpdates()
                                 }
                             }
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Row(
@@ -141,22 +163,23 @@ fun ModsTab(
                         ) {
                             Text(
                                 text = tab.title,
-                                color = if (isActive) Color.White else Color(0xFF888888),
-                                fontSize = 13.sp,
-                                fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal
+                                color = if (isActive) Color.White else Color(0xFF94A3B8),
+                                fontSize = 12.5.sp,
+                                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium
                             )
                             if (badgeCount != null && badgeCount > 0) {
                                 Box(
                                     modifier = Modifier
-                                        .clip(CircleShape)
-                                        .background(if (tab == ModsSubTab.UPDATES) Color(0xFFFFA500) else Color(0xFF333333))
-                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(if (tab == ModsSubTab.UPDATES) Color(0xFFF59E0B) else Color(0xFF141720))
+                                        .border(1.dp, if (tab == ModsSubTab.UPDATES) Color(0xFFF59E0B) else Color(0xFF222735), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 5.dp, vertical = 1.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
                                         text = badgeCount.toString(),
                                         color = if (tab == ModsSubTab.UPDATES) Color.Black else Color.White,
-                                        fontSize = 11.sp,
+                                        fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
@@ -169,50 +192,22 @@ fun ModsTab(
             // Quick Actions
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (subTab == ModsSubTab.INSTALLED) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFF1C1C1C))
-                            .border(1.dp, Color(0xFF2A2A2A), RoundedCornerShape(6.dp))
-                            .clickable { viewModel.openInstanceFolder(instance.id) }
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.FolderOpen,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Text("Open Folder", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                        }
-                    }
+                    EzzButton(
+                        text = "Open Mods Folder",
+                        onClick = { viewModel.openModsFolder(instance.id) },
+                        icon = Icons.Default.FolderOpen,
+                        variant = EzzButtonVariant.SECONDARY,
+                        size = EzzButtonSize.SMALL
+                    )
                 } else if (subTab == ModsSubTab.UPDATES) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFF1C1C1C))
-                            .border(1.dp, Color(0xFF2A2A2A), RoundedCornerShape(6.dp))
-                            .clickable { viewModel.checkForModUpdates() }
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            if (isCheckingUpdates) {
-                                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color.White)
-                            } else {
-                                Icon(imageVector = Icons.Default.Refresh, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
-                            }
-                            Text("Check Updates", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                        }
-                    }
+                    EzzButton(
+                        text = if (isCheckingUpdates) "Checking..." else "Check for Updates",
+                        onClick = { viewModel.checkForModUpdates() },
+                        icon = if (!isCheckingUpdates) Icons.Default.Refresh else null,
+                        variant = EzzButtonVariant.SECONDARY,
+                        size = EzzButtonSize.SMALL,
+                        enabled = !isCheckingUpdates
+                    )
                 }
             }
         }
@@ -223,24 +218,25 @@ fun ModsTab(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF141414))
-                    .border(1.dp, Color(0xFF2E7D32).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF10B981).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
                     .padding(12.dp)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "Installing $downloadingProject...",
                             color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
                         Text(
                             text = "${(downloadProgress * 100).toInt()}%",
-                            color = Color(0xFF4CAF50),
+                            color = Color(0xFF10B981),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -251,8 +247,8 @@ fun ModsTab(
                             .fillMaxWidth()
                             .height(4.dp)
                             .clip(RoundedCornerShape(2.dp)),
-                        color = Color(0xFF4CAF50),
-                        trackColor = Color(0xFF222222)
+                        color = Color(0xFF10B981),
+                        trackColor = Color(0xFF141720)
                     )
                 }
             }
@@ -261,25 +257,89 @@ fun ModsTab(
         // SubTab Content
         when (subTab) {
             ModsSubTab.INSTALLED -> {
-                InstalledModsView(
-                    installedMods = installedMods,
-                    localSearch = localSearch,
-                    onSearchChange = { localSearch = it },
-                    localFilter = localFilter,
-                    onFilterChange = { localFilter = it },
-                    onToggleMod = { mod -> viewModel.toggleManageMod(mod.fileName, !mod.enabled) },
-                    onDeleteMod = { mod -> viewModel.deleteManageMod(mod.fileName) },
-                    onBrowseClick = {
-                        subTab = ModsSubTab.BROWSE
-                        if (browseState.items.isEmpty()) viewModel.searchMods()
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (missingDependencies.isNotEmpty() || compatibilityConflicts.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF231215))
+                                .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                .padding(14.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Top,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = Color(0xFFEF4444),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    val totalIssues = missingDependencies.size + compatibilityConflicts.size
+                                    Text(
+                                        text = if (compatibilityConflicts.isNotEmpty() && missingDependencies.isNotEmpty()) "MOD COMPATIBILITY & DEPENDENCY ISSUES ($totalIssues)"
+                                               else if (compatibilityConflicts.isNotEmpty()) "MOD INCOMPATIBILITY DETECTED (${compatibilityConflicts.size})"
+                                               else "MISSING REQUIRED DEPENDENCIES (${missingDependencies.size})",
+                                        color = Color(0xFFFCA5A5),
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    for (conflict in compatibilityConflicts) {
+                                        Text(
+                                            text = "• ${conflict.reason}",
+                                            color = Color(0xFFF87171),
+                                            fontSize = 11.5.sp
+                                        )
+                                    }
+                                    for (missing in missingDependencies) {
+                                        Text(
+                                            text = "• $missing",
+                                            color = Color(0xFFE2E8F0),
+                                            fontSize = 11.5.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
-                )
+
+                    InstalledModsView(
+                        instance = instance,
+                        viewModel = viewModel,
+                        installedMods = installedMods,
+                        localSearch = localSearch,
+                        onSearchChange = { localSearch = it },
+                        localFilter = localFilter,
+                        onFilterChange = { localFilter = it },
+                        selectedModFiles = selectedModFiles,
+                        onSelectionChange = { selectedModFiles = it },
+                        onToggleMod = { mod -> viewModel.toggleManageMod(mod.fileName, !mod.enabled) },
+                        onDeleteMod = { mod -> viewModel.deleteManageMod(mod.fileName) },
+                        onBulkToggle = { files, enable -> viewModel.bulkToggleMods(files, enable) },
+                        onBulkDelete = { files -> viewModel.bulkDeleteMods(files) },
+                        onBrowseClick = {
+                            subTab = ModsSubTab.BROWSE
+                            if (browseState.items.isEmpty()) viewModel.searchMods()
+                        }
+                    )
+                }
             }
             ModsSubTab.BROWSE -> {
                 BrowseModsView(
                     instance = instance,
                     viewModel = viewModel,
                     browseState = browseState,
+                    onInspect = { hit -> inspectModHit = hit },
                     onInstall = { hit -> viewModel.installModrinthProject(hit) }
                 )
             }
@@ -292,129 +352,267 @@ fun ModsTab(
             }
         }
     }
+
+    // Inspect Mod Modal
+    val activeInspectHit = inspectModHit
+    if (activeInspectHit != null) {
+        ModInspectDialog(
+            projectHit = activeInspectHit,
+            instance = instance,
+            viewModel = viewModel,
+            onDismiss = { inspectModHit = null }
+        )
+    }
+
+    // Interactive Install Mod Wizard Modal
+    val activeInstallProject by viewModel.activeModInstallProject.collectAsState()
+    if (activeInstallProject != null) {
+        io.ezz.launcher.ui.dialogs.InstallModDialog(
+            project = activeInstallProject!!,
+            viewModel = viewModel,
+            onDismiss = { viewModel.closeModInstaller() }
+        )
+    }
 }
 
 @Composable
 private fun InstalledModsView(
+    instance: Instance,
+    viewModel: AppViewModel,
     installedMods: List<LocalMod>,
     localSearch: String,
     onSearchChange: (String) -> Unit,
     localFilter: String,
     onFilterChange: (String) -> Unit,
+    selectedModFiles: Set<String>,
+    onSelectionChange: (Set<String>) -> Unit,
     onToggleMod: (LocalMod) -> Unit,
     onDeleteMod: (LocalMod) -> Unit,
+    onBulkToggle: (List<String>, Boolean) -> Unit,
+    onBulkDelete: (List<String>) -> Unit,
     onBrowseClick: () -> Unit
 ) {
-    val filtered = installedMods.filter { mod ->
-        val matchesSearch = localSearch.isBlank() ||
+    val filtered = remember(installedMods, localSearch, localFilter) {
+        installedMods.filter { mod ->
+            val matchesSearch = localSearch.isBlank() ||
                 mod.name.contains(localSearch, ignoreCase = true) ||
-                mod.fileName.contains(localSearch, ignoreCase = true)
-        val matchesFilter = when (localFilter) {
-            "ENABLED" -> mod.enabled
-            "DISABLED" -> !mod.enabled
-            else -> true
+                mod.fileName.contains(localSearch, ignoreCase = true) ||
+                mod.id.contains(localSearch, ignoreCase = true)
+            val matchesFilter = when (localFilter) {
+                "ENABLED" -> mod.enabled
+                "DISABLED" -> !mod.enabled
+                else -> true
+            }
+            matchesSearch && matchesFilter
         }
-        matchesSearch && matchesFilter
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // Search & Filter Toolbar
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Search & Filter Bar
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Search field
             TextField(
                 value = localSearch,
                 onValueChange = onSearchChange,
-                placeholder = { Text("Filter installed mods...", color = Color(0xFF666666), fontSize = 13.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF666666), modifier = Modifier.size(16.dp)) },
+                placeholder = { Text("Search installed mods...", color = Color(0xFF64748B), fontSize = 13.sp) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF64748B), modifier = Modifier.size(16.dp)) },
                 trailingIcon = {
                     if (localSearch.isNotBlank()) {
                         IconButton(onClick = { onSearchChange("") }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF666666), modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF64748B), modifier = Modifier.size(16.dp))
                         }
                     }
                 },
                 modifier = Modifier
-                    .weight(1f)
-                    .height(44.dp)
+                    .width(280.dp)
+                    .height(38.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF141414)),
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp)),
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFF141414),
-                    unfocusedContainerColor = Color(0xFF141414),
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
+                    focusedContainerColor = Color(0xFF101318),
+                    unfocusedContainerColor = Color(0xFF101318),
                     focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
+                    unfocusedTextColor = Color.White,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent
                 ),
                 singleLine = true
             )
 
-            // Status Filter Chips
+            // Enabled/Disabled Filter Chips
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF141414))
-                    .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp))
                     .padding(3.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                listOf("ALL" to "All", "ENABLED" to "Enabled", "DISABLED" to "Disabled").forEach { (key, label) ->
+                listOf(
+                    "ALL" to "All (${installedMods.size})",
+                    "ENABLED" to "Enabled (${installedMods.count { it.enabled }})",
+                    "DISABLED" to "Disabled (${installedMods.count { !it.enabled }})"
+                ).forEach { (key, label) ->
                     val isSelected = localFilter == key
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(if (isSelected) Color(0xFF242424) else Color.Transparent)
+                            .background(if (isSelected) Color(0xFF1A1E29) else Color.Transparent)
+                            .border(1.dp, if (isSelected) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
                             .clickable { onFilterChange(key) }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
                             text = label,
-                            color = if (isSelected) Color.White else Color(0xFF888888),
+                            color = if (isSelected) Color.White else Color(0xFF94A3B8),
                             fontSize = 12.sp,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                         )
                     }
                 }
             }
         }
 
+        // Bulk Actions Bar (when mods are selected)
+        if (selectedModFiles.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF141720))
+                    .border(1.dp, Color(0xFF222735), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "${selectedModFiles.size} mods selected",
+                            color = Color.White,
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFF101318))
+                                .clickable { onSelectionChange(emptySet()) }
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text("Clear Selection", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        EzzButton(
+                            text = "Enable",
+                            onClick = {
+                                onBulkToggle(selectedModFiles.toList(), true)
+                                onSelectionChange(emptySet())
+                            },
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.SMALL
+                        )
+                        EzzButton(
+                            text = "Disable",
+                            onClick = {
+                                onBulkToggle(selectedModFiles.toList(), false)
+                                onSelectionChange(emptySet())
+                            },
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.SMALL
+                        )
+                        EzzButton(
+                            text = "Delete",
+                            onClick = {
+                                onBulkDelete(selectedModFiles.toList())
+                                onSelectionChange(emptySet())
+                            },
+                            variant = EzzButtonVariant.DANGER,
+                            size = EzzButtonSize.SMALL
+                        )
+                    }
+                }
+            }
+        }
+
+        // Mod Rows or Tailored Empty State
         if (filtered.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(260.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF121212))
-                    .border(1.dp, Color(0xFF1E1E1E), RoundedCornerShape(12.dp)),
+                    .height(280.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.padding(24.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Extension,
-                        contentDescription = null,
-                        tint = Color(0xFF444444),
-                        modifier = Modifier.size(44.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF141720))
+                            .border(1.dp, Color(0xFF222735), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Extension,
+                            contentDescription = null,
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                    Text(
+                        text = if (installedMods.isEmpty()) "No Mods Installed" else "No Matching Mods Found",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
                     )
                     Text(
-                        text = if (installedMods.isEmpty()) "No mods installed in this instance." else "No mods matched your filter.",
-                        color = Color(0xFF888888),
-                        fontSize = 14.sp
+                        text = if (installedMods.isEmpty())
+                            "Install mods from Modrinth or drop .jar files into your mods folder."
+                        else
+                            "Try searching with a different name or clearing your active filters.",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 12.5.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                     if (installedMods.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color.White)
-                                .clickable { onBrowseClick() }
-                                .padding(horizontal = 16.dp, vertical = 10.dp)
-                        ) {
-                            Text("Browse Modrinth Mods", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            EzzButton(
+                                text = "Browse Modrinth",
+                                onClick = onBrowseClick,
+                                icon = Icons.Default.Download,
+                                variant = EzzButtonVariant.PRIMARY,
+                                size = EzzButtonSize.MEDIUM
+                            )
+                            EzzButton(
+                                text = "Open Mods Folder",
+                                onClick = {
+                                    val modsDir = viewModel.pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("mods").toFile()
+                                    if (!modsDir.exists()) modsDir.mkdirs()
+                                    viewModel.platformBridge.openFolder(modsDir.absolutePath.toPath())
+                                },
+                                icon = Icons.Default.FolderOpen,
+                                variant = EzzButtonVariant.SECONDARY,
+                                size = EzzButtonSize.MEDIUM
+                            )
                         }
                     }
                 }
@@ -425,8 +623,17 @@ private fun InstalledModsView(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(filtered, key = { it.fileName }) { mod ->
+                    val isSelected = selectedModFiles.contains(mod.fileName)
                     InstalledModRow(
                         mod = mod,
+                        instance = instance,
+                        viewModel = viewModel,
+                        isSelected = isSelected,
+                        onSelectToggle = {
+                            onSelectionChange(
+                                if (isSelected) selectedModFiles - mod.fileName else selectedModFiles + mod.fileName
+                            )
+                        },
                         onToggle = { onToggleMod(mod) },
                         onDelete = { onDeleteMod(mod) }
                     )
@@ -439,16 +646,22 @@ private fun InstalledModsView(
 @Composable
 private fun InstalledModRow(
     mod: LocalMod,
+    instance: Instance,
+    viewModel: AppViewModel,
+    isSelected: Boolean,
+    onSelectToggle: () -> Unit,
     onToggle: () -> Unit,
     onDelete: () -> Unit
 ) {
+    var showMenu by remember { mutableStateOf(false) }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF141414))
-            .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .background(Color(0xFF101318))
+            .border(1.dp, if (isSelected) Color.White else Color(0xFF1A1D26), RoundedCornerShape(8.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -460,52 +673,57 @@ private fun InstalledModRow(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (mod.enabled) Color(0xFF1E1E1E) else Color(0xFF161616))
-                        .border(1.dp, Color(0xFF2A2A2A), RoundedCornerShape(6.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Extension,
-                        contentDescription = null,
-                        tint = if (mod.enabled) Color(0xFF4CAF50) else Color(0xFF666666),
-                        modifier = Modifier.size(18.dp)
+                // Checkbox for bulk actions
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onSelectToggle() },
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = Color.White,
+                        checkmarkColor = Color(0xFF07080A),
+                        uncheckedColor = Color(0xFF64748B)
                     )
-                }
+                )
 
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                // Real Thumbnail on Left
+                ModrinthAsyncImage(
+                    url = mod.iconPath,
+                    imageLoader = viewModel.imageLoader,
+                    placeholderIcon = Icons.Default.Extension,
+                    modifier = Modifier.size(46.dp),
+                    shape = RoundedCornerShape(8.dp)
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
                             text = mod.name,
-                            color = if (mod.enabled) Color.White else Color(0xFF777777),
-                            fontSize = 14.sp,
+                            color = if (mod.enabled) Color.White else Color(0xFF64748B),
+                            fontSize = 13.5.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                         if (mod.version.isNotBlank()) {
                             Text(
                                 text = "v${mod.version}",
-                                color = Color(0xFF888888),
+                                color = Color(0xFF94A3B8),
                                 fontSize = 11.sp
                             )
                         }
                     }
                     Text(
-                        text = mod.fileName,
-                        color = Color(0xFF555555),
-                        fontSize = 12.sp
+                        text = if (!mod.description.isNullOrBlank()) mod.description!! else mod.fileName,
+                        color = Color(0xFF64748B),
+                        fontSize = 11.5.sp,
+                        maxLines = 1
                     )
                 }
             }
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // Enable/Disable Switch
                 Switch(
@@ -513,23 +731,78 @@ private fun InstalledModRow(
                     onCheckedChange = { onToggle() },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
-                        checkedTrackColor = Color(0xFF2E7D32),
-                        uncheckedThumbColor = Color(0xFF888888),
-                        uncheckedTrackColor = Color(0xFF242424),
-                        uncheckedBorderColor = Color(0xFF333333)
+                        checkedTrackColor = Color(0xFF10B981),
+                        uncheckedThumbColor = Color(0xFF94A3B8),
+                        uncheckedTrackColor = Color(0xFF141720),
+                        uncheckedBorderColor = Color(0xFF222735)
                     )
                 )
 
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete Mod",
-                        tint = Color(0xFFE53935),
-                        modifier = Modifier.size(16.dp)
-                    )
+                val isEzzSkinMod = mod.fileName.startsWith("ezz-skin-mod", ignoreCase = true) || mod.id.contains("ezzskin", ignoreCase = true)
+
+                // Three-dot Action Menu
+                Box {
+                    IconButton(
+                        onClick = { showMenu = true },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Mod Actions",
+                            tint = Color(0xFFCBD5E1),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                        modifier = Modifier
+                            .background(Color(0xFF141720))
+                            .border(1.dp, Color(0xFF222735), RoundedCornerShape(8.dp))
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(if (mod.enabled) "Disable Mod" else "Enable Mod", color = Color.White, fontSize = 13.sp) },
+                            leadingIcon = {
+                                Icon(
+                                    if (mod.enabled) Icons.Default.ToggleOff else Icons.Default.ToggleOn,
+                                    contentDescription = null,
+                                    tint = if (mod.enabled) Color(0xFF94A3B8) else Color(0xFF10B981),
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            },
+                            onClick = {
+                                showMenu = false
+                                onToggle()
+                            }
+                        )
+
+                        DropdownMenuItem(
+                            text = { Text("Open File Location", color = Color.White, fontSize = 13.sp) },
+                            leadingIcon = {
+                                Icon(Icons.Default.FolderOpen, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
+                            },
+                            onClick = {
+                                showMenu = false
+                                val modsDir = viewModel.pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("mods").toFile()
+                                if (!modsDir.exists()) modsDir.mkdirs()
+                                viewModel.platformBridge.openFolder(modsDir.absolutePath.toPath())
+                            }
+                        )
+
+                        if (!isEzzSkinMod) {
+                            DropdownMenuItem(
+                                text = { Text("Delete Mod", color = Color(0xFFEF4444), fontSize = 13.sp) },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(15.dp))
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    onDelete()
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -542,11 +815,12 @@ private fun BrowseModsView(
     instance: Instance,
     viewModel: AppViewModel,
     browseState: io.ezz.launcher.core.model.modrinth.ModrinthBrowseState,
+    onInspect: (ModrinthProjectHit) -> Unit,
     onInstall: (ModrinthProjectHit) -> Unit
 ) {
     var searchQuery by remember(browseState.searchQuery) { mutableStateOf(browseState.searchQuery) }
 
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // Search & Filter Bar
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -559,26 +833,27 @@ private fun BrowseModsView(
                     searchQuery = it
                     viewModel.searchMods(query = it, debounceMs = 350L)
                 },
-                placeholder = { Text("Search Modrinth mods (e.g. Sodium, Iris, FerriteCore)...", color = Color(0xFF666666), fontSize = 13.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF666666), modifier = Modifier.size(16.dp)) },
+                placeholder = { Text("Search Modrinth mods (e.g. Sodium, Iris, FerriteCore)...", color = Color(0xFF94A3B8), fontSize = 13.sp) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(16.dp)) },
                 trailingIcon = {
                     if (searchQuery.isNotBlank()) {
                         IconButton(onClick = {
                             searchQuery = ""
                             viewModel.searchMods(query = "")
                         }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF666666), modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF94A3B8), modifier = Modifier.size(16.dp))
                         }
                     }
                 },
                 modifier = Modifier
                     .weight(1f)
-                    .height(44.dp)
+                    .height(42.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF141414)),
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp)),
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFF141414),
-                    unfocusedContainerColor = Color(0xFF141414),
+                    focusedContainerColor = Color(0xFF101318),
+                    unfocusedContainerColor = Color(0xFF101318),
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                     focusedTextColor = Color.White,
@@ -587,12 +862,12 @@ private fun BrowseModsView(
                 singleLine = true
             )
 
-            // Sort Options Dropdown/Pill Strip
+            // Sort Options
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF141414))
-                    .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp))
                     .padding(3.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
@@ -606,15 +881,16 @@ private fun BrowseModsView(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(if (isSelected) Color(0xFF242424) else Color.Transparent)
+                            .background(if (isSelected) Color(0xFF1A1E29) else Color.Transparent)
+                            .border(1.dp, if (isSelected) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
                             .clickable { viewModel.searchMods(sort = sortKey) }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
                             text = sortLabel,
-                            color = if (isSelected) Color.White else Color(0xFF888888),
+                            color = if (isSelected) Color.White else Color(0xFF94A3B8),
                             fontSize = 12.sp,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                         )
                     }
                 }
@@ -626,9 +902,9 @@ private fun BrowseModsView(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text("Filtering for:", color = Color(0xFF666666), fontSize = 12.sp)
-            FilterBadge(text = "MC ${instance.minecraftVersion}", color = Color(0xFF1976D2))
-            FilterBadge(text = instance.loaderType.name, color = Color(0xFF388E3C))
+            Text("Filtered for:", color = Color(0xFF94A3B8), fontSize = 11.5.sp)
+            FilterBadge(text = "MC ${instance.minecraftVersion}", color = Color.White)
+            FilterBadge(text = instance.loaderType.name, color = Color(0xFF10B981))
         }
 
         // Results Container
@@ -646,26 +922,23 @@ private fun BrowseModsView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(240.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF141414))
-                    .border(1.dp, Color(0xFF222222), RoundedCornerShape(12.dp)),
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFE53935), modifier = Modifier.size(36.dp))
-                    Text(browseState.error ?: "Error fetching mods", color = Color(0xFF888888), fontSize = 13.sp)
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFF222222))
-                            .clickable { viewModel.searchMods() }
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
-                    ) {
-                        Text("Retry", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
+                    Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(36.dp))
+                    Text(browseState.error ?: "Error fetching mods", color = Color(0xFF94A3B8), fontSize = 13.sp)
+                    EzzButton(
+                        text = "Retry",
+                        onClick = { viewModel.searchMods() },
+                        variant = EzzButtonVariant.SECONDARY,
+                        size = EzzButtonSize.SMALL
+                    )
                 }
             }
         } else if (browseState.items.isEmpty()) {
@@ -673,22 +946,23 @@ private fun BrowseModsView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(240.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF141414))
-                    .border(1.dp, Color(0xFF222222), RoundedCornerShape(12.dp)),
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No mods found matching your query.", color = Color(0xFF888888), fontSize = 14.sp)
+                Text("No mods found matching your query.", color = Color(0xFF94A3B8), fontSize = 14.sp)
             }
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(browseState.items, key = { it.projectId }) { hit ->
                     ModBrowseCard(
                         hit = hit,
                         viewModel = viewModel,
+                        onInspect = { onInspect(hit) },
                         onInstall = { onInstall(hit) }
                     )
                 }
@@ -712,6 +986,7 @@ private fun BrowseModsView(
 private fun ModBrowseCard(
     hit: ModrinthProjectHit,
     viewModel: AppViewModel,
+    onInspect: () -> Unit,
     onInstall: () -> Unit
 ) {
     val isInstalled = viewModel.isModInstalled(hit)
@@ -720,8 +995,9 @@ private fun ModBrowseCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(Color(0xFF141414))
-            .border(1.dp, Color(0xFF222222), RoundedCornerShape(10.dp))
+            .background(Color(0xFF101318))
+            .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp))
+            .clickable { onInspect() }
             .padding(14.dp)
     ) {
         Row(
@@ -737,7 +1013,7 @@ private fun ModBrowseCard(
                 ModrinthAsyncImage(
                     url = hit.previewImageUrl,
                     imageLoader = viewModel.imageLoader,
-                    modifier = Modifier.size(52.dp),
+                    modifier = Modifier.size(50.dp).clip(RoundedCornerShape(6.dp)),
                     placeholderIcon = Icons.Default.Extension,
                     contentScale = ContentScale.Crop
                 )
@@ -753,22 +1029,22 @@ private fun ModBrowseCard(
                         Text(
                             text = hit.title,
                             color = Color.White,
-                            fontSize = 15.sp,
+                            fontSize = 14.5.sp,
                             fontWeight = FontWeight.Bold
                         )
                         if (hit.author.isNotBlank()) {
                             Text(
                                 text = "by ${hit.author}",
-                                color = Color(0xFF777777),
-                                fontSize = 12.sp
+                                color = Color(0xFF94A3B8),
+                                fontSize = 11.5.sp
                             )
                         }
                     }
 
                     Text(
                         text = hit.description,
-                        color = Color(0xFFAAAAAA),
-                        fontSize = 13.sp,
+                        color = Color(0xFFCBD5E1),
+                        fontSize = 12.5.sp,
                         maxLines = 2
                     )
 
@@ -779,7 +1055,7 @@ private fun ModBrowseCard(
                     ) {
                         Text(
                             text = "${formatDownloads(hit.downloads)} downloads",
-                            color = Color(0xFF777777),
+                            color = Color(0xFF94A3B8),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium
                         )
@@ -788,12 +1064,13 @@ private fun ModBrowseCard(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
-                                    .background(Color(0xFF202020))
+                                    .background(Color(0xFF141720))
+                                    .border(1.dp, Color(0xFF222735), RoundedCornerShape(4.dp))
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
                                     text = cat,
-                                    color = Color(0xFF888888),
+                                    color = Color(0xFFCBD5E1),
                                     fontSize = 10.sp
                                 )
                             }
@@ -804,60 +1081,54 @@ private fun ModBrowseCard(
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            // Action Button
-            if (isInstalled) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFF1E281E))
-                        .border(1.dp, Color(0xFF2E7D32).copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+            // Action Buttons
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                EzzButton(
+                    text = "Details",
+                    onClick = onInspect,
+                    variant = EzzButtonVariant.SECONDARY,
+                    size = EzzButtonSize.SMALL
+                )
+
+                if (isInstalled) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF10B981).copy(alpha = 0.15f))
+                            .border(1.dp, Color(0xFF10B981), RoundedCornerShape(6.dp))
+                            .clickable { onInstall() }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            tint = Color(0xFF4CAF50),
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = "INSTALLED",
-                            color = Color(0xFF4CAF50),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = Color(0xFF10B981),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "INSTALLED",
+                                color = Color(0xFF10B981),
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
-                }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color.White)
-                        .clickable { onInstall() }
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Download,
-                            contentDescription = null,
-                            tint = Color.Black,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = "INSTALL",
-                            color = Color.Black,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                } else {
+                    EzzButton(
+                        text = "INSTALL",
+                        onClick = onInstall,
+                        icon = Icons.Default.Download,
+                        variant = EzzButtonVariant.PRIMARY,
+                        size = EzzButtonSize.SMALL
+                    )
                 }
             }
         }
@@ -876,9 +1147,9 @@ private fun ModUpdatesView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(240.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF141414))
-                    .border(1.dp, Color(0xFF222222), RoundedCornerShape(12.dp)),
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
@@ -886,15 +1157,15 @@ private fun ModUpdatesView(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Check,
+                        imageVector = Icons.Default.CheckCircle,
                         contentDescription = null,
-                        tint = Color(0xFF4CAF50),
+                        tint = Color(0xFF10B981),
                         modifier = Modifier.size(36.dp)
                     )
                     Text(
                         text = if (isChecking) "Checking Modrinth for mod updates..." else "All installed mods are up to date!",
-                        color = Color(0xFF888888),
-                        fontSize = 14.sp
+                        color = Color(0xFF94A3B8),
+                        fontSize = 13.5.sp
                     )
                 }
             }
@@ -908,8 +1179,8 @@ private fun ModUpdatesView(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF141414))
-                            .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
+                            .background(Color(0xFF101318))
+                            .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp))
                             .padding(14.dp)
                     ) {
                         Row(
@@ -926,25 +1197,17 @@ private fun ModUpdatesView(
                                 )
                                 Text(
                                     text = "Installed: ${candidate.localMod.version}  →  Latest: ${candidate.latestVersion.versionNumber}",
-                                    color = Color(0xFFFFA500),
+                                    color = Color(0xFFF59E0B),
                                     fontSize = 12.sp
                                 )
                             }
 
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(Color(0xFFFFA500))
-                                    .clickable { onUpdateMod(candidate) }
-                                    .padding(horizontal = 14.dp, vertical = 8.dp)
-                            ) {
-                                Text(
-                                    text = "UPDATE",
-                                    color = Color.Black,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                            EzzButton(
+                                text = "UPDATE",
+                                onClick = { onUpdateMod(candidate) },
+                                variant = EzzButtonVariant.PRIMARY,
+                                size = EzzButtonSize.SMALL
+                            )
                         }
                     }
                 }
@@ -958,11 +1221,11 @@ private fun FilterBadge(text: String, color: Color) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(color.copy(alpha = 0.15f))
-            .border(1.dp, color.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
-            .padding(horizontal = 6.dp, vertical = 2.dp)
+            .background(Color(0xFF141720))
+            .border(1.dp, Color(0xFF222735), RoundedCornerShape(4.dp))
+            .padding(horizontal = 7.dp, vertical = 2.dp)
     ) {
-        Text(text = text, color = color, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Text(text = text, color = color, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 

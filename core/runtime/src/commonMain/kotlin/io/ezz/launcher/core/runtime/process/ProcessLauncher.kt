@@ -1,5 +1,6 @@
 package io.ezz.launcher.core.runtime.process
 
+import io.ezz.launcher.core.model.instance.ProcessPriority
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -22,7 +23,8 @@ interface ProcessLauncher {
     fun launch(
         command: List<String>,
         workingDirectory: File,
-        environment: Map<String, String> = emptyMap()
+        environment: Map<String, String> = emptyMap(),
+        processPriority: ProcessPriority = ProcessPriority.NORMAL
     ): Flow<ProcessEvent>
 }
 
@@ -33,7 +35,8 @@ class DesktopProcessLauncher(
     override fun launch(
         command: List<String>,
         workingDirectory: File,
-        environment: Map<String, String>
+        environment: Map<String, String>,
+        processPriority: ProcessPriority
     ): Flow<ProcessEvent> = channelFlow {
         var process: Process? = null
         try {
@@ -50,6 +53,23 @@ class DesktopProcessLauncher(
                 0L
             }
             send(ProcessEvent.Started(pid))
+
+            // Safely set process priority on Windows if requested
+            if (pid > 0L && processPriority == ProcessPriority.ABOVE_NORMAL) {
+                launch(dispatcher) {
+                    try {
+                        val isWin = System.getProperty("os.name")?.lowercase()?.contains("win") ?: false
+                        if (isWin) {
+                            ProcessBuilder("cmd.exe", "/c", "wmic process where processid=$pid CALL setpriority 32768")
+                                .redirectErrorStream(true)
+                                .start()
+                                .waitFor()
+                        }
+                    } catch (_: Throwable) {
+                        // Ignore priority setting error
+                    }
+                }
+            }
 
             // Launch concurrent stdout reader
             val stdoutJob = launch(dispatcher) {

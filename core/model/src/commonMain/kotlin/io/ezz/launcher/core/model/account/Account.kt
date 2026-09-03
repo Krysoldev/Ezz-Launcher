@@ -22,6 +22,10 @@ sealed interface Account {
     val skinHash: String?
 }
 
+/**
+ * Standard offline player account.
+ * Uses deterministic offline UUID: UUID.nameUUIDFromBytes("OfflinePlayer:<username>")
+ */
 @Serializable
 data class OfflineAccount(
     override val id: String,
@@ -37,6 +41,9 @@ data class OfflineAccount(
     override val type: AccountType = AccountType.OFFLINE
 }
 
+/**
+ * Official Microsoft OAuth Minecraft account.
+ */
 @Serializable
 data class MicrosoftAccount(
     override val id: String,
@@ -45,6 +52,7 @@ data class MicrosoftAccount(
     val msaRefreshToken: String,
     val mcAccessToken: String,
     val expiresAt: Long,
+    val msalAccountId: String? = null,
     override val avatarUrl: String? = null,
     override val skinUrl: String? = null,
     override val skinModel: String? = null,

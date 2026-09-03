@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -31,6 +34,7 @@ import javax.imageio.ImageIO
  * - Extracts and renders the actual Minecraft skin head with hat overlay.
  * - Scales with FilterQuality.None (Nearest-Neighbor) for razor-sharp pixel art.
  * - Supports any DPI scaling without blur.
+ * - Features an elegant, clean fallback player avatar when skin is loading or unavailable.
  */
 @Composable
 fun MinecraftSkinHead(
@@ -54,9 +58,9 @@ fun MinecraftSkinHead(
     Box(
         modifier = modifier
             .size(size)
-            .clip(RoundedCornerShape(6.dp))
-            .background(Color(0xFF161616))
-            .border(1.dp, Color(0xFF2A2A2A), RoundedCornerShape(6.dp)),
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFF141720))
+            .border(1.dp, Color(0xFF262C3D), RoundedCornerShape(8.dp)),
         contentAlignment = Alignment.Center
     ) {
         if (imageBitmap != null) {
@@ -65,7 +69,7 @@ fun MinecraftSkinHead(
                 contentDescription = "${account?.username ?: "Player"} Avatar Head",
                 modifier = Modifier
                     .fillMaxSize()
-                    .clip(RoundedCornerShape(6.dp)),
+                    .clip(RoundedCornerShape(8.dp)),
                 contentScale = ContentScale.Crop,
                 filterQuality = FilterQuality.None
             )
@@ -73,8 +77,16 @@ fun MinecraftSkinHead(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0xFF222222))
-            )
+                    .background(Color(0xFF161B24)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    tint = Color(0xFF64748B),
+                    modifier = Modifier.size(size * 0.58f)
+                )
+            }
         }
     }
 }

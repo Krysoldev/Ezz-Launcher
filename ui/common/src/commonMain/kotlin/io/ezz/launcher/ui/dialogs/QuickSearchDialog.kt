@@ -73,9 +73,9 @@ fun QuickSearchDialog(
         Card(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
-                .clip(RoundedCornerShape(8.dp))
-                .border(1.dp, Color(0xFF282828), RoundedCornerShape(8.dp)),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF0A0A0A))
+                .clip(RoundedCornerShape(10.dp))
+                .border(1.dp, Color(0xFF1B1E2D), RoundedCornerShape(10.dp)),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0E1018))
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 // Header search
@@ -111,7 +111,7 @@ fun QuickSearchDialog(
                         item {
                             Text(
                                 text = "INSTANCES",
-                                color = Color(0xFF777777),
+                                color = Color(0xFFA5B4FC),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(vertical = 4.dp)
@@ -122,8 +122,9 @@ fun QuickSearchDialog(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Color(0xFF141414))
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFF10121D))
+                                    .border(1.dp, Color(0xFF1B1E2D), RoundedCornerShape(6.dp))
                                     .clickable {
                                         viewModel.selectInstance(inst)
                                         viewModel.navigateTo(NavigationScreen.HOME)
@@ -137,13 +138,13 @@ fun QuickSearchDialog(
                                     Icon(
                                         imageVector = Icons.Default.Apps,
                                         contentDescription = null,
-                                        tint = Color.White,
+                                        tint = Color(0xFFA5B4FC),
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column {
                                         Text(inst.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                        Text("Minecraft ${inst.minecraftVersion} • ${inst.loaderType.name}", color = Color(0xFF888888), fontSize = 11.sp)
+                                        Text("Minecraft ${inst.minecraftVersion} • ${inst.loaderType.name}", color = Color(0xFF64748B), fontSize = 11.sp)
                                     }
                                 }
 
@@ -167,7 +168,7 @@ fun QuickSearchDialog(
                         item {
                             Text(
                                 text = "MODS",
-                                color = Color(0xFF777777),
+                                color = Color(0xFFA5B4FC),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)
@@ -178,25 +179,29 @@ fun QuickSearchDialog(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Color(0xFF141414))
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFF10121D))
+                                    .border(1.dp, Color(0xFF1B1E2D), RoundedCornerShape(6.dp))
                                     .clickable {
-                                        viewModel.navigateTo(NavigationScreen.MODS)
+                                        viewModel.navigateTo(NavigationScreen.INSTANCES)
                                         onDismiss()
                                     }
                                     .padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Extension,
-                                    contentDescription = null,
-                                    tint = Color(0xFFA0A0A0),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(mod.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                                    Text(mod.fileName, color = Color(0xFF777777), fontSize = 11.sp)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Extension,
+                                        contentDescription = null,
+                                        tint = Color(0xFFA5B4FC),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(mod.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                        Text("v${mod.version} • ${mod.id}", color = Color(0xFF64748B), fontSize = 11.sp)
+                                    }
                                 }
                             }
                         }

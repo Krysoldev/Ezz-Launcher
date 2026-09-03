@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "io.ezz.skinmod.v1_16.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "client": [
+    "AbstractClientPlayerEntityMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

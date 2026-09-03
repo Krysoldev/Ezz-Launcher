@@ -87,8 +87,8 @@ fun EzzToggle(
                 .width(40.dp)
                 .height(22.dp)
                 .clip(RoundedCornerShape(11.dp))
-                .background(if (checked) Color.White else Color(0xFF171717))
-                .border(1.dp, if (checked) Color.White else Color(0xFF2E2E2E), RoundedCornerShape(11.dp)),
+                .background(if (checked) Color(0xFFFFFFFF) else Color(0xFF141720))
+                .border(1.dp, if (checked) Color(0xFFFFFFFF) else Color(0xFF222735), RoundedCornerShape(11.dp)),
             contentAlignment = Alignment.CenterStart
         ) {
             Box(
@@ -96,7 +96,7 @@ fun EzzToggle(
                     .offset(x = thumbOffset)
                     .size(16.dp)
                     .clip(CircleShape)
-                    .background(if (checked) Color(0xFF050505) else Color(0xFF777777))
+                    .background(if (checked) Color(0xFF07080A) else Color(0xFF64748B))
             )
         }
     }

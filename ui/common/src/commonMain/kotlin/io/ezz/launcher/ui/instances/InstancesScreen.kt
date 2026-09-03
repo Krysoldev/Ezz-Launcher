@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -28,12 +29,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,22 +48,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import io.ezz.launcher.core.model.instance.Instance
-import io.ezz.launcher.core.model.instance.LoaderType
 import io.ezz.launcher.ui.components.CompactRuntimeBadge
-import io.ezz.launcher.ui.components.EzzBadge
-import io.ezz.launcher.ui.components.EzzBadgeVariant
 import io.ezz.launcher.ui.components.EzzButton
 import io.ezz.launcher.ui.components.EzzButtonSize
 import io.ezz.launcher.ui.components.EzzButtonVariant
 import io.ezz.launcher.ui.components.EzzEmptyState
-import io.ezz.launcher.ui.components.EzzIconButton
-import io.ezz.launcher.ui.components.EzzLoaderBadge
-import io.ezz.launcher.ui.components.EzzSearchField
-import io.ezz.launcher.ui.theme.EzzTheme
+import io.ezz.launcher.ui.components.InstanceArtworkIcon
+import io.ezz.launcher.ui.components.RuntimeDisplay
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 import io.ezz.launcher.ui.viewmodel.NavigationScreen
 
@@ -74,98 +73,205 @@ fun InstancesScreen(
     val instances by viewModel.instanceRepository.instances.collectAsState()
     val selectedInstance by viewModel.selectedInstance.collectAsState()
     val runningSessions by viewModel.runningSessions.collectAsState()
-    val filteredInstances = instances
 
-    Column(
+    var instanceToDelete by remember { mutableStateOf<Instance?>(null) }
+
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF0A0A0A))
-            .padding(24.dp)
+            .background(Color(0xFF07080A)),
+        contentAlignment = Alignment.TopCenter
     ) {
-        // Header Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .widthIn(max = 1200.dp)
+                .padding(horizontal = 24.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "INSTANCES",
-                        color = Color.White,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 0.5.sp
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    EzzBadge(
-                        text = "${instances.size}",
-                        variant = EzzBadgeVariant.NEUTRAL
-                    )
-                }
-                Text(
-                    text = "Isolated Minecraft environments, custom profiles, and mod configurations",
-                    color = Color(0xFF888888),
-                    fontSize = 12.sp
-                )
-            }
-
-            EzzButton(
-                text = "+ Create Instance",
-                onClick = { viewModel.showCreateInstanceDialog.value = true },
-                variant = EzzButtonVariant.PRIMARY,
-                size = EzzButtonSize.MEDIUM
-            )
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Instance Grid / Empty State
-        if (filteredInstances.isEmpty()) {
+            // 1. Header Card
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF0D0D0D))
-                    .border(1.dp, Color(0xFF1E1E1E), RoundedCornerShape(8.dp)),
-                contentAlignment = Alignment.Center
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 18.dp, vertical = 14.dp)
             ) {
-                EzzEmptyState(
-                    title = "No instances found",
-                    description = "Create your first Minecraft instance to get started.",
-                    actionLabel = "+ Create Instance",
-                    onAction = { viewModel.showCreateInstanceDialog.value = true }
-                )
-            }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 320.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(filteredInstances, key = { it.id }) { instance ->
-                    val instStartedAt = runningSessions[instance.id]?.startedAt
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "INSTANCES",
+                                color = Color.White,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.6.sp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF141720))
+                                    .border(1.dp, Color(0xFF222735), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "${instances.size}",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Isolated Minecraft environments, custom profiles, and mod configurations",
+                            color = Color(0xFF64748B),
+                            fontSize = 12.sp
+                        )
+                    }
 
-                    InstanceGridCard(
-                        instance = instance,
-                        isSelected = instance.id == selectedInstance?.id,
-                        startedAt = instStartedAt,
-                        onSelect = { viewModel.selectInstance(instance) },
-                        onPlay = {
-                            viewModel.selectInstance(instance)
-                            viewModel.launchInstance(instance)
-                            viewModel.navigateTo(NavigationScreen.HOME)
-                        },
-                        onManage = {
-                            viewModel.openInstanceManager(instance)
-                        },
-                        onEdit = { viewModel.showEditInstanceDialog.value = instance },
-                        onDuplicate = { viewModel.duplicateInstance(instance.id, "${instance.name} (Copy)") },
-                        onOpenFolder = { viewModel.openInstanceFolder(instance.id) },
-                        onDelete = { viewModel.deleteInstance(instance.id) }
+                    // Header Action Buttons
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        EzzButton(
+                            text = "Create Instance",
+                            onClick = { viewModel.showCreateInstanceDialog.value = true },
+                            icon = Icons.Default.Add,
+                            variant = EzzButtonVariant.PRIMARY,
+                            size = EzzButtonSize.MEDIUM
+                        )
+
+                        EzzButton(
+                            text = "Import",
+                            onClick = { viewModel.openImportModpack() },
+                            icon = Icons.Default.FileDownload,
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.MEDIUM
+                        )
+
+                        EzzButton(
+                            text = "Browse",
+                            onClick = { viewModel.showModpackBrowserDialog.value = true },
+                            icon = Icons.Default.GridView,
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.MEDIUM
+                        )
+                    }
+                }
+            }
+
+            // 2. Instance Grid / Empty State
+            if (instances.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF101318))
+                        .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    EzzEmptyState(
+                        title = "No Minecraft instances yet",
+                        description = "Create your first instance, import a .mrpack, or browse community modpacks.",
+                        actionLabel = "＋ Create Instance",
+                        onAction = { viewModel.showCreateInstanceDialog.value = true }
                     )
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 340.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(instances, key = { it.id }) { instance ->
+                        val instStartedAt = runningSessions[instance.id]?.startedAt
+
+                        InstanceGridCard(
+                            instance = instance,
+                            isSelected = instance.id == selectedInstance?.id,
+                            startedAt = instStartedAt,
+                            onSelect = { viewModel.selectInstance(instance) },
+                            onPlay = {
+                                viewModel.selectInstance(instance)
+                                viewModel.launchInstance(instance)
+                                viewModel.navigateTo(NavigationScreen.HOME)
+                            },
+                            onManage = {
+                                viewModel.openInstanceManager(instance)
+                            },
+                            onEdit = { viewModel.showEditInstanceDialog.value = instance },
+                            onDuplicate = { viewModel.duplicateInstance(instance.id, "${instance.name} (Copy)") },
+                            onExport = { viewModel.openExportModpack(instance) },
+                            onOpenFolder = { viewModel.openInstanceFolder(instance.id) },
+                            onDelete = { instanceToDelete = instance }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // Delete Confirmation Dialog
+    if (instanceToDelete != null) {
+        val target = instanceToDelete!!
+        Dialog(
+            onDismissRequest = { instanceToDelete = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(420.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp))
+                    .padding(22.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text(
+                        text = "Delete Instance",
+                        color = Color.White,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Are you sure you want to delete \"${target.name}\"? All worlds, mods, and instance settings will be permanently removed.",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        EzzButton(
+                            text = "Cancel",
+                            onClick = { instanceToDelete = null },
+                            variant = EzzButtonVariant.GHOST,
+                            size = EzzButtonSize.SMALL
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        EzzButton(
+                            text = "Delete",
+                            onClick = {
+                                val id = target.id
+                                instanceToDelete = null
+                                viewModel.deleteInstance(id)
+                            },
+                            variant = EzzButtonVariant.DANGER,
+                            size = EzzButtonSize.SMALL
+                        )
+                    }
                 }
             }
         }
@@ -182,6 +288,7 @@ private fun InstanceGridCard(
     onManage: () -> Unit,
     onEdit: () -> Unit,
     onDuplicate: () -> Unit,
+    onExport: () -> Unit,
     onOpenFolder: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -189,7 +296,7 @@ private fun InstanceGridCard(
     val isHovered by interactionSource.collectIsHoveredAsState()
 
     val scale by animateFloatAsState(
-        targetValue = if (isHovered) 1.01f else 1.0f,
+        targetValue = if (isHovered) 1.006f else 1.0f,
         animationSpec = tween(120)
     )
 
@@ -197,86 +304,118 @@ private fun InstanceGridCard(
         modifier = Modifier
             .scale(scale)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (isSelected) Color(0xFF181818) else Color(0xFF101010))
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (isSelected) Color(0xFF141720) else if (isHovered) Color(0xFF12151D) else Color(0xFF101318))
             .border(
                 1.dp,
-                if (isSelected) Color.White else if (isHovered) Color(0xFF383838) else Color(0xFF222222),
-                RoundedCornerShape(6.dp)
+                if (isSelected) Color.White.copy(alpha = 0.8f) else if (isHovered) Color(0xFF2E3648) else Color(0xFF1A1D26),
+                RoundedCornerShape(10.dp)
             )
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onSelect
             )
-            .padding(18.dp)
+            .padding(16.dp)
     ) {
-        Column {
-            // Header Row: Loader + MC Version
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Header Row: Instance Icon + Title + Status + Active Badge
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                EzzLoaderBadge(loaderType = instance.loaderType)
-
-                Text(
-                    text = "MC ${instance.minecraftVersion}",
-                    color = Color(0xFFA0A0A0),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Body: Icon + Title + RAM
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                io.ezz.launcher.ui.components.InstanceArtworkIcon(
+                InstanceArtworkIcon(
                     instance = instance,
-                    size = 44.dp,
-                    showBadge = false
+                    size = 44.dp
                 )
 
-                Spacer(modifier = Modifier.width(14.dp))
+                Spacer(modifier = Modifier.width(12.dp))
 
-                Column {
-                    Text(
-                        text = instance.name,
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1
-                    )
+                Column(modifier = Modifier.weight(1f)) {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 2.dp)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Memory,
-                            contentDescription = null,
-                            tint = Color(0xFF666666),
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "${instance.maxMemoryMb / 1024} GB RAM",
-                            color = Color(0xFF777777),
-                            fontSize = 11.sp
+                            text = instance.name,
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false
                         )
+
+                        if (isSelected) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF064E3B).copy(alpha = 0.5f))
+                                    .border(1.dp, Color(0xFF059669).copy(alpha = 0.4f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "Active Target",
+                                    color = Color(0xFF34D399),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    if (startedAt != null) {
+                        RuntimeDisplay(
+                            startedAt = startedAt,
+                            showPrefix = true,
+                            prefixText = "RUNNING",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            dotColor = Color(0xFF10B981)
+                        )
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF10B981))
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = "Ready to Play",
+                                color = Color(0xFF10B981),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            // Middle: Badges Row
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                GridPillBadge(text = "MC ${instance.minecraftVersion}")
+                GridPillBadge(text = instance.loaderType.name)
+                GridPillBadge(text = "${instance.maxMemoryMb} MB RAM")
+            }
 
-            // Action Buttons
+            // Bottom Action Toolbar
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // Left: Launch + Manage
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     if (startedAt != null) {
                         CompactRuntimeBadge(
                             startedAt = startedAt,
@@ -284,9 +423,9 @@ private fun InstanceGridCard(
                         )
                     } else {
                         EzzButton(
-                            text = "Launch",
-                            icon = Icons.Default.PlayArrow,
+                            text = "Play",
                             onClick = onPlay,
+                            icon = Icons.Default.PlayArrow,
                             variant = if (isSelected) EzzButtonVariant.PRIMARY else EzzButtonVariant.SECONDARY,
                             size = EzzButtonSize.SMALL
                         )
@@ -294,44 +433,111 @@ private fun InstanceGridCard(
 
                     EzzButton(
                         text = "Manage",
-                        icon = Icons.Default.Settings,
                         onClick = onManage,
                         variant = EzzButtonVariant.SECONDARY,
                         size = EzzButtonSize.SMALL
                     )
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    EzzIconButton(
+                // Right Action Icons
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    CardIconButton(
                         icon = Icons.Default.FolderOpen,
-                        onClick = onOpenFolder,
-                        contentDescription = "Open Directory",
-                        size = EzzButtonSize.SMALL,
-                        variant = EzzButtonVariant.GHOST
+                        tooltip = "Open Directory",
+                        onClick = onOpenFolder
                     )
-                    EzzIconButton(
+                    CardIconButton(
                         icon = Icons.Default.Edit,
-                        onClick = onEdit,
-                        contentDescription = "Edit Configuration",
-                        size = EzzButtonSize.SMALL,
-                        variant = EzzButtonVariant.GHOST
+                        tooltip = "Edit Config",
+                        onClick = onEdit
                     )
-                    EzzIconButton(
+                    CardIconButton(
                         icon = Icons.Default.ContentCopy,
-                        onClick = onDuplicate,
-                        contentDescription = "Duplicate Profile",
-                        size = EzzButtonSize.SMALL,
-                        variant = EzzButtonVariant.GHOST
+                        tooltip = "Duplicate",
+                        onClick = onDuplicate
                     )
-                    EzzIconButton(
+                    CardIconButton(
+                        icon = Icons.Default.FileUpload,
+                        tooltip = "Export (.zip)",
+                        onClick = onExport
+                    )
+                    CardIconButton(
                         icon = Icons.Default.Delete,
-                        onClick = onDelete,
-                        contentDescription = "Delete Profile",
-                        size = EzzButtonSize.SMALL,
-                        variant = EzzButtonVariant.DANGER
+                        tooltip = "Delete",
+                        isDanger = true,
+                        onClick = onDelete
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun GridPillBadge(text: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(Color(0xFF141720))
+            .border(1.dp, Color(0xFF222735), RoundedCornerShape(4.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Text(
+            text = text,
+            color = Color(0xFFCBD5E1),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            softWrap = false
+        )
+    }
+}
+
+@Composable
+private fun CardIconButton(
+    icon: ImageVector,
+    tooltip: String,
+    isDanger: Boolean = false,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+
+    Box(
+        modifier = Modifier
+            .size(30.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(
+                if (isHovered) {
+                    if (isDanger) Color(0xFF3B1216) else Color(0xFF181C28)
+                } else Color.Transparent
+            )
+            .border(
+                1.dp,
+                if (isHovered) {
+                    if (isDanger) Color(0xFFEF4444).copy(alpha = 0.5f) else Color(0xFF323A4E)
+                } else Color.Transparent,
+                RoundedCornerShape(6.dp)
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = tooltip,
+            tint = if (isHovered) {
+                if (isDanger) Color(0xFFEF4444) else Color.White
+            } else {
+                if (isDanger) Color(0xFF94A3B8) else Color(0xFF64748B)
+            },
+            modifier = Modifier.size(15.dp)
+        )
     }
 }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -92,15 +93,15 @@ fun SettingsScreen(
     Row(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF050505))
+            .background(Color(0xFF07080A))
     ) {
         // Settings Navigation Sidebar
         Column(
             modifier = Modifier
-                .width(220.dp)
+                .width(230.dp)
                 .fillMaxHeight()
-                .background(Color(0xFF0A0A0A))
-                .border(androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF202020)))
+                .background(Color(0xFF101318))
+                .border(androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1A1D26)))
                 .padding(18.dp)
         ) {
             Text(
@@ -112,7 +113,7 @@ fun SettingsScreen(
             )
             Text(
                 text = "Configuration & System",
-                color = Color(0xFF777777),
+                color = Color(0xFF64748B),
                 fontSize = 11.sp
             )
 
@@ -120,30 +121,45 @@ fun SettingsScreen(
 
             SettingsCategory.entries.forEach { category ->
                 val isSelected = activeCategory == category
+                val interactionSource = remember { MutableInteractionSource() }
+                val isHovered by interactionSource.collectIsHoveredAsState()
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(6.dp))
-                        .background(if (isSelected) Color(0xFF222222) else Color.Transparent)
-                        .clickable { activeCategory = category }
+                        .background(
+                            if (isSelected) Color(0xFF1A1E29)
+                            else if (isHovered) Color(0xFF141720)
+                            else Color.Transparent
+                        )
+                        .then(
+                            if (isSelected) Modifier.border(1.dp, Color.White, RoundedCornerShape(6.dp))
+                            else Modifier
+                        )
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                            onClick = { activeCategory = category }
+                        )
                         .padding(horizontal = 10.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = category.icon,
                         contentDescription = null,
-                        tint = if (isSelected) Color.White else Color(0xFF888888),
+                        tint = if (isSelected) Color.White else if (isHovered) Color.White else Color(0xFF94A3B8),
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = category.title,
-                        color = if (isSelected) Color.White else Color(0xFF888888),
+                        color = if (isSelected) Color.White else if (isHovered) Color.White else Color(0xFF94A3B8),
                         fontSize = 12.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                     )
                 }
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(3.dp))
             }
         }
 
@@ -173,7 +189,7 @@ fun SettingsScreen(
 private fun SectionHeader(title: String, subtitle: String) {
     Column(modifier = Modifier.padding(bottom = 18.dp)) {
         Text(text = title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black, letterSpacing = 0.3.sp)
-        Text(text = subtitle, color = Color(0xFF888888), fontSize = 12.sp)
+        Text(text = subtitle, color = Color(0xFF64748B), fontSize = 12.sp)
     }
 }
 
@@ -322,15 +338,15 @@ private fun AppearanceSettingsSection() {
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(if (isSelected) Color(0xFF222222) else Color(0xFF121212))
-                                .border(1.dp, if (isSelected) Color.White else Color(0xFF242424), RoundedCornerShape(6.dp))
+                                .background(if (isSelected) Color(0xFF1A1E29) else Color(0xFF141720))
+                                .border(1.dp, if (isSelected) Color.White else Color(0xFF222735), RoundedCornerShape(6.dp))
                                 .clickable { state.preset = preset }
                                 .padding(12.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = preset.displayName,
-                                color = if (isSelected) Color.White else Color(0xFF888888),
+                                color = if (isSelected) Color.White else Color(0xFF94A3B8),
                                 fontSize = 12.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                             )
@@ -553,8 +569,8 @@ private fun RepairSettingsSection(viewModel: AppViewModel) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFF101010))
-                            .border(1.dp, Color(0xFF242424), RoundedCornerShape(6.dp))
+                            .background(Color(0xFF141720))
+                            .border(1.dp, Color(0xFF222735), RoundedCornerShape(6.dp))
                             .padding(12.dp)
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -595,7 +611,7 @@ private fun DiagnosticsSettingsSection(viewModel: AppViewModel) {
                 onClick = {
                     val report = buildString {
                         appendLine("=== EZZ LAUNCHER DIAGNOSTIC REPORT ===")
-                        appendLine("Version: 1.0.0")
+                        appendLine("Version: 2.0.0")
                         appendLine("OS: $osName ($osArch)")
                         appendLine("Java: $javaVersion")
                         appendLine("Cores: $cores")
@@ -656,7 +672,7 @@ private fun AboutSettingsSection(viewModel: AppViewModel) {
                             Spacer(modifier = Modifier.width(5.dp))
                             Text("LAUNCHER", color = Color(0xFFD4D4D4), fontSize = 20.sp, fontWeight = FontWeight.Black, letterSpacing = 1.sp)
                         }
-                        Text("Version 1.0.0 (Windows Production Client)", color = Color(0xFF777777), fontSize = 12.sp)
+                        Text("Version 2.0.0 (Windows Production Client)", color = Color(0xFF777777), fontSize = 12.sp)
                     }
                 }
 

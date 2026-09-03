@@ -160,9 +160,11 @@ fun BottomPlayBar(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "${(selectedInstance?.maxMemoryMb ?: 4096) / 1024} GB RAM",
+                                text = "${(selectedInstance?.maxMemoryMb ?: 4096) / 1024}\u00A0GB\u00A0RAM",
                                 color = colors.textSecondary,
-                                fontSize = 12.sp
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }

@@ -3,6 +3,9 @@
 build/
 */build/
 */*/build/
+**/build/
+bin/
+**/bin/
 *.class
 
 # IDE and Editor files

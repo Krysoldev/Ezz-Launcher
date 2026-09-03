@@ -17,17 +17,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.OpenInBrowser
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,19 +35,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import io.ezz.launcher.core.auth.microsoft.MicrosoftLoginProgress
 import io.ezz.launcher.ui.components.EzzButton
 import io.ezz.launcher.ui.components.EzzButtonSize
 import io.ezz.launcher.ui.components.EzzButtonVariant
-import io.ezz.launcher.ui.components.EzzCard
 import io.ezz.launcher.ui.components.EzzIconButton
 import io.ezz.launcher.ui.components.EzzTextField
-import io.ezz.launcher.ui.components.ToastManager
-import io.ezz.launcher.ui.components.ToastType
-import io.ezz.launcher.ui.theme.EzzTheme
-import io.ezz.launcher.ui.viewmodel.AppViewModel
-import java.awt.Toolkit
-import java.awt.datatransfer.StringSelection
 
 @Composable
 fun AddOfflineAccountDialog(
@@ -67,9 +54,9 @@ fun AddOfflineAccountDialog(
             modifier = Modifier
                 .widthIn(max = 420.dp)
                 .fillMaxWidth(0.95f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF0A0A0A))
-                .border(1.dp, Color(0xFF282828), RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFF0F1217))
+                .border(1.dp, Color(0xFF212633), RoundedCornerShape(12.dp))
                 .padding(22.dp)
         ) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
@@ -78,18 +65,27 @@ fun AddOfflineAccountDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF181C26)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = "Add Offline Account",
                             color = Color.White,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 0.3.sp
-                        )
-                        Text(
-                            text = "Play offline without Microsoft authentication",
-                            color = Color(0xFF888888),
-                            fontSize = 12.sp
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
 
@@ -103,20 +99,36 @@ fun AddOfflineAccountDialog(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
+                Text(
+                    text = "Player Username",
+                    color = Color(0xFF94A3B8),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
                 EzzTextField(
                     value = username,
                     onValueChange = {
                         username = it
                         errorMessage = null
                     },
-                    label = "Minecraft Username",
                     placeholder = "e.g. Steve",
                     error = errorMessage,
-                    leadingIcon = Icons.Default.Person,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Offline accounts let you launch Minecraft without signing in to Microsoft. Skins and online authentication on official servers will not be available.",
+                    color = Color(0xFF64748B),
+                    fontSize = 11.5.sp,
+                    lineHeight = 16.sp
+                )
+
+                Spacer(modifier = Modifier.height(22.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -125,14 +137,14 @@ fun AddOfflineAccountDialog(
                     EzzButton(
                         text = "Cancel",
                         onClick = onDismiss,
-                        variant = EzzButtonVariant.GHOST,
+                        variant = EzzButtonVariant.SECONDARY,
                         size = EzzButtonSize.MEDIUM
                     )
 
                     Spacer(modifier = Modifier.width(10.dp))
 
                     EzzButton(
-                        text = "Create Profile",
+                        text = "Add Account",
                         onClick = {
                             val trimmed = username.trim()
                             if (trimmed.length < 3) {
@@ -152,184 +164,83 @@ fun AddOfflineAccountDialog(
     }
 }
 
+/**
+ * Clean confirmation dialog before removing an account from Ezz Launcher.
+ */
 @Composable
-fun MicrosoftLoginDialog(
-    viewModel: AppViewModel,
-    onDismiss: () -> Unit
+fun RemoveAccountConfirmationDialog(
+    username: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
 ) {
-    val loginProgress by viewModel.microsoftLoginProgress.collectAsState()
-
     Dialog(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
-                .widthIn(max = 480.dp)
-                .fillMaxWidth(0.95f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF0A0A0A))
-                .border(1.dp, Color(0xFF282828), RoundedCornerShape(8.dp))
+                .widthIn(max = 400.dp)
+                .fillMaxWidth(0.92f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFF0F1217))
+                .border(1.dp, Color(0xFF262A36), RoundedCornerShape(12.dp))
                 .padding(22.dp)
         ) {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            Column {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF3B1219)),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Icon(
-                            imageVector = Icons.Default.Security,
+                            imageVector = Icons.Default.DeleteOutline,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = Color(0xFFF87171),
                             modifier = Modifier.size(20.dp)
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Microsoft Authentication",
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
                     }
-
-                    EzzIconButton(
-                        icon = Icons.Default.Close,
-                        onClick = onDismiss,
-                        size = EzzButtonSize.SMALL,
-                        variant = EzzButtonVariant.GHOST
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Remove account?",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                when (val progress = loginProgress) {
-                    is MicrosoftLoginProgress.Authenticating -> {
-                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp), strokeWidth = 2.5.dp)
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Text(
-                            text = progress.step,
-                            color = Color(0xFFA0A0A0),
-                            fontSize = 13.sp
-                        )
-                    }
+                Text(
+                    text = "$username will be removed from Ezz Launcher.",
+                    color = Color(0xFFCBD5E1),
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
 
-                    is MicrosoftLoginProgress.AwaitingUserAction -> {
-                        Text(
-                            text = "Open the authentication URL and enter this verification code:",
-                            color = Color(0xFFA0A0A0),
-                            fontSize = 12.sp,
-                            lineHeight = 16.sp
-                        )
+                Spacer(modifier = Modifier.height(24.dp))
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    EzzButton(
+                        text = "Cancel",
+                        onClick = onDismiss,
+                        variant = EzzButtonVariant.SECONDARY,
+                        size = EzzButtonSize.MEDIUM
+                    )
 
-                        // User Code Card
-                        EzzCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            backgroundColor = Color(0xFF141414),
-                            borderColor = Color(0xFF383838)
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(18.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    text = progress.userCode,
-                                    color = Color.White,
-                                    fontSize = 26.sp,
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 4.sp
-                                )
+                    Spacer(modifier = Modifier.width(10.dp))
 
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    EzzButton(
-                                        text = "Copy Code",
-                                        onClick = {
-                                            val selection = StringSelection(progress.userCode)
-                                            Toolkit.getDefaultToolkit().systemClipboard.setContents(selection, selection)
-                                            ToastManager.show("Code Copied", "Device code copied to clipboard", ToastType.SUCCESS)
-                                        },
-                                        variant = EzzButtonVariant.SECONDARY,
-                                        size = EzzButtonSize.SMALL,
-                                        icon = Icons.Default.ContentCopy
-                                    )
-
-                                    EzzButton(
-                                        text = "Open Browser",
-                                        onClick = {
-                                            viewModel.platformBridge.openUrl(progress.verificationUrl)
-                                        },
-                                        variant = EzzButtonVariant.PRIMARY,
-                                        size = EzzButtonSize.SMALL,
-                                        icon = Icons.Default.OpenInBrowser
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Waiting for authorization in browser...",
-                                color = Color(0xFF777777),
-                                fontSize = 11.sp
-                            )
-                        }
-                    }
-
-                    is MicrosoftLoginProgress.Success -> {
-                        Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(42.dp))
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = "Authenticated as ${progress.account.username}",
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
-                        EzzButton(
-                            text = "Done",
-                            onClick = onDismiss,
-                            variant = EzzButtonVariant.PRIMARY,
-                            size = EzzButtonSize.MEDIUM
-                        )
-                    }
-
-                    is MicrosoftLoginProgress.Error -> {
-                        Text(
-                            text = "Authentication Failed",
-                            color = Color(0xFFEF4444),
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = progress.message,
-                            color = Color(0xFFA0A0A0),
-                            fontSize = 12.sp
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
-                        EzzButton(
-                            text = "Retry",
-                            onClick = { viewModel.startMicrosoftLogin() },
-                            variant = EzzButtonVariant.PRIMARY,
-                            size = EzzButtonSize.MEDIUM
-                        )
-                    }
-
-                    null -> {}
+                    EzzButton(
+                        text = "Remove Account",
+                        onClick = onConfirm,
+                        variant = EzzButtonVariant.DANGER,
+                        size = EzzButtonSize.MEDIUM
+                    )
                 }
             }
         }

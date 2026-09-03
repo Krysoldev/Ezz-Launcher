@@ -1,11 +1,18 @@
 package io.ezz.launcher.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,34 +24,38 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.ManageAccounts
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.ezz.launcher.ui.theme.EzzTheme
+import io.ezz.launcher.core.minecraft.skin.MinecraftSkinManager
+import io.ezz.launcher.core.model.account.Account
+import io.ezz.launcher.core.model.account.AccountType
 import io.ezz.launcher.ui.viewmodel.NavigationScreen
 
 data class NavItem(
@@ -58,58 +69,60 @@ data class NavItem(
 fun Sidebar(
     currentScreen: NavigationScreen,
     onNavigate: (NavigationScreen) -> Unit,
-    accountName: String?,
-    accountType: String?,
-    isSupabaseConnected: Boolean? = true,
+    account: Account? = null,
+    accounts: List<Account> = emptyList(),
+    onSelectAccount: ((Account) -> Unit)? = null,
+    skinManager: MinecraftSkinManager? = null,
     modifier: Modifier = Modifier
 ) {
-    val colors = EzzTheme.colors
+    var showAccountSwitcher by remember { mutableStateOf(false) }
 
     val navItems = listOf(
         NavItem(NavigationScreen.HOME, "Home", Icons.Default.Home),
-        NavItem(NavigationScreen.INSTANCES, "Instances", Icons.Default.Apps),
-        NavItem(NavigationScreen.VAULT, "Vault", Icons.Default.AccountCircle),
+        NavItem(NavigationScreen.INSTANCES, "Instances", Icons.Default.GridView),
+        NavItem(NavigationScreen.VAULT, "Vault", Icons.Default.Person),
         NavItem(NavigationScreen.ACCOUNTS, "Accounts", Icons.Default.AccountCircle),
-        NavItem(NavigationScreen.PROFILES, "Profiles", Icons.Default.Tune),
-        NavItem(NavigationScreen.SETTINGS, "Settings", Icons.Default.Settings),
-        NavItem(NavigationScreen.CONSOLE, "Console", Icons.Default.Terminal)
+        NavItem(NavigationScreen.CONSOLE, "Console", Icons.Default.Terminal),
+        NavItem(NavigationScreen.SETTINGS, "Settings", Icons.Default.Settings)
     )
 
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .width(240.dp)
-            .background(colors.surface)
-            .border(androidx.compose.foundation.BorderStroke(1.dp, colors.border.copy(alpha = 0.5f)))
-            .padding(16.dp),
+            .width(220.dp)
+            .background(Color(0xFF0C0E12))
+            .border(androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1A1D26)))
+            .padding(vertical = 16.dp, horizontal = 10.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Column {
-            // App Branding Logo
+        Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            // Ezz Launcher Logo & Branding Header
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
                 Image(
                     painter = painterResource("logo.png"),
                     contentDescription = "Ezz Launcher Logo",
                     modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(8.dp))
                 )
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
                 Column {
                     Text(
                         text = "EZZ LAUNCHER",
-                        color = colors.textPrimary,
+                        color = Color.White,
                         fontWeight = FontWeight.Black,
-                        fontSize = 15.sp,
-                        letterSpacing = 1.sp
+                        fontSize = 13.5.sp,
+                        letterSpacing = 0.8.sp
                     )
                     Text(
                         text = "Minecraft Java Edition",
-                        color = colors.primary,
-                        fontSize = 11.sp,
+                        color = Color(0xFF64748B),
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -117,58 +130,71 @@ fun Sidebar(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Navigation Items
+            // Navigation Item List
             navItems.forEach { item ->
                 val isSelected = currentScreen == item.screen
                 val interactionSource = remember { MutableInteractionSource() }
+                val isHovered by interactionSource.collectIsHoveredAsState()
 
                 val backgroundColor by animateColorAsState(
-                    targetValue = if (isSelected) colors.primary.copy(alpha = 0.15f) else Color.Transparent
+                    targetValue = when {
+                        isSelected -> Color(0xFF1A1E29)
+                        isHovered -> Color(0xFF12151D)
+                        else -> Color.Transparent
+                    },
+                    animationSpec = tween(durationMillis = 150)
                 )
+
                 val contentColor by animateColorAsState(
-                    targetValue = if (isSelected) colors.primary else colors.textSecondary
+                    targetValue = when {
+                        isSelected -> Color.White
+                        isHovered -> Color(0xFFE2E8F0)
+                        else -> Color(0xFF94A3B8)
+                    },
+                    animationSpec = tween(durationMillis = 150)
                 )
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 3.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .padding(vertical = 2.5.dp)
+                        .clip(RoundedCornerShape(8.dp))
                         .background(backgroundColor)
                         .clickable(
                             interactionSource = interactionSource,
                             indication = null,
                             onClick = { onNavigate(item.screen) }
                         )
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                        .padding(horizontal = 10.dp, vertical = 8.5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Active Pill Bar
                     if (isSelected) {
                         Box(
                             modifier = Modifier
                                 .width(3.dp)
-                                .height(18.dp)
+                                .height(16.dp)
                                 .clip(RoundedCornerShape(2.dp))
-                                .background(colors.primary)
+                                .background(Color.White)
                         )
-                        Spacer(modifier = Modifier.width(9.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                    } else {
+                        Spacer(modifier = Modifier.width(3.dp))
                     }
 
                     Icon(
                         imageVector = item.icon,
                         contentDescription = item.title,
                         tint = contentColor,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(17.dp)
                     )
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
 
                     Text(
                         text = item.title,
                         color = contentColor,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         modifier = Modifier.weight(1f)
                     )
 
@@ -176,13 +202,13 @@ fun Sidebar(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))
-                                .background(colors.primaryGlow)
+                                .background(Color(0xFF1E2330))
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text(
                                 text = item.badge,
-                                color = colors.primary,
-                                fontSize = 10.sp,
+                                color = Color.White,
+                                fontSize = 9.5.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -191,73 +217,245 @@ fun Sidebar(
             }
         }
 
-        // Bottom User Profile Card & Supabase Sync Status
-        Column {
-            // Supabase Cloud Status Indicator
-            Row(
+        // ==========================================
+        // 15. SIDEBAR ACCOUNT CARD & ACCOUNT SWITCHER
+        // ==========================================
+        if (account != null) {
+            val otherAccounts = accounts.filter { it.id != account.id }
+
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(colors.surfaceVariant)
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Icon(
-                    imageVector = if (isSupabaseConnected == true) Icons.Default.CloudDone else Icons.Default.CloudOff,
-                    contentDescription = null,
-                    tint = if (isSupabaseConnected == true) colors.accent else colors.warning,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = if (isSupabaseConnected == true) "Supabase Cloud: Active" else "Supabase Cloud: Connecting",
-                    color = if (isSupabaseConnected == true) colors.accent else colors.warning,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // User Profile Row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(colors.surfaceVariant)
-                    .clickable { onNavigate(NavigationScreen.ACCOUNTS) }
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(colors.primaryGlow),
-                    contentAlignment = Alignment.Center
+                // Animated Account Switcher Popup
+                AnimatedVisibility(
+                    visible = showAccountSwitcher,
+                    enter = fadeIn(tween(140)) + expandVertically(tween(140)),
+                    exit = fadeOut(tween(100)) + shrinkVertically(tween(100))
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.AccountCircle,
-                        contentDescription = null,
-                        tint = colors.primary,
-                        modifier = Modifier.size(28.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFF10131B))
+                            .border(1.dp, Color(0xFF222736), RoundedCornerShape(10.dp))
+                            .padding(10.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Section: ACTIVE
+                            Text(
+                                text = "ACTIVE",
+                                color = Color(0xFF64748B),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.6.sp
+                            )
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    if (skinManager != null) {
+                                        MinecraftSkinHead(
+                                            account = account,
+                                            skinManager = skinManager,
+                                            size = 26.dp
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = account.username,
+                                            color = Color.White,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
+                                        )
+                                        Text(
+                                            text = if (account.type == AccountType.MICROSOFT) "Microsoft Account" else "Offline Account",
+                                            color = Color(0xFF94A3B8),
+                                            fontSize = 9.5.sp
+                                        )
+                                    }
+                                }
+
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Active",
+                                    tint = Color(0xFF34D399),
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+
+                            // Section: OTHER ACCOUNTS
+                            if (otherAccounts.isNotEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(1.dp)
+                                        .background(Color(0xFF1A1F2C))
+                                )
+
+                                Text(
+                                    text = "OTHER ACCOUNTS",
+                                    color = Color(0xFF64748B),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.6.sp
+                                )
+
+                                otherAccounts.forEach { otherAcc ->
+                                    val otherInteraction = remember { MutableInteractionSource() }
+                                    val isOtherHovered by otherInteraction.collectIsHoveredAsState()
+
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(if (isOtherHovered) Color(0xFF181C26) else Color.Transparent)
+                                            .clickable(
+                                                interactionSource = otherInteraction,
+                                                indication = null,
+                                                onClick = {
+                                                    onSelectAccount?.invoke(otherAcc)
+                                                    showAccountSwitcher = false
+                                                }
+                                            )
+                                            .padding(horizontal = 4.dp, vertical = 4.dp)
+                                    ) {
+                                        if (skinManager != null) {
+                                            MinecraftSkinHead(
+                                                account = otherAcc,
+                                                skinManager = skinManager,
+                                                size = 24.dp
+                                            )
+                                        }
+                                        Column {
+                                            Text(
+                                                text = otherAcc.username,
+                                                color = if (isOtherHovered) Color.White else Color(0xFFCBD5E1),
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1
+                                            )
+                                            Text(
+                                                text = if (otherAcc.type == AccountType.MICROSOFT) "Microsoft" else "Offline",
+                                                color = Color(0xFF64748B),
+                                                fontSize = 9.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Divider & Manage Accounts
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(1.dp)
+                                    .background(Color(0xFF1A1F2C))
+                            )
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable {
+                                        showAccountSwitcher = false
+                                        onNavigate(NavigationScreen.ACCOUNTS)
+                                    }
+                                    .padding(horizontal = 4.dp, vertical = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ManageAccounts,
+                                    contentDescription = null,
+                                    tint = Color(0xFF38BDF8),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "Manage Accounts",
+                                    color = Color(0xFF38BDF8),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
                 }
 
-                Spacer(modifier = Modifier.width(10.dp))
+                // Active Account Card (Bottom Left)
+                val accountInteraction = remember { MutableInteractionSource() }
+                val isAccountHovered by accountInteraction.collectIsHoveredAsState()
 
-                Column {
-                    Text(
-                        text = accountName ?: "Player",
-                        color = colors.textPrimary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
-                    Text(
-                        text = accountType ?: "Offline",
-                        color = colors.textSecondary,
-                        fontSize = 11.sp
-                    )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(if (isAccountHovered || showAccountSwitcher) Color(0xFF151923) else Color(0xFF10131A))
+                        .border(
+                            1.dp,
+                            if (isAccountHovered || showAccountSwitcher) Color(0xFF2D3548) else Color(0xFF1A1F2A),
+                            RoundedCornerShape(9.dp)
+                        )
+                        .clickable(
+                            interactionSource = accountInteraction,
+                            indication = null,
+                            onClick = { showAccountSwitcher = !showAccountSwitcher }
+                        )
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (skinManager != null) {
+                            MinecraftSkinHead(
+                                account = account,
+                                skinManager = skinManager,
+                                size = 32.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.AccountCircle,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = account.username,
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = if (account.type == AccountType.MICROSOFT) "Microsoft Account" else "Offline Account",
+                                color = Color(0xFF8B949E),
+                                fontSize = 9.5.sp
+                            )
+                        }
+
+                        // Green Active Status Dot
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF10B981))
+                        )
+                    }
                 }
             }
         }

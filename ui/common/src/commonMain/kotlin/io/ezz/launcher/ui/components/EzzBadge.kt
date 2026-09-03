@@ -38,12 +38,12 @@ fun EzzBadge(
     dotColor: Color? = null
 ) {
     val (bg, textColor, borderColor, defaultDot) = when (variant) {
-        EzzBadgeVariant.PRIMARY -> Tuple4(Color(0xFF1E1E1E), Color(0xFFFFFFFF), Color(0xFF383838), null)
-        EzzBadgeVariant.SUCCESS -> Tuple4(Color(0xFF141A16), Color(0xFFE0E0E0), Color(0xFF243428), Color(0xFF10B981))
-        EzzBadgeVariant.WARNING -> Tuple4(Color(0xFF1C1914), Color(0xFFE0E0E0), Color(0xFF382E20), Color(0xFFF59E0B))
-        EzzBadgeVariant.DANGER -> Tuple4(Color(0xFF1F1414), Color(0xFFE0E0E0), Color(0xFF382020), Color(0xFFEF4444))
-        EzzBadgeVariant.INFO -> Tuple4(Color(0xFF161616), Color(0xFFB8B8B8), Color(0xFF2E2E2E), null)
-        EzzBadgeVariant.NEUTRAL -> Tuple4(Color(0xFF141414), Color(0xFFA0A0A0), Color(0xFF242424), null)
+        EzzBadgeVariant.PRIMARY -> Tuple4(Color(0xFF1E2330), Color(0xFFFFFFFF), Color(0xFF323A4E), null)
+        EzzBadgeVariant.SUCCESS -> Tuple4(Color(0xFF064E3B).copy(alpha = 0.5f), Color(0xFF34D399), Color(0xFF059669).copy(alpha = 0.4f), Color(0xFF10B981))
+        EzzBadgeVariant.WARNING -> Tuple4(Color(0xFF451A03).copy(alpha = 0.5f), Color(0xFFFBBF24), Color(0xFFB45309).copy(alpha = 0.4f), Color(0xFFF59E0B))
+        EzzBadgeVariant.DANGER -> Tuple4(Color(0xFF450A0A).copy(alpha = 0.5f), Color(0xFFF87171), Color(0xFFDC2626).copy(alpha = 0.4f), Color(0xFFEF4444))
+        EzzBadgeVariant.INFO -> Tuple4(Color(0xFF141720), Color(0xFFCBD5E1), Color(0xFF222735), null)
+        EzzBadgeVariant.NEUTRAL -> Tuple4(Color(0xFF141720), Color(0xFFCBD5E1), Color(0xFF222735), null)
     }
 
     val finalDot = dotColor ?: defaultDot

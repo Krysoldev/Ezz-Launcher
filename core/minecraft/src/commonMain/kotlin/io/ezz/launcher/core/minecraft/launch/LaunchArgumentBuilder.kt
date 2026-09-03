@@ -5,7 +5,9 @@ import io.ezz.launcher.core.minecraft.resolver.RuleEvaluator
 import io.ezz.launcher.core.model.account.Account
 import io.ezz.launcher.core.model.account.MicrosoftAccount
 import io.ezz.launcher.core.model.account.OfflineAccount
+import io.ezz.launcher.core.model.instance.GarbageCollectorType
 import io.ezz.launcher.core.model.instance.Instance
+import io.ezz.launcher.core.model.instance.PerformanceProfile
 import io.ezz.launcher.core.model.minecraft.Rule
 import io.ezz.launcher.core.model.minecraft.VersionInfo
 import kotlinx.serialization.json.JsonArray
@@ -37,8 +39,10 @@ object LaunchArgumentBuilder {
         command.add(javaBinaryPath)
 
         // 1. Memory arguments
-        command.add("-Xms${instance.minMemoryMb}M")
-        command.add("-Xmx${instance.maxMemoryMb}M")
+        val minMem = instance.minMemoryMb.coerceAtLeast(512)
+        val maxMem = instance.maxMemoryMb.coerceAtLeast(minMem)
+        command.add("-Xms${minMem}M")
+        command.add("-Xmx${maxMem}M")
 
         // 2. Classpath assembly
         val pathSeparator = if (os == OperatingSystem.WINDOWS) ";" else ":"
@@ -68,7 +72,7 @@ object LaunchArgumentBuilder {
             "resolution_height" to instance.windowHeight.toString()
         )
 
-        // 3. JVM Arguments
+        // 3. JVM Arguments from Version Metadata
         val jvmArguments = versionInfo.arguments?.jvm
         if (jvmArguments != null && jvmArguments.isNotEmpty()) {
             val jvmArgs = parseArgumentElements(jvmArguments, variables, os, arch)
@@ -86,9 +90,46 @@ object LaunchArgumentBuilder {
             command.add(fullClasspath)
         }
 
-        // Standard JVM compatibility flags for Minecraft and native mod loaders
+        // 4. Clean, Performance-Focused JVM Flags
+        val customArgsJoined = instance.customJvmArgs.joinToString(" ")
+        val hasCustomGC = customArgsJoined.contains("-XX:+Use")
+
+        if (!hasCustomGC) {
+            when (instance.gcType) {
+                GarbageCollectorType.AUTO, GarbageCollectorType.G1GC -> {
+                    command.add("-XX:+UseG1GC")
+                    command.add("-XX:G1ReservePercent=20")
+                    command.add("-XX:MaxGCPauseMillis=50")
+                    command.add("-XX:G1HeapRegionSize=32M")
+                }
+                GarbageCollectorType.ZGC -> {
+                    command.add("-XX:+UseZGC")
+                    command.add("-XX:+ZGenerational")
+                }
+                GarbageCollectorType.SHENANDOAH -> {
+                    command.add("-XX:+UseShenandoahGC")
+                }
+            }
+        }
+
+        // Performance profile optimizations
+        if (instance.performanceProfile == PerformanceProfile.PERFORMANCE ||
+            instance.performanceProfile == PerformanceProfile.MAX_FPS ||
+            instance.performanceProfile == PerformanceProfile.EXTREME_FPS) {
+            if (!command.contains("-XX:+AlwaysPreTouch")) {
+                command.add("-XX:+AlwaysPreTouch")
+            }
+            if (!command.contains("-XX:+ParallelRefProcEnabled")) {
+                command.add("-XX:+ParallelRefProcEnabled")
+            }
+        }
+
+        // Standard modern JVM compatibility & stability flags
         if (!command.contains("-XX:+IgnoreUnrecognizedVMOptions")) {
             command.add("-XX:+IgnoreUnrecognizedVMOptions")
+        }
+        if (!command.contains("--enable-native-access=ALL-UNNAMED")) {
+            command.add("--enable-native-access=ALL-UNNAMED")
         }
         if (!command.contains("-Dsun.stdout.encoding=UTF-8")) {
             command.add("-Dsun.stdout.encoding=UTF-8")
@@ -100,13 +141,13 @@ object LaunchArgumentBuilder {
             command.add("-Djava.net.preferIPv4Stack=true")
         }
 
-        // Add instance custom JVM arguments
-        command.addAll(instance.customJvmArgs)
+        // Add instance custom JVM arguments (excluding empty entries)
+        command.addAll(instance.customJvmArgs.filter { it.isNotBlank() })
 
-        // 4. Main Class
+        // 5. Main Class
         command.add(versionInfo.mainClass)
 
-        // 5. Game Arguments
+        // 6. Game Arguments
         val gameArguments = versionInfo.arguments?.game
         val mcArgs = versionInfo.minecraftArguments
 

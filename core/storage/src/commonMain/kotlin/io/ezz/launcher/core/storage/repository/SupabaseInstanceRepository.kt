@@ -188,6 +188,48 @@ class SupabaseInstanceRepository(
         }
     }
 
+    override suspend fun registerInstance(instance: Instance): Instance = withContext(dispatcher) {
+        val currentList = readLocalCache().filter { it.id != instance.id } + instance
+        saveLocalCache(currentList)
+        _instances.value = currentList
+
+        // Ensure directory structure
+        try {
+            val instDir = pathProvider.getInstanceDirectory(instance.id)
+            fileSystem.createDirectories(instDir)
+            fileSystem.createDirectories(instDir.resolve(".minecraft"))
+        } catch (_: Exception) {}
+
+        try {
+            if (supabaseClient.config.isConfigured && supabaseClient.isConnected.value == true) {
+                val dto = SupabaseInstanceDto(
+                    id = instance.id,
+                    userId = effectiveUserId,
+                    name = instance.name,
+                    minecraftVersion = instance.minecraftVersion,
+                    loaderType = instance.loaderType.name.lowercase(),
+                    loaderVersion = instance.loaderVersion,
+                    iconId = instance.iconId,
+                    javaPath = instance.javaPath,
+                    minMemoryMb = instance.minMemoryMb,
+                    maxMemoryMb = instance.maxMemoryMb,
+                    customJvmArgs = instance.customJvmArgs,
+                    windowWidth = instance.windowWidth,
+                    windowHeight = instance.windowHeight,
+                    createdAt = instance.createdAt.toString()
+                )
+                supabaseClient.insert<SupabaseInstanceDto, SupabaseInstanceDto>(
+                    table = "instances",
+                    bodyData = dto
+                )
+            }
+        } catch (e: Exception) {
+            println("Notice: Supabase register instance deferred: ${e.message}")
+        }
+
+        instance
+    }
+
     override suspend fun deleteInstance(id: String): Unit = withContext(dispatcher) {
         val currentList = readLocalCache().filter { it.id != id }
         saveLocalCache(currentList)

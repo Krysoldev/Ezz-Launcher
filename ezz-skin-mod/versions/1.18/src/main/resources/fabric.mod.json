@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "ezzskin",
+  "version": "1.0.0",
+  "name": "Ezz Skin Fabric Mod",
+  "description": "Client-side per-account custom skin provider for EzzLauncher",
+  "authors": [
+    "KrysolDev",
+    "Ezz Team"
+  ],
+  "contact": {
+    "homepage": "https://ezzlauncher.dpdns.org"
+  },
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "io.ezz.skinmod.v1_18.EzzSkinMod118"
+    ]
+  },
+  "mixins": [
+    "ezzskin.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.14.0",
+    "minecraft": ">=1.18.0 <=1.18.2"
+  }
+}

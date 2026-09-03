@@ -7,14 +7,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,7 +22,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.ezz.launcher.core.model.instance.Instance
-import io.ezz.launcher.ui.theme.EzzTheme
+import io.ezz.launcher.ui.components.EzzButton
+import io.ezz.launcher.ui.components.EzzButtonSize
+import io.ezz.launcher.ui.components.EzzButtonVariant
+import io.ezz.launcher.ui.components.EzzTextField
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 import java.io.File
 
@@ -37,7 +35,6 @@ fun InstanceExportDialog(
     viewModel: AppViewModel,
     onDismiss: () -> Unit
 ) {
-    val colors = EzzTheme.colors
     val userHome = System.getProperty("user.home") ?: "."
     val defaultPath = remember(sourceInstance.id) {
         "$userHome/Downloads/${sourceInstance.name.replace(" ", "_")}_export.zip"
@@ -51,35 +48,27 @@ fun InstanceExportDialog(
         title = {
             Text(
                 text = "Export Instance Package",
-                color = colors.textPrimary,
-                fontWeight = FontWeight.Black,
-                fontSize = 18.sp
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 17.sp
             )
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(
                     text = "Export '${sourceInstance.name}' into a standalone ZIP package containing mods, configs, resource packs, and instance metadata.",
-                    color = colors.textSecondary,
-                    fontSize = 13.sp
+                    color = Color(0xFF94A3B8),
+                    fontSize = 12.5.sp
                 )
 
-                TextField(
-                    value = destinationPath,
-                    onValueChange = { destinationPath = it },
-                    label = { Text("Destination ZIP file") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = colors.surface,
-                        unfocusedContainerColor = colors.surface,
-                        focusedTextColor = colors.textPrimary,
-                        unfocusedTextColor = colors.textPrimary,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent
-                    ),
-                    singleLine = true
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Destination ZIP File Path", color = Color(0xFF94A3B8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    EzzTextField(
+                        value = destinationPath,
+                        onValueChange = { destinationPath = it },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
 
                 Row(
                     modifier = Modifier
@@ -93,37 +82,39 @@ fun InstanceExportDialog(
                         onCheckedChange = { includeWorlds = it },
                         colors = CheckboxDefaults.colors(
                             checkedColor = Color.White,
-                            checkmarkColor = Color.Black,
-                            uncheckedColor = colors.textMuted
+                            checkmarkColor = Color(0xFF07080A),
+                            uncheckedColor = Color(0xFF64748B)
                         )
                     )
                     Text(
                         text = "Include Worlds in export package",
-                        color = colors.textPrimary,
-                        fontSize = 13.sp
+                        color = Color(0xFFCBD5E1),
+                        fontSize = 12.5.sp
                     )
                 }
             }
         },
         confirmButton = {
-            Button(
+            EzzButton(
+                text = "Export ZIP",
                 onClick = {
                     if (destinationPath.isNotBlank()) {
                         viewModel.exportInstanceWithOption(sourceInstance, File(destinationPath.trim()), includeWorlds)
                     }
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text("Export ZIP", fontWeight = FontWeight.Bold)
-            }
+                variant = EzzButtonVariant.PRIMARY,
+                size = EzzButtonSize.SMALL
+            )
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(8.dp)) {
-                Text("Cancel")
-            }
+            EzzButton(
+                text = "Cancel",
+                onClick = onDismiss,
+                variant = EzzButtonVariant.SECONDARY,
+                size = EzzButtonSize.SMALL
+            )
         },
-        containerColor = colors.surface,
+        containerColor = Color(0xFF101318),
         shape = RoundedCornerShape(12.dp)
     )
 }

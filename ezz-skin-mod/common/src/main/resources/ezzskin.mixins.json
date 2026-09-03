@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "io.ezz.skinmod.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "client": [
+    "PlayerListEntryMixin",
+    "DefaultSkinHelperMixin",
+    "PlayerSkinProviderMixin",
+    "ClientPlayNetworkHandlerMixin"
+  ],
+  "injectors": { "defaultRequire": 0 }
+}

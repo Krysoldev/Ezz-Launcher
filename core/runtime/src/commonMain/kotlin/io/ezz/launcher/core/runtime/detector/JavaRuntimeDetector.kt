@@ -2,6 +2,14 @@ package io.ezz.launcher.core.runtime.detector
 
 import io.ezz.launcher.core.model.runtime.JavaRuntime
 import java.io.File
+import java.lang.management.ManagementFactory
+
+data class SystemMemoryInfo(
+    val totalRamMb: Int,
+    val availableRamMb: Int,
+    val recommendedMinMb: Int,
+    val recommendedMaxMb: Int
+)
 
 object JavaRuntimeDetector {
 
@@ -27,11 +35,9 @@ object JavaRuntimeDetector {
             candidates.add(currentJavaHome)
         }
 
-        // 2. JAVA_HOME environment variable
-        val envJavaHome = System.getenv("JAVA_HOME")
-        if (!envJavaHome.isNullOrBlank()) {
-            candidates.add(envJavaHome)
-        }
+        // 2. JAVA_HOME & JDK_HOME environment variables
+        System.getenv("JAVA_HOME")?.takeIf { it.isNotBlank() }?.let { candidates.add(it) }
+        System.getenv("JDK_HOME")?.takeIf { it.isNotBlank() }?.let { candidates.add(it) }
 
         // 3. PATH discovery
         val pathEnv = System.getenv("PATH") ?: ""
@@ -41,21 +47,33 @@ object JavaRuntimeDetector {
             if (javaExe.exists() && javaExe.canExecute()) {
                 val home = javaExe.parentFile?.parentFile?.absolutePath
                 if (home != null) candidates.add(home)
+                candidates.add(javaExe.absolutePath)
             }
         }
 
         // 4. Standard OS Directories
         val userHome = System.getProperty("user.home") ?: "."
+        val localAppData = System.getenv("LOCALAPPDATA") ?: "$userHome\\AppData\\Local"
+        val appData = System.getenv("APPDATA") ?: "$userHome\\AppData\\Roaming"
+        val programFiles = System.getenv("ProgramFiles") ?: "C:\\Program Files"
+        val programFilesX86 = System.getenv("ProgramFiles(x86)") ?: "C:\\Program Files (x86)"
+
         val standardRoots = mutableListOf(
-            "C:\\Program Files\\Java",
-            "C:\\Program Files\\Eclipse Adoptium",
-            "C:\\Program Files\\Microsoft",
-            "C:\\Program Files\\BellSoft",
-            "C:\\Program Files\\Zulu",
-            "C:\\Program Files\\Amazon Corretto",
+            "$programFiles\\Java",
+            "$programFiles\\Eclipse Adoptium",
+            "$programFiles\\Microsoft",
+            "$programFiles\\BellSoft",
+            "$programFiles\\Zulu",
+            "$programFiles\\Amazon Corretto",
+            "$programFiles\\Semeru",
+            "$programFilesX86\\Java",
             "$userHome\\.jdks",
+            "$userHome\\.sdkman\\candidates\\java",
+            "$appData\\.minecraft\\runtime",
+            "$localAppData\\Packages\\Microsoft.4297127D64C94_8wekyb3d8bbwe\\LocalCache\\Local\\runtime",
             "/usr/lib/jvm",
-            "/Library/Java/JavaVirtualMachines"
+            "/Library/Java/JavaVirtualMachines",
+            "/opt/jdk"
         )
 
         for (rootPath in standardRoots) {
@@ -64,6 +82,10 @@ object JavaRuntimeDetector {
                 rootDir.listFiles()?.forEach { subDir ->
                     if (subDir.isDirectory) {
                         candidates.add(subDir.absolutePath)
+                        // Also check 1 level deeper (e.g. runtime/java-runtime-gamma/windows-x64/java-runtime-gamma)
+                        subDir.listFiles()?.filter { it.isDirectory }?.forEach { deepSub ->
+                            candidates.add(deepSub.absolutePath)
+                        }
                     }
                 }
             }
@@ -71,12 +93,16 @@ object JavaRuntimeDetector {
 
         for (candidate in candidates) {
             val runtime = inspectJavaHome(candidate)
-            if (runtime != null && found.none { it.path == runtime.path }) {
+            if (runtime != null && found.none { it.path.equals(runtime.path, ignoreCase = true) }) {
                 found.add(runtime)
             }
         }
 
-        return found.sortedByDescending { it.majorVersion }
+        // Sort prioritizing 64-Bit and then highest major version
+        return found.sortedWith(
+            compareByDescending<JavaRuntime> { it.is64Bit }
+                .thenByDescending { it.majorVersion }
+        )
     }
 
     fun inspectJavaHome(dirOrBinaryPath: String): JavaRuntime? {
@@ -112,11 +138,18 @@ object JavaRuntimeDetector {
         }
     }
 
-    private fun parseJavaVersionOutput(binaryPath: String, output: String): JavaRuntime {
+    fun parseJavaVersionOutput(binaryPath: String, output: String): JavaRuntime {
         var major = 8
         var full = "Unknown"
-        var is64 = output.contains("64-Bit", ignoreCase = true) || output.contains("x86_64", ignoreCase = true) || output.contains("amd64", ignoreCase = true)
-        var vendor = "Unknown"
+        var is64 = output.contains("64-Bit", ignoreCase = true) ||
+                output.contains("x86_64", ignoreCase = true) ||
+                output.contains("amd64", ignoreCase = true) ||
+                output.contains("aarch64", ignoreCase = true) ||
+                output.contains("arm64", ignoreCase = true)
+
+        if (output.contains("32-Bit", ignoreCase = true) || output.contains("i386", ignoreCase = true) || output.contains("i686", ignoreCase = true)) {
+            is64 = false
+        }
 
         val versionRegex = Regex("""(?:java|openjdk) version "([^"]+)"""")
         val match = versionRegex.find(output)
@@ -125,17 +158,20 @@ object JavaRuntimeDetector {
             major = parseMajorVersion(full)
         } else {
             val line = output.lines().firstOrNull() ?: ""
-            full = line
+            full = line.trim()
             major = parseMajorVersion(line)
         }
 
+        var vendor = "Unknown"
         when {
-            output.contains("HotSpot", ignoreCase = true) -> vendor = "Oracle/OpenJDK"
-            output.contains("Temurin", ignoreCase = true) || output.contains("Adoptium", ignoreCase = true) -> vendor = "Eclipse Adoptium"
-            output.contains("Microsoft", ignoreCase = true) -> vendor = "Microsoft"
+            output.contains("Temurin", ignoreCase = true) || output.contains("Adoptium", ignoreCase = true) -> vendor = "Eclipse Adoptium (Temurin)"
+            output.contains("Microsoft", ignoreCase = true) -> vendor = "Microsoft OpenJDK"
             output.contains("Zulu", ignoreCase = true) -> vendor = "Azul Zulu"
             output.contains("Corretto", ignoreCase = true) -> vendor = "Amazon Corretto"
+            output.contains("Liberica", ignoreCase = true) || output.contains("BellSoft", ignoreCase = true) -> vendor = "BellSoft Liberica"
             output.contains("GraalVM", ignoreCase = true) -> vendor = "GraalVM"
+            output.contains("HotSpot", ignoreCase = true) -> vendor = "Oracle / OpenJDK"
+            output.contains("Semeru", ignoreCase = true) || output.contains("IBM", ignoreCase = true) -> vendor = "IBM Semeru"
         }
 
         return JavaRuntime(
@@ -147,6 +183,15 @@ object JavaRuntimeDetector {
         )
     }
 
+    /**
+     * Intelligently selects the best available 64-bit Java runtime matching Minecraft's requirements.
+     * Order of preference:
+     * 1. 64-Bit exact major version match (e.g. Java 21 for MC 1.21, Java 17 for MC 1.20).
+     * 2. 64-Bit closest compatible version (version >= requiredMajor).
+     * 3. 64-Bit closest overall.
+     * 4. 32-Bit exact/compatible match (with fallback).
+     * 5. System PATH fallback.
+     */
     fun findBestRuntime(minecraftVersion: String, detected: List<JavaRuntime> = detectInstalledRuntimes()): JavaRuntime {
         val requiredMajor = getRequiredJavaMajorVersion(minecraftVersion)
 
@@ -160,25 +205,42 @@ object JavaRuntimeDetector {
             )
         }
 
-        // 1. Exact match (e.g. Java 21 for 1.21.x, Java 17 for 1.20.x, Java 8 for 1.12.x)
-        val exactMatch = detected.firstOrNull { it.majorVersion == requiredMajor }
-        if (exactMatch != null) return exactMatch
+        val runtimes64 = detected.filter { it.is64Bit }
 
-        // 2. Compatible stable release (between requiredMajor and 22, avoiding preview/experimental versions > 22)
-        val stableCompatible = detected
-            .filter { it.majorVersion >= requiredMajor && it.majorVersion <= 22 }
-            .minByOrNull { it.majorVersion }
-        if (stableCompatible != null) return stableCompatible
+        // 1. 64-bit Exact match
+        val exactMatch64 = runtimes64.firstOrNull { it.majorVersion == requiredMajor }
+        if (exactMatch64 != null) return exactMatch64
 
-        // 3. Any compatible release (closest to requiredMajor)
-        val anyCompatible = detected
-            .filter { it.majorVersion >= requiredMajor }
-            .minByOrNull { it.majorVersion }
-        if (anyCompatible != null) return anyCompatible
+        // 2. Safe tested compatible releases
+        val safeCompatible64 = when (requiredMajor) {
+            21 -> runtimes64.filter { it.majorVersion in 21..22 }
+            17 -> runtimes64.filter { it.majorVersion in 17..21 }
+            16 -> runtimes64.filter { it.majorVersion in 16..21 }
+            8 -> runtimes64.filter { it.majorVersion in 8..11 }
+            else -> runtimes64.filter { it.majorVersion >= requiredMajor }
+        }
 
-        // 4. Closest overall
-        val closest = detected.minByOrNull { kotlin.math.abs(it.majorVersion - requiredMajor) }
-        if (closest != null) return closest
+        val bestSafe64 = safeCompatible64.minByOrNull { kotlin.math.abs(it.majorVersion - requiredMajor) }
+        if (bestSafe64 != null) return bestSafe64
+
+        // 3. 64-bit closest overall
+        val closest64 = runtimes64.minByOrNull { kotlin.math.abs(it.majorVersion - requiredMajor) }
+        if (closest64 != null) return closest64
+
+        // 4. Any detected match (including 32-bit if no 64-bit found)
+        val exactAny = detected.firstOrNull { it.majorVersion == requiredMajor }
+        if (exactAny != null) return exactAny
+
+        val safeAny = detected.filter {
+            when (requiredMajor) {
+                21 -> it.majorVersion in 21..22
+                17 -> it.majorVersion in 17..21
+                16 -> it.majorVersion in 16..21
+                8 -> it.majorVersion in 8..11
+                else -> it.majorVersion >= requiredMajor
+            }
+        }.minByOrNull { kotlin.math.abs(it.majorVersion - requiredMajor) }
+        if (safeAny != null) return safeAny
 
         // 5. Fallback PATH command
         val defaultCmd = if (isWindows()) "java.exe" else "java"
@@ -186,7 +248,8 @@ object JavaRuntimeDetector {
             path = defaultCmd,
             majorVersion = requiredMajor,
             fullVersion = "System PATH",
-            vendor = "System"
+            vendor = "System",
+            is64Bit = true
         )
     }
 
@@ -198,11 +261,79 @@ object JavaRuntimeDetector {
 
     fun getRequiredJavaMajorVersion(minecraftVersion: String): Int {
         return when {
+            isAtLeastVersion(minecraftVersion, "26.0") -> 26
+            isAtLeastVersion(minecraftVersion, "25.0") -> 25
             isAtLeastVersion(minecraftVersion, "1.20.5") -> 21
             isAtLeastVersion(minecraftVersion, "1.18") -> 17
             isAtLeastVersion(minecraftVersion, "1.17") -> 16
             else -> 8
         }
+    }
+
+    fun checkRuntimeCompatibility(runtime: JavaRuntime, minecraftVersion: String): Pair<Boolean, String> {
+        val requiredMajor = getRequiredJavaMajorVersion(minecraftVersion)
+        return when {
+            runtime.majorVersion == requiredMajor -> {
+                true to "Compatible ($requiredMajor Recommended)"
+            }
+            requiredMajor == 21 && runtime.majorVersion == 22 -> {
+                true to "Compatible (Java 22)"
+            }
+            requiredMajor == 21 && runtime.majorVersion >= 23 -> {
+                false to "Incompatible: Java ${runtime.majorVersion} causes native LWJGL 3.3.3 JNI crashes. Java 21 is required."
+            }
+            requiredMajor == 17 && runtime.majorVersion in 17..21 -> {
+                true to "Compatible (Java ${runtime.majorVersion})"
+            }
+            runtime.majorVersion < requiredMajor -> {
+                false to "Incompatible: Java $requiredMajor required, but Java ${runtime.majorVersion} detected."
+            }
+            !runtime.is64Bit -> {
+                false to "Warning: 32-bit Java detected. 64-bit Java $requiredMajor required."
+            }
+            else -> {
+                true to "Compatible (Java ${runtime.majorVersion})"
+            }
+        }
+    }
+
+    fun getSystemMemoryInfo(): SystemMemoryInfo {
+        var totalMb = 8192
+        var freeMb = 4096
+        try {
+            val osBean = ManagementFactory.getOperatingSystemMXBean()
+            val totalPhysicalMemMethod = osBean.javaClass.methods.firstOrNull { it.name == "getTotalPhysicalMemorySize" || it.name == "getTotalMemorySize" }
+            val freePhysicalMemMethod = osBean.javaClass.methods.firstOrNull { it.name == "getFreePhysicalMemorySize" || it.name == "getFreeMemorySize" }
+
+            if (totalPhysicalMemMethod != null) {
+                val bytes = totalPhysicalMemMethod.invoke(osBean) as? Long ?: 0L
+                if (bytes > 0L) totalMb = (bytes / (1024 * 1024)).toInt()
+            }
+            if (freePhysicalMemMethod != null) {
+                val bytes = freePhysicalMemMethod.invoke(osBean) as? Long ?: 0L
+                if (bytes > 0L) freeMb = (bytes / (1024 * 1024)).toInt()
+            }
+        } catch (_: Throwable) {
+            // Fallback estimation
+        }
+
+        // Calculate safe allocation ceiling: leave at least 2.5 GB for OS/GPU/Background
+        val maxSafeAllocation = (totalMb - 2560).coerceAtLeast(2048)
+        val recommendedMin = 2048
+        val recommendedMax = when {
+            totalMb >= 32768 -> 8192
+            totalMb >= 16384 -> 6144
+            totalMb >= 12288 -> 4096
+            totalMb >= 8192 -> 4096
+            else -> maxSafeAllocation.coerceAtMost(3072)
+        }
+
+        return SystemMemoryInfo(
+            totalRamMb = totalMb,
+            availableRamMb = freeMb,
+            recommendedMinMb = recommendedMin,
+            recommendedMaxMb = recommendedMax
+        )
     }
 
     private fun isAtLeastVersion(version: String, target: String): Boolean {
@@ -229,7 +360,7 @@ object JavaRuntimeDetector {
         }
     }
 
-    private fun isWindows(): Boolean {
+    fun isWindows(): Boolean {
         return System.getProperty("os.name")?.lowercase()?.contains("win") ?: false
     }
 }

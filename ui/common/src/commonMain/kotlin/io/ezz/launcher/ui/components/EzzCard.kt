@@ -48,16 +48,16 @@ fun EzzCard(
     )
 
     val baseBg = backgroundColor ?: when (variant) {
-        EzzCardVariant.SURFACE -> Color(0xFF151515)
-        EzzCardVariant.ELEVATED -> Color(0xFF1A1A1A)
-        EzzCardVariant.OUTLINED -> Color(0xFF0A0A0A)
-        EzzCardVariant.GLASS -> Color(0xFF101010)
+        EzzCardVariant.SURFACE -> Color(0xFF101318)
+        EzzCardVariant.ELEVATED -> Color(0xFF141720)
+        EzzCardVariant.OUTLINED -> Color(0xFF07080A)
+        EzzCardVariant.GLASS -> Color(0xFF101318)
     }
 
     val baseBorder = borderColor ?: when {
-        isHovered && onClick != null -> Color(0xFF444444)
-        variant == EzzCardVariant.OUTLINED -> Color(0xFF303030)
-        else -> Color(0xFF242424)
+        isHovered && onClick != null -> Color(0xFF2E3648)
+        variant == EzzCardVariant.OUTLINED -> Color(0xFF222735)
+        else -> Color(0xFF1A1D26)
     }
 
     val clickableModifier = if (onClick != null) {
@@ -76,7 +76,7 @@ fun EzzCard(
             .clip(RoundedCornerShape(cornerRadius))
             .then(clickableModifier),
         shape = RoundedCornerShape(cornerRadius),
-        color = if (isHovered && onClick != null) Color(0xFF1C1C1C) else baseBg,
+        color = if (isHovered && onClick != null) Color(0xFF161A24) else baseBg,
         border = BorderStroke(1.dp, baseBorder)
     ) {
         Box {

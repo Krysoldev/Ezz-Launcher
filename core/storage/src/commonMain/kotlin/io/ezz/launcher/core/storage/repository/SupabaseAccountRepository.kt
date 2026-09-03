@@ -114,7 +114,7 @@ class SupabaseAccountRepository(
         _accounts.value.find { it.id == id } ?: readLocalAccounts().find { it.id == id }
     }
 
-    override suspend fun saveAccount(account: Account): Unit = withContext(dispatcher) {
+    override suspend fun saveAccount(account: Account, source: String?): Unit = withContext(dispatcher) {
         if (account is MicrosoftAccount) {
             secureVault.putString("msa_refresh_${account.id}", account.msaRefreshToken)
             secureVault.putString("mc_access_${account.id}", account.mcAccessToken)

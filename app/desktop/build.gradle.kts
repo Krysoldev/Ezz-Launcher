@@ -21,7 +21,10 @@ kotlin {
             implementation("io.ktor:ktor-client-cio:2.3.11")
             
             implementation(compose.desktop.currentOs)
+            implementation(compose.material3)
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.8.1")
+            implementation("net.java.dev.jna:jna:5.13.0")
+            implementation("net.java.dev.jna:jna-platform:5.13.0")
         }
     }
 }

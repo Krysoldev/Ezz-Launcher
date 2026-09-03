@@ -68,7 +68,7 @@ fun ServersScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF050505))
+            .background(Color(0xFF07080B))
             .padding(26.dp)
     ) {
         // Header
@@ -89,12 +89,12 @@ fun ServersScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     EzzBadge(
                         text = "${savedServers.size}",
-                        variant = EzzBadgeVariant.NEUTRAL
+                        variant = EzzBadgeVariant.PRIMARY
                     )
                 }
                 Text(
                     text = "Saved multiplayer server addresses, direct connection shortcuts, and ping telemetry",
-                    color = Color(0xFF888888),
+                    color = Color(0xFF64748B),
                     fontSize = 12.sp
                 )
             }
@@ -113,24 +113,28 @@ fun ServersScreen(
         // Categories
         Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .background(Color(0xFF141414))
-                .border(1.dp, Color(0xFF242424), RoundedCornerShape(6.dp))
-                .padding(2.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF0E1018))
+                .border(1.dp, Color(0xFF1B1E2D), RoundedCornerShape(8.dp))
+                .padding(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             listOf("Saved (${savedServers.size})", "Featured").forEachIndexed { index, label ->
                 val isSelected = selectedCategory == index
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(if (isSelected) Color(0xFF242424) else Color.Transparent)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (isSelected) Color(0xFF3B1F70) else Color.Transparent)
+                        .then(
+                            if (isSelected) Modifier.border(1.dp, Color(0xFF6366F1).copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                            else Modifier
+                        )
                         .clickable { selectedCategory = index }
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
                         text = label,
-                        color = if (isSelected) Color.White else Color(0xFF888888),
+                        color = if (isSelected) Color(0xFFC7D2FE) else Color(0xFF94A3B8),
                         fontSize = 11.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                     )
@@ -145,9 +149,9 @@ fun ServersScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .weight(1f)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF0F0F0F))
-                    .border(1.dp, Color(0xFF202020), RoundedCornerShape(8.dp)),
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF0E1018))
+                    .border(1.dp, Color(0xFF1B1E2D), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 EzzEmptyState(
@@ -200,9 +204,9 @@ private fun ServerCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(6.dp))
-            .background(Color(0xFF101010))
-            .border(1.dp, Color(0xFF222222), RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color(0xFF0E1018))
+            .border(1.dp, Color(0xFF1B1E2D), RoundedCornerShape(10.dp))
             .padding(14.dp)
     ) {
         Row(
@@ -214,15 +218,15 @@ private fun ServerCard(
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFF181818))
-                        .border(1.dp, Color(0xFF282828), RoundedCornerShape(6.dp)),
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF10121D))
+                        .border(1.dp, Color(0xFF282F4E), RoundedCornerShape(8.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Dns,
                         contentDescription = "Server",
-                        tint = Color.White,
+                        tint = Color(0xFFA5B4FC),
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -246,7 +250,7 @@ private fun ServerCard(
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = server.address,
-                        color = Color(0xFFA0A0A0),
+                        color = Color(0xFF64748B),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
                     )
@@ -293,9 +297,9 @@ private fun AddServerDialog(
         Card(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
-                .clip(RoundedCornerShape(8.dp))
-                .border(1.dp, Color(0xFF282828), RoundedCornerShape(8.dp)),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF0A0A0A))
+                .clip(RoundedCornerShape(10.dp))
+                .border(1.dp, Color(0xFF1B1E2D), RoundedCornerShape(10.dp)),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0E1018))
         ) {
             Column(modifier = Modifier.padding(22.dp)) {
                 Text(
@@ -307,7 +311,7 @@ private fun AddServerDialog(
                 )
                 Text(
                     text = "Enter server name and IP address (e.g. mc.hypixel.net)",
-                    color = Color(0xFF888888),
+                    color = Color(0xFF64748B),
                     fontSize = 12.sp
                 )
 

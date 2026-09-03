@@ -47,17 +47,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LoaderType
-import io.ezz.launcher.ui.components.EzzBadge
-import io.ezz.launcher.ui.components.EzzBadgeVariant
 import io.ezz.launcher.ui.components.EzzButton
 import io.ezz.launcher.ui.components.EzzButtonSize
 import io.ezz.launcher.ui.components.EzzButtonVariant
 import io.ezz.launcher.ui.components.EzzCard
 import io.ezz.launcher.ui.components.EzzIconButton
-import io.ezz.launcher.ui.components.EzzLoaderBadge
 import io.ezz.launcher.ui.components.EzzSlider
 import io.ezz.launcher.ui.components.EzzTextField
-import io.ezz.launcher.ui.theme.EzzTheme
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 
 private enum class InstanceSettingSection(val title: String, val icon: ImageVector) {
@@ -77,6 +73,7 @@ fun EditInstanceDialog(
     var activeSection by remember { mutableStateOf(InstanceSettingSection.GENERAL) }
 
     var name by remember { mutableStateOf(instance.name) }
+    var customIconPath by remember { mutableStateOf(instance.customIconPath) }
     var maxRamMb by remember { mutableStateOf(instance.maxMemoryMb.toFloat()) }
     var javaPath by remember { mutableStateOf(instance.javaPath ?: "") }
     var windowWidth by remember { mutableStateOf(instance.windowWidth.toString()) }
@@ -88,10 +85,10 @@ fun EditInstanceDialog(
         Card(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
-                .height(520.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .border(1.dp, Color(0xFF2E2E2E), RoundedCornerShape(8.dp)),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF0A0A0A))
+                .height(540.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF101318))
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(22.dp)) {
                 // Header
@@ -105,9 +102,8 @@ fun EditInstanceDialog(
                         horizontalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         io.ezz.launcher.ui.components.InstanceArtworkIcon(
-                            instance = instance,
-                            size = 46.dp,
-                            showBadge = false
+                            instance = instance.copy(customIconPath = customIconPath),
+                            size = 46.dp
                         )
 
                         Column {
@@ -115,13 +111,22 @@ fun EditInstanceDialog(
                                 text = "Configure ${instance.name}",
                                 color = Color.White,
                                 fontSize = 17.sp,
-                                fontWeight = FontWeight.Black,
+                                fontWeight = FontWeight.Bold,
                                 letterSpacing = 0.3.sp
                             )
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
-                                EzzLoaderBadge(loaderType = instance.loaderType)
+                                Text(
+                                    text = instance.loaderType.name,
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                EzzBadge(text = "Minecraft ${instance.minecraftVersion}", variant = EzzBadgeVariant.NEUTRAL)
+                                Text(
+                                    text = "• Minecraft ${instance.minecraftVersion}",
+                                    color = Color(0xFF64748B),
+                                    fontSize = 12.sp
+                                )
                             }
                         }
                     }
@@ -148,9 +153,9 @@ fun EditInstanceDialog(
                         modifier = Modifier
                             .width(180.dp)
                             .fillMaxHeight()
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFF101010))
-                            .border(1.dp, Color(0xFF202020), RoundedCornerShape(6.dp))
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF0C0E12))
+                            .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp))
                             .padding(6.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
@@ -159,8 +164,12 @@ fun EditInstanceDialog(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(if (isSelected) Color(0xFF222222) else Color.Transparent)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isSelected) Color(0xFF1A1E29) else Color.Transparent)
+                                    .then(
+                                        if (isSelected) Modifier.border(1.dp, Color.White, RoundedCornerShape(6.dp))
+                                        else Modifier
+                                    )
                                     .clickable { activeSection = section }
                                     .padding(horizontal = 10.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -168,13 +177,13 @@ fun EditInstanceDialog(
                                 Icon(
                                     imageVector = section.icon,
                                     contentDescription = null,
-                                    tint = if (isSelected) Color.White else Color(0xFF888888),
+                                    tint = if (isSelected) Color.White else Color(0xFF64748B),
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
                                     text = section.title,
-                                    color = if (isSelected) Color.White else Color(0xFF888888),
+                                    color = if (isSelected) Color.White else Color(0xFF94A3B8),
                                     fontSize = 12.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                                 )
@@ -187,9 +196,9 @@ fun EditInstanceDialog(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFF121212))
-                            .border(1.dp, Color(0xFF222222), RoundedCornerShape(6.dp))
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF0C0E12))
+                            .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp))
                             .padding(18.dp)
                     ) {
                         Column(
@@ -207,12 +216,59 @@ fun EditInstanceDialog(
                                         modifier = Modifier.fillMaxWidth()
                                     )
 
+                                    // Instance Icon Settings
+                                    Text("Instance Icon", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                    ) {
+                                        io.ezz.launcher.ui.components.InstanceArtworkIcon(
+                                            instance = instance.copy(customIconPath = customIconPath),
+                                            size = 52.dp
+                                        )
+                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                EzzButton(
+                                                    text = "Choose Custom Icon",
+                                                    onClick = {
+                                                        val file = viewModel.platformBridge.pickImageFile("Select Instance Icon (PNG, JPG, WEBP)")
+                                                        if (file != null && file.exists()) {
+                                                            val instDirStr = viewModel.pathProvider.getInstanceDirectory(instance.id).toString()
+                                                            val targetIcon = java.io.File(instDirStr, "icon.png")
+                                                            try {
+                                                                file.copyTo(targetIcon, overwrite = true)
+                                                                customIconPath = targetIcon.absolutePath
+                                                            } catch (e: Exception) {
+                                                                customIconPath = file.absolutePath
+                                                            }
+                                                        }
+                                                    },
+                                                    variant = EzzButtonVariant.SECONDARY,
+                                                    size = EzzButtonSize.SMALL
+                                                )
+                                                if (!customIconPath.isNullOrBlank()) {
+                                                    EzzButton(
+                                                        text = "Reset",
+                                                        onClick = { customIconPath = null },
+                                                        variant = EzzButtonVariant.GHOST,
+                                                        size = EzzButtonSize.SMALL
+                                                    )
+                                                }
+                                            }
+                                            Text(
+                                                text = if (!customIconPath.isNullOrBlank()) "Custom icon active" else "Using default 3D block icon",
+                                                color = Color(0xFF64748B),
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                    }
+
                                     EzzCard(modifier = Modifier.fillMaxWidth()) {
                                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                             Text("Metadata & Location", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                            Text("Game Version: Minecraft ${instance.minecraftVersion}", color = Color(0xFFA0A0A0), fontSize = 11.sp)
-                                            Text("Mod Loader: ${instance.loaderType.name}", color = Color(0xFFA0A0A0), fontSize = 11.sp)
-                                            Text("Root: ${viewModel.pathProvider.getInstanceDirectory(instance.id)}", color = Color(0xFF777777), fontSize = 10.sp)
+                                            Text("Game Version: Minecraft ${instance.minecraftVersion}", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                                            Text("Mod Loader: ${instance.loaderType.name}", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                                            Text("Root: ${viewModel.pathProvider.getInstanceDirectory(instance.id)}", color = Color(0xFF64748B), fontSize = 10.sp)
                                         }
                                     }
                                 }
@@ -258,7 +314,7 @@ fun EditInstanceDialog(
                                     if (installedMods.isEmpty()) {
                                         Text(
                                             text = "No mods found in this instance. Use the Mods tab or drag .jar files into the mods folder.",
-                                            color = Color(0xFF777777),
+                                            color = Color(0xFF64748B),
                                             fontSize = 12.sp
                                         )
                                     } else {
@@ -267,14 +323,14 @@ fun EditInstanceDialog(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .clip(RoundedCornerShape(4.dp))
-                                                    .background(Color(0xFF181818))
-                                                    .border(1.dp, Color(0xFF242424), RoundedCornerShape(4.dp))
+                                                    .background(Color(0xFF141720))
+                                                    .border(1.dp, Color(0xFF222735), RoundedCornerShape(4.dp))
                                                     .padding(horizontal = 10.dp, vertical = 6.dp),
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Text(mod.name, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                                Text(mod.version, color = Color(0xFF888888), fontSize = 11.sp)
+                                                Text(mod.version, color = Color(0xFF64748B), fontSize = 11.sp)
                                             }
                                         }
                                     }
@@ -321,6 +377,7 @@ fun EditInstanceDialog(
                             onClick = {
                                 val updated = instance.copy(
                                     name = name.ifBlank { instance.name },
+                                    customIconPath = customIconPath,
                                     maxMemoryMb = maxRamMb.toInt(),
                                     javaPath = javaPath.ifBlank { null },
                                     windowWidth = windowWidth.toIntOrNull() ?: instance.windowWidth,

@@ -3,6 +3,8 @@ package io.ezz.launcher.ui.manager.tabs
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
@@ -27,13 +30,11 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -52,9 +53,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LocalWorld
-import io.ezz.launcher.ui.theme.EzzTheme
+import io.ezz.launcher.ui.components.EzzButton
+import io.ezz.launcher.ui.components.EzzButtonSize
+import io.ezz.launcher.ui.components.EzzButtonVariant
+import io.ezz.launcher.ui.components.ModrinthAsyncImage
 import io.ezz.launcher.ui.viewmodel.AppViewModel
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -65,9 +68,9 @@ fun WorldsTab(
     viewModel: AppViewModel,
     modifier: Modifier = Modifier
 ) {
-    val colors = EzzTheme.colors
     val worlds by viewModel.manageWorlds.collectAsState()
 
+    var worldSearch by remember { mutableStateOf("") }
     var worldToRename by remember { mutableStateOf<LocalWorld?>(null) }
     var worldToDuplicate by remember { mutableStateOf<LocalWorld?>(null) }
     var worldToDelete by remember { mutableStateOf<LocalWorld?>(null) }
@@ -75,72 +78,131 @@ fun WorldsTab(
     var renameText by remember { mutableStateOf("") }
     var duplicateText by remember { mutableStateOf("") }
 
+    val filteredWorlds = worlds.filter { world ->
+        worldSearch.isBlank() || world.name.contains(worldSearch, ignoreCase = true) || world.folderName.contains(worldSearch, ignoreCase = true)
+    }
+
     Column(
         modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Top Action Bar
+        // Top Action Bar & Search
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
-                Text(
-                    text = "WORLDS & SAVES",
-                    color = colors.textPrimary,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Black
-                )
-                Text(
-                    text = "${worlds.size} world(s) found in saves directory",
-                    color = colors.textMuted,
-                    fontSize = 13.sp
-                )
-            }
+            TextField(
+                value = worldSearch,
+                onValueChange = { worldSearch = it },
+                placeholder = { Text("Search worlds...", color = Color(0xFF94A3B8), fontSize = 13.sp) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(16.dp)) },
+                trailingIcon = {
+                    if (worldSearch.isNotBlank()) {
+                        IconButton(onClick = { worldSearch = "" }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF94A3B8), modifier = Modifier.size(16.dp))
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(42.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp)),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color(0xFF101318),
+                    unfocusedContainerColor = Color(0xFF101318),
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                ),
+                singleLine = true
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(
+                EzzButton(
+                    text = "Refresh",
                     onClick = { viewModel.refreshManageData() },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textPrimary)
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Refresh")
-                }
+                    icon = Icons.Default.Refresh,
+                    variant = EzzButtonVariant.SECONDARY,
+                    size = EzzButtonSize.SMALL
+                )
 
-                Button(
+                EzzButton(
+                    text = "Open Saves Folder",
                     onClick = {
                         val path = viewModel.pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("saves")
                         viewModel.platformBridge.openFolder(path)
                     },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = colors.surfaceLight, contentColor = colors.textPrimary)
-                ) {
-                    Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Open Saves Folder")
-                }
+                    icon = Icons.Default.FolderOpen,
+                    variant = EzzButtonVariant.SECONDARY,
+                    size = EzzButtonSize.SMALL
+                )
             }
         }
 
-        if (worlds.isEmpty()) {
+        if (filteredWorlds.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(240.dp)
+                    .height(280.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(colors.surface)
-                    .border(1.dp, colors.border, RoundedCornerShape(10.dp)),
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.Public, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(40.dp))
-                    Text(text = "No worlds found", color = colors.textSecondary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Text(text = "Launch the game and create a singleplayer world or place save folders into saves/", color = colors.textMuted, fontSize = 12.sp)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(Color(0xFF141720))
+                            .border(1.dp, Color(0xFF222735), androidx.compose.foundation.shape.CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Public,
+                            contentDescription = null,
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                    Text(
+                        text = if (worlds.isEmpty()) "No Singleplayer Worlds Found" else "No Matching Worlds Found",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        text = if (worlds.isEmpty())
+                            "Launch Minecraft to create a singleplayer world or place save folders into saves/."
+                        else
+                            "Try searching with a different name.",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 12.5.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    if (worlds.isEmpty()) {
+                        EzzButton(
+                            text = "Open Saves Folder",
+                            onClick = {
+                                val path = viewModel.pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("saves")
+                                viewModel.platformBridge.openFolder(path)
+                            },
+                            icon = Icons.Default.FolderOpen,
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.MEDIUM
+                        )
+                    }
                 }
             }
         } else {
@@ -148,9 +210,10 @@ fun WorldsTab(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(worlds, key = { it.folderName }) { world ->
+                items(filteredWorlds, key = { it.folderName }) { world ->
                     WorldCard(
                         world = world,
+                        viewModel = viewModel,
                         onPlay = { viewModel.launchInstance(instance) },
                         onBackup = { viewModel.backupWorld(world.folderName) },
                         onHistory = { viewModel.openWorldBackups(world) },
@@ -173,23 +236,27 @@ fun WorldsTab(
     if (worldToRename != null) {
         AlertDialog(
             onDismissRequest = { worldToRename = null },
-            title = { Text("Rename World", color = colors.textPrimary, fontWeight = FontWeight.Bold) },
+            title = { Text("Rename World", color = Color.White, fontWeight = FontWeight.Bold) },
             text = {
                 TextField(
                     value = renameText,
                     onValueChange = { renameText = it },
-                    placeholder = { Text("Enter new world name") },
+                    placeholder = { Text("Enter new world name", color = Color(0xFF94A3B8)) },
                     singleLine = true,
                     colors = TextFieldDefaults.colors(
-                        focusedContainerColor = colors.surface,
-                        unfocusedContainerColor = colors.surface,
-                        focusedTextColor = colors.textPrimary,
-                        unfocusedTextColor = colors.textPrimary
-                    )
+                        focusedContainerColor = Color(0xFF141720),
+                        unfocusedContainerColor = Color(0xFF141720),
+                        focusedIndicatorColor = Color.White,
+                        unfocusedIndicatorColor = Color(0xFF222735),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    ),
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
                 )
             },
             confirmButton = {
-                Button(
+                EzzButton(
+                    text = "Rename",
                     onClick = {
                         val w = worldToRename
                         if (w != null && renameText.isNotBlank()) {
@@ -197,17 +264,20 @@ fun WorldsTab(
                             worldToRename = null
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
-                ) {
-                    Text("Rename", fontWeight = FontWeight.Bold)
-                }
+                    variant = EzzButtonVariant.PRIMARY,
+                    size = EzzButtonSize.SMALL
+                )
             },
             dismissButton = {
-                OutlinedButton(onClick = { worldToRename = null }) {
-                    Text("Cancel")
-                }
+                EzzButton(
+                    text = "Cancel",
+                    onClick = { worldToRename = null },
+                    variant = EzzButtonVariant.SECONDARY,
+                    size = EzzButtonSize.SMALL
+                )
             },
-            containerColor = colors.surface
+            containerColor = Color(0xFF101318),
+            shape = RoundedCornerShape(12.dp)
         )
     }
 
@@ -215,23 +285,27 @@ fun WorldsTab(
     if (worldToDuplicate != null) {
         AlertDialog(
             onDismissRequest = { worldToDuplicate = null },
-            title = { Text("Duplicate World", color = colors.textPrimary, fontWeight = FontWeight.Bold) },
+            title = { Text("Duplicate World", color = Color.White, fontWeight = FontWeight.Bold) },
             text = {
                 TextField(
                     value = duplicateText,
                     onValueChange = { duplicateText = it },
-                    placeholder = { Text("Enter copy name") },
+                    placeholder = { Text("Enter copy name", color = Color(0xFF94A3B8)) },
                     singleLine = true,
                     colors = TextFieldDefaults.colors(
-                        focusedContainerColor = colors.surface,
-                        unfocusedContainerColor = colors.surface,
-                        focusedTextColor = colors.textPrimary,
-                        unfocusedTextColor = colors.textPrimary
-                    )
+                        focusedContainerColor = Color(0xFF141720),
+                        unfocusedContainerColor = Color(0xFF141720),
+                        focusedIndicatorColor = Color.White,
+                        unfocusedIndicatorColor = Color(0xFF222735),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White
+                    ),
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
                 )
             },
             confirmButton = {
-                Button(
+                EzzButton(
+                    text = "Duplicate",
                     onClick = {
                         val w = worldToDuplicate
                         if (w != null && duplicateText.isNotBlank()) {
@@ -239,17 +313,20 @@ fun WorldsTab(
                             worldToDuplicate = null
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
-                ) {
-                    Text("Duplicate", fontWeight = FontWeight.Bold)
-                }
+                    variant = EzzButtonVariant.PRIMARY,
+                    size = EzzButtonSize.SMALL
+                )
             },
             dismissButton = {
-                OutlinedButton(onClick = { worldToDuplicate = null }) {
-                    Text("Cancel")
-                }
+                EzzButton(
+                    text = "Cancel",
+                    onClick = { worldToDuplicate = null },
+                    variant = EzzButtonVariant.SECONDARY,
+                    size = EzzButtonSize.SMALL
+                )
             },
-            containerColor = colors.surface
+            containerColor = Color(0xFF101318),
+            shape = RoundedCornerShape(12.dp)
         )
     }
 
@@ -257,30 +334,34 @@ fun WorldsTab(
     if (worldToDelete != null) {
         AlertDialog(
             onDismissRequest = { worldToDelete = null },
-            title = { Text("Delete World", color = colors.danger, fontWeight = FontWeight.Black) },
+            title = { Text("Delete World", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold) },
             text = {
                 Text(
                     text = "Are you sure you want to permanently delete world '${worldToDelete?.name}'? This cannot be undone.",
-                    color = colors.textSecondary
+                    color = Color(0xFFCBD5E1)
                 )
             },
             confirmButton = {
-                Button(
+                EzzButton(
+                    text = "Delete Permanently",
                     onClick = {
                         worldToDelete?.let { viewModel.deleteWorld(it.folderName) }
                         worldToDelete = null
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = colors.danger, contentColor = Color.White)
-                ) {
-                    Text("Delete Permanently", fontWeight = FontWeight.Bold)
-                }
+                    variant = EzzButtonVariant.DANGER,
+                    size = EzzButtonSize.SMALL
+                )
             },
             dismissButton = {
-                OutlinedButton(onClick = { worldToDelete = null }) {
-                    Text("Cancel")
-                }
+                EzzButton(
+                    text = "Cancel",
+                    onClick = { worldToDelete = null },
+                    variant = EzzButtonVariant.SECONDARY,
+                    size = EzzButtonSize.SMALL
+                )
             },
-            containerColor = colors.surface
+            containerColor = Color(0xFF101318),
+            shape = RoundedCornerShape(12.dp)
         )
     }
 }
@@ -288,6 +369,7 @@ fun WorldsTab(
 @Composable
 private fun WorldCard(
     world: LocalWorld,
+    viewModel: AppViewModel,
     onPlay: () -> Unit,
     onBackup: () -> Unit,
     onHistory: () -> Unit,
@@ -295,10 +377,9 @@ private fun WorldCard(
     onRename: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val colors = EzzTheme.colors
     val dateStr = remember(world.lastPlayed) {
         if (world.lastPlayed > 0) {
-            SimpleDateFormat("MMM d, yyyy HH:mm", Locale.getDefault()).format(Date(world.lastPlayed))
+            SimpleDateFormat("MMM d, yyyy • HH:mm", Locale.getDefault()).format(Date(world.lastPlayed))
         } else {
             "Unknown"
         }
@@ -308,9 +389,9 @@ private fun WorldCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(colors.cardBackground)
-            .border(1.dp, colors.border, RoundedCornerShape(10.dp))
-            .padding(16.dp)
+            .background(Color(0xFF101318))
+            .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp))
+            .padding(14.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -322,67 +403,65 @@ private fun WorldCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(colors.surfaceLight),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.Public, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(26.dp))
-                }
+                // Real World Icon or Fallback
+                ModrinthAsyncImage(
+                    url = world.iconPath,
+                    imageLoader = viewModel.imageLoader,
+                    placeholderIcon = Icons.Default.Public,
+                    modifier = Modifier.size(46.dp),
+                    shape = RoundedCornerShape(8.dp)
+                )
 
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             text = world.name,
-                            color = colors.textPrimary,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Black
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
                         )
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))
-                                .background(colors.surfaceLight)
+                                .background(Color(0xFF141720))
+                                .border(1.dp, Color(0xFF222735), RoundedCornerShape(4.dp))
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
-                            Text(text = world.gameType, color = colors.textSecondary, fontSize = 11.sp)
+                            Text(text = world.gameType, color = Color(0xFFCBD5E1), fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
 
                     Text(
                         text = "Last Played: $dateStr • Size: ${formatBytes(world.sizeBytes)}",
-                        color = colors.textMuted,
-                        fontSize = 12.sp
+                        color = Color(0xFF94A3B8),
+                        fontSize = 11.5.sp
                     )
                 }
             }
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Button(
+                EzzButton(
+                    text = "Play",
                     onClick = onPlay,
-                    shape = RoundedCornerShape(6.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
-                ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Play", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                }
+                    icon = Icons.Default.PlayArrow,
+                    variant = EzzButtonVariant.PRIMARY,
+                    size = EzzButtonSize.SMALL
+                )
 
-                IconButton(onClick = onBackup) {
-                    Icon(Icons.Default.Archive, contentDescription = "Create Backup", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
+                IconButton(onClick = onBackup, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Archive, contentDescription = "Create Backup", tint = Color(0xFFCBD5E1), modifier = Modifier.size(16.dp))
                 }
-                IconButton(onClick = onHistory) {
-                    Icon(Icons.Default.History, contentDescription = "Backups History", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
+                IconButton(onClick = onHistory, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.History, contentDescription = "Backups History", tint = Color(0xFFCBD5E1), modifier = Modifier.size(16.dp))
                 }
-                IconButton(onClick = onDuplicate) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = "Duplicate World", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
+                IconButton(onClick = onDuplicate, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = "Duplicate World", tint = Color(0xFFCBD5E1), modifier = Modifier.size(16.dp))
                 }
-                IconButton(onClick = onRename) {
-                    Icon(Icons.Default.DriveFileRenameOutline, contentDescription = "Rename World", tint = colors.textSecondary, modifier = Modifier.size(18.dp))
+                IconButton(onClick = onRename, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.DriveFileRenameOutline, contentDescription = "Rename World", tint = Color(0xFFCBD5E1), modifier = Modifier.size(16.dp))
                 }
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete World", tint = colors.danger.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
+                IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete World", tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
                 }
             }
         }

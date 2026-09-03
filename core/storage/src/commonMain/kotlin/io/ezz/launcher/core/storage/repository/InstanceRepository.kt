@@ -23,6 +23,7 @@ interface InstanceRepository {
         customIconPath: String? = null
     ): Instance
     suspend fun updateInstance(instance: Instance)
+    suspend fun registerInstance(instance: Instance): Instance
     suspend fun deleteInstance(id: String)
     suspend fun duplicateInstance(id: String, newName: String): Instance
 }

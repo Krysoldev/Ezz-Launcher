@@ -1,5 +1,6 @@
 package io.ezz.launcher.ui.manager.tabs
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,16 +22,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,13 +38,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LocalScreenshot
-import io.ezz.launcher.ui.theme.EzzTheme
+import io.ezz.launcher.ui.components.EzzButton
+import io.ezz.launcher.ui.components.EzzButtonSize
+import io.ezz.launcher.ui.components.EzzButtonVariant
+import io.ezz.launcher.ui.image.ImageDecoder
 import io.ezz.launcher.ui.viewmodel.AppViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -57,7 +63,6 @@ fun ScreenshotsTab(
     viewModel: AppViewModel,
     modifier: Modifier = Modifier
 ) {
-    val colors = EzzTheme.colors
     val screenshots by viewModel.manageScreenshots.collectAsState()
     var sortNewestFirst by remember { mutableStateOf(true) }
 
@@ -71,61 +76,65 @@ fun ScreenshotsTab(
 
     Column(
         modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Top Bar
+        // Top Toolbar
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
-                Text(
-                    text = "SCREENSHOTS GALLERY",
-                    color = colors.textPrimary,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Black
-                )
-                Text(
-                    text = "${screenshots.size} screenshot(s) saved",
-                    color = colors.textMuted,
-                    fontSize = 13.sp
-                )
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp))
+                    .padding(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (sortNewestFirst) Color(0xFF1A1E29) else Color.Transparent)
+                        .border(1.dp, if (sortNewestFirst) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
+                        .clickable { sortNewestFirst = true }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Text("Newest First", color = if (sortNewestFirst) Color.White else Color(0xFF94A3B8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (!sortNewestFirst) Color(0xFF1A1E29) else Color.Transparent)
+                        .border(1.dp, if (!sortNewestFirst) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
+                        .clickable { sortNewestFirst = false }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Text("Oldest First", color = if (!sortNewestFirst) Color.White else Color(0xFF94A3B8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(
-                    onClick = { sortNewestFirst = !sortNewestFirst },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textPrimary)
-                ) {
-                    Text(if (sortNewestFirst) "Sort: Newest First" else "Sort: Oldest First", fontSize = 12.sp)
-                }
-
-                OutlinedButton(
+                EzzButton(
+                    text = "Refresh",
                     onClick = { viewModel.refreshManageData() },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.textPrimary)
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Refresh")
-                }
+                    icon = Icons.Default.Refresh,
+                    variant = EzzButtonVariant.SECONDARY,
+                    size = EzzButtonSize.SMALL
+                )
 
-                Button(
+                EzzButton(
+                    text = "Open Folder",
                     onClick = {
                         val path = viewModel.pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("screenshots")
                         viewModel.platformBridge.openFolder(path)
                     },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = colors.surfaceLight, contentColor = colors.textPrimary)
-                ) {
-                    Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Open Folder")
-                }
+                    icon = Icons.Default.FolderOpen,
+                    variant = EzzButtonVariant.SECONDARY,
+                    size = EzzButtonSize.SMALL
+                )
             }
         }
 
@@ -133,16 +142,16 @@ fun ScreenshotsTab(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(240.dp)
+                    .height(280.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(colors.surface)
-                    .border(1.dp, colors.border, RoundedCornerShape(10.dp)),
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.Image, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(40.dp))
-                    Text(text = "No screenshots yet", color = colors.textSecondary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Text(text = "Press F2 in-game to take screenshots", color = colors.textMuted, fontSize = 12.sp)
+                    Icon(Icons.Default.Image, contentDescription = null, tint = Color(0xFF64748B), modifier = Modifier.size(40.dp))
+                    Text(text = "No screenshots yet", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "Press F2 in-game to capture high-res Minecraft screenshots", color = Color(0xFF94A3B8), fontSize = 12.sp)
                 }
             }
         } else {
@@ -170,29 +179,50 @@ private fun ScreenshotCard(
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val colors = EzzTheme.colors
     val dateStr = remember(screenshot.lastModified) {
-        SimpleDateFormat("MMM d, yyyy HH:mm", Locale.getDefault()).format(Date(screenshot.lastModified))
+        SimpleDateFormat("MMM d, yyyy • HH:mm", Locale.getDefault()).format(Date(screenshot.lastModified))
+    }
+
+    var imageBitmap by remember(screenshot.filePath) { mutableStateOf<ImageBitmap?>(null) }
+
+    LaunchedEffect(screenshot.filePath) {
+        withContext(Dispatchers.IO) {
+            val file = File(screenshot.filePath)
+            if (file.exists()) {
+                imageBitmap = ImageDecoder.decodeFile(file)
+            }
+        }
     }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(colors.cardBackground)
-            .border(1.dp, colors.border, RoundedCornerShape(10.dp))
+            .background(Color(0xFF101318))
+            .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
     ) {
         Column {
-            // Thumbnail Area
+            // Thumbnail Area with actual image
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(130.dp)
-                    .background(Color(0xFF141414)),
+                    .height(135.dp)
+                    .background(Color(0xFF141720)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Image, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(36.dp))
+                val bitmap = imageBitmap
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap,
+                        contentDescription = screenshot.fileName,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(Icons.Default.Image, contentDescription = null, tint = Color(0xFF64748B), modifier = Modifier.size(36.dp))
+                }
+
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -200,9 +230,9 @@ private fun ScreenshotCard(
                 ) {
                     IconButton(
                         onClick = onDelete,
-                        modifier = Modifier.size(28.dp).background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                        modifier = Modifier.size(28.dp).background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(6.dp))
                     ) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = colors.danger, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFEF4444), modifier = Modifier.size(15.dp))
                     }
                 }
             }
@@ -214,14 +244,14 @@ private fun ScreenshotCard(
             ) {
                 Text(
                     text = screenshot.fileName,
-                    color = colors.textPrimary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 1
                 )
                 Text(
                     text = "$dateStr • ${screenshot.fileSizeBytes / 1024} KB",
-                    color = colors.textMuted,
+                    color = Color(0xFF94A3B8),
                     fontSize = 11.sp
                 )
             }

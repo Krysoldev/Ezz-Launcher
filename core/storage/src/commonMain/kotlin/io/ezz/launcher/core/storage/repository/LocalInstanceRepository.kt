@@ -161,6 +161,21 @@ class LocalInstanceRepository(
         }
     }
 
+    override suspend fun registerInstance(instance: Instance): Instance = withContext(dispatcher) {
+        mutex.withLock {
+            val instDir = pathProvider.getInstanceDirectory(instance.id)
+            try {
+                fileSystem.createDirectories(instDir)
+                fileSystem.createDirectories(instDir.resolve(".minecraft"))
+            } catch (_: Exception) {}
+
+            val updated = _instances.value.filter { it.id != instance.id } + instance
+            _instances.value = updated
+            saveToDisk(updated)
+            instance
+        }
+    }
+
     override suspend fun deleteInstance(id: String): Unit = withContext(dispatcher) {
         mutex.withLock {
             val current = _instances.value

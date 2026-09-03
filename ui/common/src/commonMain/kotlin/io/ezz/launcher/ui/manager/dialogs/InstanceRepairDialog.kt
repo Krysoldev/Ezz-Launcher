@@ -19,10 +19,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -31,11 +28,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.ezz.launcher.core.model.instance.InstanceRepairReport
-import io.ezz.launcher.ui.theme.EzzTheme
+import io.ezz.launcher.ui.components.EzzButton
+import io.ezz.launcher.ui.components.EzzButtonSize
+import io.ezz.launcher.ui.components.EzzButtonVariant
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 
 @Composable
@@ -43,7 +42,6 @@ fun InstanceRepairDialog(
     viewModel: AppViewModel,
     onDismiss: () -> Unit
 ) {
-    val colors = EzzTheme.colors
     val report by viewModel.manageRepairReport.collectAsState()
     val scrollState = rememberScrollState()
 
@@ -54,14 +52,14 @@ fun InstanceRepairDialog(
                 Icon(
                     if (report?.isHealthy == true) Icons.Default.CheckCircle else Icons.Default.Warning,
                     contentDescription = null,
-                    tint = if (report?.isHealthy == true) Color(0xFF10B981) else colors.warning,
-                    modifier = Modifier.size(24.dp)
+                    tint = if (report?.isHealthy == true) Color(0xFF10B981) else Color(0xFFFBBF24),
+                    modifier = Modifier.size(22.dp)
                 )
                 Text(
                     text = "Instance Health Diagnostic",
-                    color = colors.textPrimary,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 18.sp
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp
                 )
             }
         },
@@ -73,11 +71,11 @@ fun InstanceRepairDialog(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 if (report == null) {
-                    Text("Running diagnostics...", color = colors.textSecondary)
+                    Text("Running diagnostics...", color = Color(0xFF94A3B8), fontSize = 13.sp)
                 } else {
                     // Passed Checks
                     if (report!!.passed.isNotEmpty()) {
-                        Text("PASSED CHECKS", color = Color(0xFF10B981), fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
+                        Text("PASSED CHECKS", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
                         report!!.passed.forEach { item ->
                             CheckRow(item, Color(0xFF10B981), Icons.Default.CheckCircle)
                         }
@@ -85,50 +83,48 @@ fun InstanceRepairDialog(
 
                     // Warnings
                     if (report!!.warnings.isNotEmpty()) {
-                        Text("WARNINGS", color = colors.warning, fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
+                        Text("WARNINGS", color = Color(0xFFFBBF24), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
                         report!!.warnings.forEach { item ->
-                            CheckRow(item, colors.warning, Icons.Default.Warning)
+                            CheckRow(item, Color(0xFFFBBF24), Icons.Default.Warning)
                         }
                     }
 
                     // Failed Checks
                     if (report!!.failed.isNotEmpty()) {
-                        Text("FAILURES", color = colors.danger, fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
+                        Text("FAILURES", color = Color(0xFFEF4444), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
                         report!!.failed.forEach { item ->
-                            CheckRow(item, colors.danger, Icons.Default.Error)
+                            CheckRow(item, Color(0xFFEF4444), Icons.Default.Error)
                         }
                     }
                 }
             }
         },
         confirmButton = {
-            Button(
+            EzzButton(
+                text = "Close",
                 onClick = onDismiss,
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text("Close", fontWeight = FontWeight.Bold)
-            }
+                variant = EzzButtonVariant.PRIMARY,
+                size = EzzButtonSize.SMALL
+            )
         },
-        containerColor = colors.surface,
+        containerColor = Color(0xFF101318),
         shape = RoundedCornerShape(12.dp)
     )
 }
 
 @Composable
-private fun CheckRow(text: String, tint: Color, icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    val colors = EzzTheme.colors
+private fun CheckRow(text: String, tint: Color, icon: ImageVector) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
-            .background(colors.cardBackground)
-            .border(1.dp, colors.border, RoundedCornerShape(6.dp))
+            .background(Color(0xFF141720))
+            .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(6.dp))
             .padding(10.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
-            Text(text = text, color = colors.textPrimary, fontSize = 12.sp)
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(15.dp))
+            Text(text = text, color = Color.White, fontSize = 12.sp)
         }
     }
 }

@@ -2,7 +2,9 @@ package io.ezz.launcher.core.minecraft.launch
 
 import io.ezz.launcher.core.minecraft.resolver.OperatingSystem
 import io.ezz.launcher.core.model.account.OfflineAccount
+import io.ezz.launcher.core.model.instance.GarbageCollectorType
 import io.ezz.launcher.core.model.instance.Instance
+import io.ezz.launcher.core.model.instance.PerformanceProfile
 import io.ezz.launcher.core.model.minecraft.VersionInfo
 import okio.Path.Companion.toPath
 import kotlin.test.Test
@@ -100,5 +102,40 @@ class LaunchArgumentBuilderTest {
         assertTrue(command.contains("1920"))
         assertTrue(command.contains("--height"))
         assertTrue(command.contains("1080"))
+    }
+
+    @Test
+    fun testPerformanceProfileAndGcArguments() {
+        val instance = Instance(
+            id = "test-perf",
+            name = "Performance Instance",
+            minecraftVersion = "1.21.1",
+            performanceProfile = PerformanceProfile.MAX_FPS,
+            gcType = GarbageCollectorType.ZGC,
+            minMemoryMb = 4096,
+            maxMemoryMb = 8192
+        )
+
+        val account = OfflineAccount(id = "acc", username = "ProPlayer", uuid = "00000000-0000-0000-0000-000000000000")
+        val versionInfo = VersionInfo(id = "1.21.1", mainClass = "net.fabricmc.loader.impl.launch.knot.KnotClient")
+
+        val command = LaunchArgumentBuilder.buildLaunchCommand(
+            instance = instance,
+            account = account,
+            versionInfo = versionInfo,
+            classpathEntries = emptyList(),
+            clientJarPath = "client.jar".toPath(),
+            nativesDir = "natives".toPath(),
+            assetsDir = "assets".toPath(),
+            gameDir = "gameDir".toPath(),
+            javaBinaryPath = "java"
+        )
+
+        assertTrue(command.contains("-Xms4096M"))
+        assertTrue(command.contains("-Xmx8192M"))
+        assertTrue(command.contains("-XX:+UseZGC"))
+        assertTrue(command.contains("-XX:+ZGenerational"))
+        assertTrue(command.contains("-XX:+AlwaysPreTouch"))
+        assertTrue(command.contains("-XX:+ParallelRefProcEnabled"))
     }
 }

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "ezzskin",
+  "version": "1.0.0",
+  "name": "Ezz Skin Fabric Mod",
+  "description": "Multi-version skin mod for Ezz Launcher",
+  "authors": ["KrysolDev"],
+  "icon": "assets/ezzskin/icon.png",
+  "environment": "client",
+  "entrypoints": { "client": ["io.ezz.skinmod.EzzSkinMod"] },
+  "mixins": ["ezzskin.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.14.0",
+    "minecraft": ">=1.16.0"
+  }
+}

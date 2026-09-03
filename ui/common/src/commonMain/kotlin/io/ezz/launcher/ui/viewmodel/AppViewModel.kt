@@ -1,7 +1,7 @@
 package io.ezz.launcher.ui.viewmodel
 
 import io.ezz.launcher.core.auth.AuthManager
-import io.ezz.launcher.core.auth.microsoft.MicrosoftLoginProgress
+import io.ezz.launcher.core.auth.microsoft.MicrosoftAuthState
 import io.ezz.launcher.core.minecraft.loader.fabric.FabricMetaClient
 import io.ezz.launcher.core.minecraft.loader.optifine.OptiFineCompatibilityValidator
 import io.ezz.launcher.core.minecraft.manifest.VersionManifestService
@@ -36,12 +36,17 @@ import io.ezz.launcher.core.storage.supabase.SupabaseClient
 import io.ezz.launcher.core.storage.supabase.SupabaseMinecraftVersionDto
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import io.ezz.launcher.core.model.instance.InstanceManagerTab
 import io.ezz.launcher.core.model.instance.InstanceStatistics
 import io.ezz.launcher.core.model.instance.LocalMod
@@ -52,6 +57,9 @@ import io.ezz.launcher.core.model.instance.LocalWorldBackup
 import io.ezz.launcher.core.model.instance.LocalScreenshot
 import io.ezz.launcher.core.model.instance.InstanceLogEntry
 import io.ezz.launcher.core.model.instance.InstanceRepairReport
+import io.ezz.launcher.core.model.instance.LogLine
+import io.ezz.launcher.core.model.instance.LogReadResult
+import io.ezz.launcher.core.model.instance.LogSeverityLevel
 import io.ezz.launcher.core.model.modrinth.ModrinthContentType
 import io.ezz.launcher.core.model.modrinth.ModrinthProjectHit
 import io.ezz.launcher.core.model.modrinth.ModrinthVersion
@@ -67,7 +75,20 @@ import io.ezz.launcher.core.model.skin.VaultManifest
 import io.ezz.launcher.core.model.skin.VaultSkin
 import io.ezz.launcher.core.storage.repository.VaultSkinRepository
 import io.ezz.launcher.core.storage.repository.LocalVaultSkinRepository
-import kotlinx.coroutines.Job
+import io.ezz.launcher.ui.components.ToastManager
+import io.ezz.launcher.ui.components.ToastType
+import io.ktor.client.request.get
+import io.ktor.client.call.body
+
+data class VaultScreenState(
+    val currentAccount: Account? = null,
+    val activeSkin: VaultSkin? = null,
+    val selectedSkin: VaultSkin? = null,
+    val allSkins: List<VaultSkin> = emptyList(),
+    val selectedSkinBytes: ByteArray? = null,
+    val isSelectedSkinActive: Boolean = false,
+    val stateVersion: Long = 0L
+)
 
 enum class NavigationScreen {
     HOME,
@@ -75,9 +96,13 @@ enum class NavigationScreen {
     VAULT,
     ACCOUNTS,
     MODS,
+    RESOURCE_PACKS,
+    SHADERS,
+    WORLDS,
+    SCREENSHOTS,
+    SETTINGS,
     SERVERS,
     PROFILES,
-    SETTINGS,
     CONSOLE,
     INSTANCE_MANAGER
 }
@@ -129,6 +154,7 @@ class AppViewModel(
     val processSessionTracker: io.ezz.launcher.core.runtime.process.ProcessSessionTracker? = null,
     val localInstanceManager: LocalInstanceManager? = null,
     val modrinthService: ModrinthService? = null,
+    val curseForgeService: io.ezz.launcher.core.network.curseforge.CurseForgeService? = null,
     val vaultSkinRepository: VaultSkinRepository? = null,
     val platformBridge: PlatformBridge = DefaultPlatformBridge(),
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main)
@@ -143,6 +169,9 @@ class AppViewModel(
 
     val modrinth: ModrinthService =
         modrinthService ?: ModrinthService()
+
+    val curseForge: io.ezz.launcher.core.network.curseforge.CurseForgeService =
+        curseForgeService ?: io.ezz.launcher.core.network.curseforge.CurseForgeService()
 
     val skinService: io.ezz.launcher.core.minecraft.skin.MinecraftSkinManager =
         skinManager ?: io.ezz.launcher.core.minecraft.skin.MinecraftSkinManager(
@@ -205,6 +234,22 @@ class AppViewModel(
     private val _detectedJavaRuntimes = MutableStateFlow<List<JavaRuntime>>(emptyList())
     val detectedJavaRuntimes: StateFlow<List<JavaRuntime>> = _detectedJavaRuntimes.asStateFlow()
 
+    private val _detectedGpus = MutableStateFlow<List<io.ezz.launcher.core.runtime.detector.DetectedGpu>>(emptyList())
+    val detectedGpus: StateFlow<List<io.ezz.launcher.core.runtime.detector.DetectedGpu>> = _detectedGpus.asStateFlow()
+
+    private val _systemMemoryInfo = MutableStateFlow(io.ezz.launcher.core.runtime.detector.JavaRuntimeDetector.getSystemMemoryInfo())
+    val systemMemoryInfo: StateFlow<io.ezz.launcher.core.runtime.detector.SystemMemoryInfo> = _systemMemoryInfo.asStateFlow()
+
+    fun appendConsoleLog(message: String, isError: Boolean = false) {
+        val entry = ConsoleLogEntry(message = message, isError = isError)
+        val current = _logs.value
+        if (current.size >= 2000) {
+            _logs.value = current.drop(current.size - 1999) + entry
+        } else {
+            _logs.value = current + entry
+        }
+    }
+
     private val _isSupabaseConnected = MutableStateFlow<Boolean?>(null)
     val isSupabaseConnected: StateFlow<Boolean?> = _isSupabaseConnected.asStateFlow()
 
@@ -240,7 +285,56 @@ class AppViewModel(
     // Diagnostic Error Dialog State
     val launchErrorDialogData = MutableStateFlow<LaunchErrorData?>(null)
 
-    // Vault Skin Flows
+    // Authoritative Unified Vault Skin State (Single Source of Truth)
+    private val _selectedVaultSkinId = MutableStateFlow<String?>(null)
+    val selectedVaultSkinId: StateFlow<String?> = _selectedVaultSkinId.asStateFlow()
+
+    private val _vaultVersion = MutableStateFlow(0L)
+    val vaultVersion: StateFlow<Long> = _vaultVersion.asStateFlow()
+
+    val vaultState: StateFlow<VaultScreenState> = combine(
+        accountRepository.selectedAccount,
+        vaultRepository.manifest,
+        _selectedVaultSkinId,
+        _vaultVersion
+    ) { account, manifest, selectedId, version ->
+        val currentAccountId = account?.id
+        val activeSkinId = if (currentAccountId != null) {
+            manifest.accountSkinMappings[currentAccountId] ?: manifest.activeSkinId
+        } else {
+            manifest.activeSkinId
+        }
+        val activeSkin = activeSkinId?.let { id -> manifest.skins.firstOrNull { it.id == id } }
+
+        val selectedSkin = if (selectedId != null) {
+            manifest.skins.firstOrNull { it.id == selectedId } ?: activeSkin ?: manifest.skins.firstOrNull()
+        } else {
+            activeSkin ?: manifest.skins.firstOrNull()
+        }
+
+        val isSelectedActive = if (selectedSkin != null) {
+            selectedSkin.id == activeSkin?.id
+        } else {
+            activeSkin == null
+        }
+
+        val skinBytes = selectedSkin?.let { vaultRepository.getSkinBytes(it) }
+
+        VaultScreenState(
+            currentAccount = account,
+            activeSkin = activeSkin,
+            selectedSkin = selectedSkin,
+            allSkins = manifest.skins,
+            selectedSkinBytes = skinBytes,
+            isSelectedSkinActive = isSelectedActive,
+            stateVersion = version
+        )
+    }.stateIn(
+        scope = scope,
+        started = SharingStarted.Eagerly,
+        initialValue = VaultScreenState()
+    )
+
     val vaultSkins: StateFlow<List<VaultSkin>> = vaultRepository.skins
     val activeVaultSkinId: StateFlow<String?> = vaultRepository.activeSkinId
     private val _selectedVaultSkin = MutableStateFlow<VaultSkin?>(null)
@@ -249,23 +343,38 @@ class AppViewModel(
     // Dialog States
     val showCreateInstanceDialog = MutableStateFlow(false)
     val showEditInstanceDialog = MutableStateFlow<Instance?>(null)
+    val showModpackBrowserDialog = MutableStateFlow(false)
+    val showImportModpackDialog = MutableStateFlow(false)
+    val showExportModpackDialog = MutableStateFlow<Instance?>(null)
+    val pendingMrpackFile = MutableStateFlow<java.io.File?>(null)
+    val mrpackImportProgress = MutableStateFlow<io.ezz.launcher.core.model.modrinth.MrpackImportProgress?>(null)
+    val isImportingMrpack = MutableStateFlow(false)
+    private var mrpackImportJob: Job? = null
     val showAddOfflineAccountDialog = MutableStateFlow(false)
     val showMicrosoftLoginDialog = MutableStateFlow(false)
     val showEzzAuthDialog = MutableStateFlow(false)
     val showAddServerDialog = MutableStateFlow(false)
     val showSearchDialog = MutableStateFlow(false)
-    val microsoftLoginProgress = MutableStateFlow<MicrosoftLoginProgress?>(null)
+    val microsoftAuthState = MutableStateFlow<MicrosoftAuthState>(MicrosoftAuthState.Idle)
+    private var microsoftLoginJob: Job? = null
+    var windowHandle: Long? = null
+    var nativeWindowProvider: (() -> Long?)? = null
 
     // Dedicated Instance Manager State
     val activeManageTab = MutableStateFlow(InstanceManagerTab.OVERVIEW)
     val manageStatistics = MutableStateFlow<InstanceStatistics?>(null)
     val manageMods = MutableStateFlow<List<LocalMod>>(emptyList())
+    val missingDependencies = MutableStateFlow<List<String>>(emptyList())
+    val compatibilityConflicts = MutableStateFlow<List<io.ezz.launcher.core.model.modrinth.ModConflict>>(emptyList())
     val manageResourcePacks = MutableStateFlow<List<LocalResourcePack>>(emptyList())
     val manageShaders = MutableStateFlow<List<LocalShaderPack>>(emptyList())
     val manageWorlds = MutableStateFlow<List<LocalWorld>>(emptyList())
     val manageScreenshots = MutableStateFlow<List<LocalScreenshot>>(emptyList())
     val manageLogs = MutableStateFlow<List<InstanceLogEntry>>(emptyList())
     val manageSelectedLogContent = MutableStateFlow<String?>(null)
+    val manageLogResult = MutableStateFlow<LogReadResult?>(null)
+    val isLogLoading = MutableStateFlow(false)
+    val logLoadError = MutableStateFlow<String?>(null)
     val manageRepairReport = MutableStateFlow<InstanceRepairReport?>(null)
 
     // Modrinth Image Caching Engine
@@ -285,6 +394,8 @@ class AppViewModel(
     private var searchModsJob: Job? = null
     private var searchResourcePacksJob: Job? = null
     private var searchShadersJob: Job? = null
+    private var loadLogJob: Job? = null
+    private var liveLogJob: Job? = null
 
     // Instance Manager Modals & Dialogs
     val selectedScreenshotForViewer = MutableStateFlow<LocalScreenshot?>(null)
@@ -333,28 +444,21 @@ class AppViewModel(
             }
         }
 
-        scope.launch {
+        scope.launch(Dispatchers.IO) {
             try {
-                pathProvider.initializeDirectories()
                 supabaseClient?.let {
                     _isSupabaseConnected.value = it.checkConnection()
                 }
                 profileRepository?.loadProfile()
-                instanceRepository.loadAll()
-                val loadedAccounts = accountRepository.loadAll()
-                settingsRepository.loadSettings()
                 refreshAvailableVersions()
                 refreshJavaRuntimes()
+                _detectedGpus.value = io.ezz.launcher.core.runtime.detector.GpuDetector.detectGpus()
+                _systemMemoryInfo.value = io.ezz.launcher.core.runtime.detector.JavaRuntimeDetector.getSystemMemoryInfo()
 
                 // Load Public Supabase Tables
                 loadPublicData()
-
-                // If no accounts exist on first start, create a default offline account
-                if (loadedAccounts.isEmpty()) {
-                    authManager.createOfflineAccount("Player")
-                }
             } catch (e: Throwable) {
-                _errorMessage.value = "Database connection note: ${e.message}"
+                _errorMessage.value = "Background service note: ${e.message}"
             }
         }
 
@@ -442,6 +546,14 @@ class AppViewModel(
     }
 
     fun selectInstance(instance: Instance) {
+        val previousId = _selectedInstance.value?.id
+        if (previousId != instance.id) {
+            stopLiveLogWatching()
+            selectedLogFile.value = null
+            manageSelectedLogContent.value = null
+            manageLogResult.value = null
+            logLoadError.value = null
+        }
         _selectedInstance.value = instance
         val session = _runningSessions.value[instance.id]
         if (session != null) {
@@ -479,6 +591,10 @@ class AppViewModel(
     }
 
     fun deleteMod(instanceId: String, fileName: String) {
+        if (fileName.startsWith("ezz-skin-mod", ignoreCase = true) || fileName.contains("ezzskin", ignoreCase = true)) {
+            println("[AppViewModel] Cannot delete protected Ezz Skin Mod: $fileName")
+            return
+        }
         scope.launch {
             try {
                 localModScanner?.deleteMod(instanceId, fileName)
@@ -543,25 +659,16 @@ class AppViewModel(
         scope.launch {
             try {
                 accountRepository.selectAccount(account.id)
+                _selectedVaultSkinId.value = null
+                _selectedVaultSkin.value = null
+                _vaultVersion.value++
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to select account: ${e.message}"
             }
         }
     }
 
-    fun deleteAccount(accountId: String) {
-        scope.launch {
-            try {
-                accountRepository.removeAccount(accountId)
-            } catch (e: Exception) {
-                _errorMessage.value = "Failed to delete account: ${e.message}"
-            }
-        }
-    }
 
-    fun cancelMicrosoftLogin() {
-        showMicrosoftLoginDialog.value = false
-    }
 
     fun stopInstance() {
         _processState.value = ProcessState.Idle
@@ -732,9 +839,16 @@ class AppViewModel(
             return
         }
 
-        val launchAccount = account
+        val rawAccount = account
 
         scope.launch {
+            val launchAccount = try {
+                authManager.getValidSession(rawAccount)
+            } catch (e: Exception) {
+                _logs.value = listOf(ConsoleLogEntry(message = "[Auth Notice] ${e.message}", isError = false))
+                rawAccount
+            }
+
             _logs.value = listOf(ConsoleLogEntry(message = "=== Launching ${targetInstance.name} (${targetInstance.minecraftVersion}) as ${launchAccount.username} ==="))
             activeDownloadState.value = ActiveDownloadState(
                 stage = "PREPARING",
@@ -810,7 +924,7 @@ class AppViewModel(
                             )
                         }
                         is LaunchEvent.LogReceived -> {
-                            _logs.value = _logs.value + ConsoleLogEntry(message = event.line, isError = event.isError)
+                            appendConsoleLog(event.line, isError = event.isError)
                         }
                     }
                 }
@@ -905,44 +1019,328 @@ class AppViewModel(
         }
     }
 
+    private var importSessionId: Long = 0L
+
+    fun openImportModpack(file: java.io.File? = null) {
+        resetImportState()
+        pendingMrpackFile.value = file
+        showImportModpackDialog.value = true
+    }
+
+    fun closeImportModpack() {
+        showImportModpackDialog.value = false
+        resetImportState()
+    }
+
+    fun resetImportState() {
+        importSessionId++
+        mrpackImportJob?.cancel()
+        mrpackImportJob = null
+        isImportingMrpack.value = false
+        mrpackImportProgress.value = null
+        pendingMrpackFile.value = null
+    }
+
+    fun openExportModpack(instance: Instance) {
+        showExportModpackDialog.value = instance
+    }
+
+    fun cancelMrpackImport() {
+        resetImportState()
+        ToastManager.show("Import Cancelled", "Modpack import was aborted.", ToastType.INFO)
+    }
+
+    fun executeImportMrpack(
+        file: java.io.File,
+        instanceName: String? = null,
+        onComplete: ((Result<Instance>) -> Unit)? = null
+    ) {
+        mrpackImportJob?.cancel()
+        val session = ++importSessionId
+        mrpackImportJob = scope.launch {
+            isImportingMrpack.value = true
+            mrpackImportProgress.value = io.ezz.launcher.core.model.modrinth.MrpackImportProgress(
+                stage = io.ezz.launcher.core.model.modrinth.MrpackImportStage.READING_MANIFEST,
+                message = "Validating and reading modpack...",
+                progress = 0.05f
+            )
+
+            try {
+                val result = instanceManager.mrpackManager.importMrpack(file, instanceName) { progress ->
+                    if (session == importSessionId) {
+                        mrpackImportProgress.value = progress
+                    }
+                }
+
+                if (session != importSessionId) {
+                    return@launch // Discard stale session
+                }
+
+                isImportingMrpack.value = false
+                if (result.isSuccess) {
+                    val imported = result.getOrNull()
+                    if (imported != null) {
+                        _selectedInstance.value = imported
+                    }
+                    instanceRepository.loadAll()
+                    ToastManager.show(
+                        title = "Modpack Imported",
+                        description = "'${imported?.name ?: "Instance"}' is ready to play!",
+                        type = ToastType.SUCCESS
+                    )
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "Failed to import modpack"
+                    ToastManager.show("Import Failed", error, ToastType.ERROR)
+                }
+                onComplete?.invoke(result)
+            } catch (e: Exception) {
+                if (session != importSessionId) return@launch
+                isImportingMrpack.value = false
+                mrpackImportProgress.value = null
+                ToastManager.show("Import Error", e.message ?: "Unknown error", ToastType.ERROR)
+                onComplete?.invoke(Result.failure(e))
+            }
+        }
+    }
+
+    fun executeExportMrpack(
+        instance: Instance,
+        targetFile: java.io.File,
+        options: io.ezz.launcher.core.model.modrinth.MrpackExportOptions,
+        onProgress: (String, Float) -> Unit = { _, _ -> },
+        onComplete: ((Boolean) -> Unit)? = null
+    ) {
+        scope.launch {
+            try {
+                val result = instanceManager.mrpackManager.exportMrpack(instance, targetFile, options, onProgress)
+                if (result.isSuccess) {
+                    ToastManager.show(
+                        title = "Modpack Exported",
+                        description = "Saved '${options.customName ?: instance.name}' (.mrpack)",
+                        type = ToastType.SUCCESS
+                    )
+                    onComplete?.invoke(true)
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "Failed to create .mrpack"
+                    ToastManager.show("Export Failed", error, ToastType.ERROR)
+                    onComplete?.invoke(false)
+                }
+            } catch (e: Exception) {
+                ToastManager.show("Export Error", e.message ?: "Failed to export", ToastType.ERROR)
+                onComplete?.invoke(false)
+            }
+        }
+    }
+
+    fun importInstanceFromFile(
+        file: java.io.File,
+        preferredName: String? = null,
+        onComplete: ((Result<Instance>) -> Unit)? = null
+    ) {
+        openImportModpack(file)
+    }
+
+    fun exportInstanceToFile(
+        instance: Instance,
+        targetFile: java.io.File,
+        includeWorlds: Boolean = false,
+        onComplete: ((Boolean) -> Unit)? = null
+    ) {
+        val options = io.ezz.launcher.core.model.modrinth.MrpackExportOptions(
+            customName = instance.name,
+            includeConfigs = true,
+            includeMods = true,
+            includeResourcePacks = true,
+            includeShaderPacks = true
+        )
+        executeExportMrpack(instance, targetFile, options, onComplete = onComplete)
+    }
+
+    fun installModrinthModpack(
+        hit: ModrinthProjectHit,
+        version: ModrinthVersion?,
+        customName: String? = null,
+        onComplete: ((Result<Instance>) -> Unit)? = null
+    ) {
+        scope.launch {
+            try {
+                val targetVersion = version ?: modrinth.getProjectVersions(hit.projectId).firstOrNull()
+                if (targetVersion == null) {
+                    val error = IllegalStateException("No compatible versions found for modpack '${hit.title}'.")
+                    ToastManager.show("Installation Failed", error.message, ToastType.ERROR)
+                    onComplete?.invoke(Result.failure(error))
+                    return@launch
+                }
+
+                val primaryFile = targetVersion.files.firstOrNull { it.primary } ?: targetVersion.files.firstOrNull()
+                if (primaryFile == null) {
+                    val error = IllegalStateException("No downloadable file found for modpack version '${targetVersion.name}'.")
+                    ToastManager.show("Installation Failed", error.message, ToastType.ERROR)
+                    onComplete?.invoke(Result.failure(error))
+                    return@launch
+                }
+
+                activeDownloadState.value = ActiveDownloadState(
+                    stage = "DOWNLOADING",
+                    currentFile = "${hit.title} modpack",
+                    progress = 0f,
+                    downloadedBytes = 0L,
+                    totalBytes = primaryFile.size
+                )
+
+                val tempDir = java.io.File(System.getProperty("java.io.tmpdir"), "ezz_modpack_dl")
+                tempDir.mkdirs()
+                val tempMrpack = java.io.File(tempDir, "${hit.slug}_${targetVersion.id}.mrpack")
+
+                val downloaded = modrinth.downloadContent(primaryFile.url, tempMrpack) { bytes, total ->
+                    val pct = if (total > 0) bytes.toFloat() / total.toFloat() else 0f
+                    activeDownloadState.value = ActiveDownloadState(
+                        stage = "DOWNLOADING",
+                        currentFile = "${hit.title} (${primaryFile.filename})",
+                        progress = pct,
+                        downloadedBytes = bytes,
+                        totalBytes = total
+                    )
+                }
+
+                if (!downloaded || !tempMrpack.exists()) {
+                    activeDownloadState.value = null
+                    val error = IllegalStateException("Failed to download modpack archive from Modrinth.")
+                    ToastManager.show("Download Failed", error.message, ToastType.ERROR)
+                    onComplete?.invoke(Result.failure(error))
+                    return@launch
+                }
+
+                val packName = customName?.takeIf { it.isNotBlank() } ?: hit.title
+                val result = instanceManager.importInstanceFromMrpack(tempMrpack, packName) { step, progress ->
+                    activeDownloadState.value = ActiveDownloadState(
+                        stage = "INSTALLING",
+                        currentFile = step,
+                        progress = progress,
+                        downloadedBytes = (progress * 100L).toLong(),
+                        totalBytes = 100L
+                    )
+                }
+
+                val iconUrl = hit.iconUrl
+                if (result.isSuccess) {
+                    val rawCreated = result.getOrNull()
+                    if (rawCreated != null && !iconUrl.isNullOrBlank()) {
+                        try {
+                            val iconBytes = modrinth.downloadImageBytes(iconUrl)
+                            if (iconBytes != null && iconBytes.isNotEmpty()) {
+                                val iconFile = java.io.File(tempDir, "icon_${hit.projectId}.png")
+                                iconFile.writeBytes(iconBytes)
+                                instanceManager.setCustomIcon(rawCreated.id, iconFile)
+                                iconFile.delete()
+                            }
+                        } catch (_: Exception) {}
+                    }
+
+                    instanceRepository.loadAll()
+                    val created = rawCreated?.let { instanceRepository.getInstance(it.id) } ?: rawCreated
+                    if (created != null) {
+                        _selectedInstance.value = created
+                    }
+                    showModpackBrowserDialog.value = false
+                    ToastManager.show(
+                        title = "Modpack Installed",
+                        description = "'${packName}' is ready to play!",
+                        type = ToastType.SUCCESS
+                    )
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "Installation failed"
+                    ToastManager.show("Modpack Error", error, ToastType.ERROR)
+                }
+                onComplete?.invoke(result)
+            } catch (e: Exception) {
+                activeDownloadState.value = null
+                ToastManager.show("Modpack Error", e.message ?: "Failed to install modpack", ToastType.ERROR)
+                onComplete?.invoke(Result.failure(e))
+            }
+        }
+    }
+
     fun addOfflineAccount(username: String) {
         scope.launch {
             try {
-                authManager.createOfflineAccount(username)
+                val cleanUsername = username.trim()
+                if (cleanUsername.isBlank()) return@launch
+
+                val created = authManager.createOfflineAccount(cleanUsername)
                 showAddOfflineAccountDialog.value = false
+                skinService.loadOrRefreshSkin(created)
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to add offline account: ${e.message}"
             }
         }
     }
 
+    fun setWindowHandle(handle: Long) {
+        this.windowHandle = handle
+        authManager.microsoftAuthService.setWindowHandle(handle)
+    }
+
+    fun openMicrosoftLoginModal() {
+        microsoftAuthState.value = MicrosoftAuthState.Idle
+        val effectiveHandle = windowHandle ?: nativeWindowProvider?.invoke()
+        if (effectiveHandle != null && effectiveHandle != 0L) {
+            windowHandle = effectiveHandle
+            authManager.microsoftAuthService.setWindowHandle(effectiveHandle)
+        }
+        showMicrosoftLoginDialog.value = true
+    }
+
     fun startMicrosoftLogin() {
         showMicrosoftLoginDialog.value = true
-        scope.launch {
+        microsoftAuthState.value = MicrosoftAuthState.ConnectingToMicrosoft
+
+        val effectiveHandle = windowHandle ?: nativeWindowProvider?.invoke()
+        if (effectiveHandle != null && effectiveHandle != 0L) {
+            windowHandle = effectiveHandle
+            authManager.microsoftAuthService.setWindowHandle(effectiveHandle)
+        }
+
+        microsoftLoginJob?.cancel()
+        microsoftLoginJob = scope.launch {
             try {
-                authManager.startMicrosoftLogin().collect { progress ->
-                    microsoftLoginProgress.value = progress
-                    if (progress is MicrosoftLoginProgress.Success) {
+                authManager.startMicrosoftLogin(effectiveHandle).collect { state ->
+                    if (state is MicrosoftAuthState.Cancelled) {
+                        println("[AppViewModel] Microsoft authentication was cancelled by user. Returning cleanly to Accounts page.")
+                        microsoftAuthState.value = MicrosoftAuthState.Idle
                         showMicrosoftLoginDialog.value = false
-                        microsoftLoginProgress.value = null
-                        skinService.loadOrRefreshSkin(progress.account)
+                        return@collect
+                    }
+                    microsoftAuthState.value = state
+                    if (state is MicrosoftAuthState.Success) {
+                        skinService.loadOrRefreshSkin(state.account)
                     }
                 }
             } catch (e: Exception) {
-                microsoftLoginProgress.value = MicrosoftLoginProgress.Error(e.message ?: "Login failed")
+                microsoftAuthState.value = MicrosoftAuthState.Failed(e.message ?: "Authentication failed")
             }
         }
     }
 
-    fun removeAccount(id: String) {
+    fun cancelMicrosoftLogin() {
+        microsoftLoginJob?.cancel()
+        microsoftLoginJob = null
+        authManager.microsoftAuthService.cancelActiveLogin()
+        microsoftAuthState.value = MicrosoftAuthState.Idle
+        showMicrosoftLoginDialog.value = false
+    }
+
+    fun deleteAccount(id: String) {
         scope.launch {
             try {
-                accountRepository.removeAccount(id)
+                authManager.removeAccount(id)
             } catch (e: Exception) {
                 _errorMessage.value = "Failed to remove account: ${e.message}"
             }
         }
     }
+
+    fun removeAccount(id: String) = deleteAccount(id)
 
     fun updateSettings(settings: LauncherSettings) {
         scope.launch {
@@ -970,13 +1368,22 @@ class AppViewModel(
     }
 
     fun setManageTab(tab: InstanceManagerTab) {
+        val prevTab = activeManageTab.value
         activeManageTab.value = tab
+        if (prevTab == InstanceManagerTab.LOGS && tab != InstanceManagerTab.LOGS) {
+            stopLiveLogWatching()
+        }
         if (tab == InstanceManagerTab.MODS && modsBrowseState.value.items.isEmpty()) {
             searchMods()
         } else if (tab == InstanceManagerTab.RESOURCE_PACKS && resourcePacksBrowseState.value.items.isEmpty()) {
             searchResourcePacks()
         } else if (tab == InstanceManagerTab.SHADERS && shadersBrowseState.value.items.isEmpty()) {
             searchShaders()
+        } else if (tab == InstanceManagerTab.LOGS) {
+            val inst = _selectedInstance.value
+            if (inst != null && _runningSessions.value.containsKey(inst.id)) {
+                startLiveLogWatching(inst.id)
+            }
         }
     }
 
@@ -985,14 +1392,42 @@ class AppViewModel(
         scope.launch {
             try {
                 manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
-                manageMods.value = instanceManager.getMods(instance.id)
+                val mods = instanceManager.getMods(instance.id)
+                manageMods.value = mods
+                refreshMissingDependencies(instance, mods)
                 manageResourcePacks.value = instanceManager.getResourcePacks(instance.id)
                 manageShaders.value = instanceManager.getShaderPacks(instance.id)
                 manageWorlds.value = instanceManager.getWorlds(instance.id)
                 manageScreenshots.value = instanceManager.getScreenshots(instance.id)
-                manageLogs.value = instanceManager.getLogs(instance.id)
+                val logsList = instanceManager.getLogs(instance.id)
+                manageLogs.value = logsList
+
+                // Ensure selected log is consistent with the current instance
+                val currentSel = selectedLogFile.value
+                if (currentSel == null || logsList.none { it.filePath == currentSel.filePath }) {
+                    val latest = logsList.firstOrNull { it.fileName == "latest.log" } ?: logsList.firstOrNull()
+                    loadLogContent(latest)
+                }
             } catch (e: Throwable) {
                 println("Error refreshing manage data: ${e.message}")
+            }
+        }
+    }
+
+    fun refreshMissingDependencies(instance: Instance? = _selectedInstance.value, mods: List<LocalMod>? = null) {
+        val inst = instance ?: return
+        scope.launch(Dispatchers.IO) {
+            try {
+                val currentMods = mods ?: manageMods.value.ifEmpty { instanceManager.getMods(inst.id) }
+                val report = io.ezz.launcher.core.minecraft.mods.ModCompatibilityResolver.validateLaunchCompatibility(
+                    minecraftVersion = inst.minecraftVersion,
+                    loader = inst.loaderType.name,
+                    installedMods = currentMods
+                )
+                missingDependencies.value = report.missingDependencies
+                compatibilityConflicts.value = report.explicitConflicts
+            } catch (e: Throwable) {
+                println("[AppViewModel] Error refreshing missing dependencies: ${e.message}")
             }
         }
     }
@@ -1000,6 +1435,11 @@ class AppViewModel(
     // MODS
     fun toggleManageMod(fileName: String, enable: Boolean) {
         val instance = _selectedInstance.value ?: return
+        val isEzzSkinMod = fileName.startsWith("ezz-skin-mod", ignoreCase = true) || fileName.contains("ezzskin", ignoreCase = true)
+        if (isEzzSkinMod) {
+            val updated = instance.copy(ezzSkinEnabled = enable)
+            updateInstance(updated)
+        }
         scope.launch {
             instanceManager.toggleMod(instance.id, fileName, enable)
             manageMods.value = instanceManager.getMods(instance.id)
@@ -1008,10 +1448,44 @@ class AppViewModel(
         }
     }
 
+    fun bulkToggleMods(fileNames: List<String>, enable: Boolean) {
+        val instance = _selectedInstance.value ?: return
+        val hasEzzSkinMod = fileNames.any { it.startsWith("ezz-skin-mod", ignoreCase = true) || it.contains("ezzskin", ignoreCase = true) }
+        if (hasEzzSkinMod) {
+            val updated = instance.copy(ezzSkinEnabled = enable)
+            updateInstance(updated)
+        }
+        scope.launch {
+            fileNames.forEach { fileName ->
+                instanceManager.toggleMod(instance.id, fileName, enable)
+            }
+            manageMods.value = instanceManager.getMods(instance.id)
+            manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+            refreshMods(instance.id)
+        }
+    }
+
     fun deleteManageMod(fileName: String) {
         val instance = _selectedInstance.value ?: return
+        if (fileName.startsWith("ezz-skin-mod", ignoreCase = true) || fileName.contains("ezzskin", ignoreCase = true)) {
+            println("[AppViewModel] Cannot delete protected Ezz Skin Mod: $fileName")
+            return
+        }
         scope.launch {
             instanceManager.deleteMod(instance.id, fileName)
+            manageMods.value = instanceManager.getMods(instance.id)
+            manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+            refreshMods(instance.id)
+        }
+    }
+
+    fun bulkDeleteMods(fileNames: List<String>) {
+        val instance = _selectedInstance.value ?: return
+        val filtered = fileNames.filterNot { it.startsWith("ezz-skin-mod", ignoreCase = true) || it.contains("ezzskin", ignoreCase = true) }
+        scope.launch {
+            filtered.forEach { fileName ->
+                instanceManager.deleteMod(instance.id, fileName)
+            }
             manageMods.value = instanceManager.getMods(instance.id)
             manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
             refreshMods(instance.id)
@@ -1028,10 +1502,32 @@ class AppViewModel(
         }
     }
 
+    fun bulkToggleResourcePacks(fileNames: List<String>, enable: Boolean) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            fileNames.forEach { fileName ->
+                instanceManager.toggleResourcePack(instance.id, fileName, enable)
+            }
+            manageResourcePacks.value = instanceManager.getResourcePacks(instance.id)
+            manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+        }
+    }
+
     fun deleteManageResourcePack(fileName: String) {
         val instance = _selectedInstance.value ?: return
         scope.launch {
             instanceManager.deleteResourcePack(instance.id, fileName)
+            manageResourcePacks.value = instanceManager.getResourcePacks(instance.id)
+            manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+        }
+    }
+
+    fun bulkDeleteResourcePacks(fileNames: List<String>) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            fileNames.forEach { fileName ->
+                instanceManager.deleteResourcePack(instance.id, fileName)
+            }
             manageResourcePacks.value = instanceManager.getResourcePacks(instance.id)
             manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
         }
@@ -1047,10 +1543,32 @@ class AppViewModel(
         }
     }
 
+    fun bulkToggleShaders(fileNames: List<String>, enable: Boolean) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            fileNames.forEach { fileName ->
+                instanceManager.toggleShaderPack(instance.id, fileName, enable)
+            }
+            manageShaders.value = instanceManager.getShaderPacks(instance.id)
+            manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+        }
+    }
+
     fun deleteManageShader(fileName: String) {
         val instance = _selectedInstance.value ?: return
         scope.launch {
             instanceManager.deleteShaderPack(instance.id, fileName)
+            manageShaders.value = instanceManager.getShaderPacks(instance.id)
+            manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+        }
+    }
+
+    fun bulkDeleteShaders(fileNames: List<String>) {
+        val instance = _selectedInstance.value ?: return
+        scope.launch {
+            fileNames.forEach { fileName ->
+                instanceManager.deleteShaderPack(instance.id, fileName)
+            }
             manageShaders.value = instanceManager.getShaderPacks(instance.id)
             manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
         }
@@ -1141,11 +1659,72 @@ class AppViewModel(
     }
 
     // LOGS
-    fun loadLogContent(logEntry: InstanceLogEntry) {
-        selectedLogFile.value = logEntry
-        scope.launch {
-            manageSelectedLogContent.value = instanceManager.readLogContent(logEntry.filePath)
+    fun loadLogContent(logEntry: InstanceLogEntry?, isLiveUpdate: Boolean = false) {
+        if (logEntry == null) {
+            selectedLogFile.value = null
+            manageSelectedLogContent.value = null
+            manageLogResult.value = null
+            isLogLoading.value = false
+            logLoadError.value = null
+            return
         }
+
+        selectedLogFile.value = logEntry
+        if (!isLiveUpdate) {
+            isLogLoading.value = true
+        }
+        logLoadError.value = null
+
+        loadLogJob?.cancel()
+        loadLogJob = scope.launch(Dispatchers.IO) {
+            try {
+                val result = instanceManager.readLogResult(logEntry.filePath, maxLines = 5000)
+                manageLogResult.value = result
+                manageSelectedLogContent.value = if (result.lines.isEmpty()) "" else result.lines.joinToString("\n") { it.text }
+                logLoadError.value = null
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Ignore cancellation
+            } catch (e: Throwable) {
+                logLoadError.value = "Failed to load log: ${e.message}"
+            } finally {
+                isLogLoading.value = false
+            }
+        }
+    }
+
+    fun startLiveLogWatching(instanceId: String) {
+        liveLogJob?.cancel()
+        liveLogJob = scope.launch(Dispatchers.IO) {
+            var lastModTime = 0L
+            var lastSize = 0L
+            while (isActive) {
+                delay(1500L)
+                val currentSelected = _selectedInstance.value
+                val isRunning = _runningSessions.value.containsKey(instanceId)
+                if (currentSelected?.id != instanceId || !isRunning || activeManageTab.value != InstanceManagerTab.LOGS) {
+                    break
+                }
+
+                val currentLog = selectedLogFile.value ?: manageLogs.value.firstOrNull { it.fileName == "latest.log" }
+                if (currentLog != null) {
+                    val file = java.io.File(currentLog.filePath)
+                    if (file.exists()) {
+                        val currentMod = file.lastModified()
+                        val currentSize = file.length()
+                        if (currentMod != lastModTime || currentSize != lastSize) {
+                            lastModTime = currentMod
+                            lastSize = currentSize
+                            loadLogContent(currentLog, isLiveUpdate = true)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun stopLiveLogWatching() {
+        liveLogJob?.cancel()
+        liveLogJob = null
     }
 
     // REPAIR
@@ -1428,33 +2007,213 @@ class AppViewModel(
     // INSTALLATION & VERIFICATION
     // ==========================================================
 
+    // Active Mod Install Modal state
+    val activeModInstallProject = MutableStateFlow<ModrinthProjectHit?>(null)
+
+    fun openModInstaller(hit: ModrinthProjectHit) {
+        activeModInstallProject.value = hit
+    }
+
+    fun closeModInstaller() {
+        activeModInstallProject.value = null
+    }
+
+    fun getInstalledMod(hit: ModrinthProjectHit, instanceId: String? = _selectedInstance.value?.id): LocalMod? {
+        val querySlug = hit.slug.lowercase()
+        val queryTitle = hit.title.lowercase()
+        val queryId = hit.projectId.lowercase()
+
+        val foundLocal = manageMods.value.firstOrNull { local ->
+            val fileName = local.fileName.lowercase()
+            val name = local.name.lowercase()
+            val id = local.id.lowercase()
+            fileName.contains(querySlug) ||
+            fileName.contains(queryId) ||
+            name.equals(queryTitle, ignoreCase = true) ||
+            id.equals(querySlug, ignoreCase = true) ||
+            id.equals(queryId, ignoreCase = true)
+        }
+        if (foundLocal != null) return foundLocal
+
+        val meta = _installedMods.value.firstOrNull { m ->
+            val fileName = m.fileName.lowercase()
+            val name = m.name.lowercase()
+            val id = m.id.lowercase()
+            fileName.contains(querySlug) ||
+            fileName.contains(queryId) ||
+            name.equals(queryTitle, ignoreCase = true) ||
+            id.equals(querySlug, ignoreCase = true) ||
+            id.equals(queryId, ignoreCase = true)
+        }
+        return meta?.let {
+            LocalMod(
+                id = it.id,
+                name = it.name,
+                version = it.version,
+                description = it.description,
+                fileName = it.fileName,
+                fileSize = it.fileSize,
+                enabled = it.enabled,
+                loader = it.loader
+            )
+        }
+    }
+
+    suspend fun installModWithDependencies(
+        instance: Instance,
+        project: ModrinthProjectHit,
+        mainVersion: ModrinthVersion,
+        selectedDependencies: List<io.ezz.launcher.core.model.modrinth.ResolvedModDependency>,
+        onProgress: (stage: String, progress: Float) -> Unit
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val gameDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").toFile()
+        val modsDir = java.io.File(gameDir, "mods")
+        modsDir.mkdirs()
+
+        val timeStamp = System.currentTimeMillis()
+        val stagingDir = java.io.File(gameDir, ".install_staging_$timeStamp")
+        val backupDir = java.io.File(gameDir, ".install_backup_$timeStamp")
+        stagingDir.mkdirs()
+
+        val newlyAddedModFiles = mutableListOf<java.io.File>()
+        val backedUpOldFiles = mutableListOf<Pair<java.io.File, java.io.File>>() // original -> backup
+
+        try {
+            val filesToDownload = mutableListOf<Pair<String, ModrinthVersion>>()
+            filesToDownload.add(project.title to mainVersion)
+            selectedDependencies.filter { it.selectedToInstall && it.version != null }.forEach { dep ->
+                val depTitle = dep.project?.title ?: dep.version!!.name
+                filesToDownload.add(depTitle to dep.version!!)
+            }
+
+            val totalCount = filesToDownload.size
+            for ((index, item) in filesToDownload.withIndex()) {
+                val (title, ver) = item
+                val primaryFile = ver.files.firstOrNull { it.primary } ?: ver.files.firstOrNull()
+                    ?: throw IllegalStateException("No download files available for $title (v${ver.versionNumber})")
+                val stagedFile = java.io.File(stagingDir, primaryFile.filename)
+
+                onProgress("Downloading $title (v${ver.versionNumber})...", index.toFloat() / totalCount.toFloat())
+                val ok = modrinth.downloadContent(
+                    url = primaryFile.url,
+                    targetFile = stagedFile,
+                    onProgress = { downloaded, total ->
+                        if (total > 0) {
+                            val fileFraction = downloaded.toFloat() / total.toFloat()
+                            val overallProgress = (index.toFloat() + fileFraction) / totalCount.toFloat()
+                            onProgress("Downloading $title (${(fileFraction * 100).toInt()}%)...", overallProgress)
+                        }
+                    }
+                )
+
+                if (!ok || !stagedFile.exists() || stagedFile.length() == 0L) {
+                    throw IllegalStateException("Failed to download $title file ${primaryFile.filename}")
+                }
+
+                // 2. Validate Bytecode & Integrity
+                onProgress("Validating bytecode: $title...", (index.toFloat() + 0.8f) / totalCount.toFloat())
+                val javaVer = io.ezz.launcher.core.runtime.detector.JavaRuntimeDetector.getRequiredJavaMajorVersion(instance.minecraftVersion)
+                val validation = io.ezz.launcher.core.minecraft.mod.ModBytecodeValidator.validateJarFile(stagedFile, javaVer)
+                if (validation is io.ezz.launcher.core.minecraft.mod.ModCompatibilityResult.Incompatible) {
+                    throw IllegalStateException("Bytecode incompatibility: ${validation.errorMessage}")
+                }
+            }
+
+            // 3. Stage old version backup (Duplicate mod protection - never leave 2 versions of same mod)
+            onProgress("Preparing file installation...", 0.90f)
+            backupDir.mkdirs()
+            val existingMods = modsDir.listFiles { _, name -> name.endsWith(".jar") || name.endsWith(".jar.disabled") } ?: emptyArray()
+
+            for ((title, ver) in filesToDownload) {
+                val primaryFile = ver.files.firstOrNull { it.primary } ?: ver.files.firstOrNull() ?: continue
+                val cleanPrefix = primaryFile.filename.substringBefore('-').lowercase()
+                if (cleanPrefix.isNotBlank() && !cleanPrefix.startsWith("ezz-skin-mod")) {
+                    existingMods.forEach { oldJar ->
+                        val oldName = oldJar.name.lowercase()
+                        if ((oldName.startsWith(cleanPrefix) || oldName.contains(cleanPrefix)) && oldJar.name != primaryFile.filename) {
+                            val backupTarget = java.io.File(backupDir, oldJar.name)
+                            if (oldJar.renameTo(backupTarget)) {
+                                backedUpOldFiles.add(oldJar to backupTarget)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. Atomically move staged files into mods/
+            for ((_, ver) in filesToDownload) {
+                val primaryFile = ver.files.firstOrNull { it.primary } ?: ver.files.firstOrNull() ?: continue
+                val stagedFile = java.io.File(stagingDir, primaryFile.filename)
+                val finalTarget = java.io.File(modsDir, primaryFile.filename)
+                if (finalTarget.exists()) {
+                    finalTarget.delete()
+                }
+                if (!stagedFile.renameTo(finalTarget)) {
+                    // Fallback copy
+                    stagedFile.copyTo(finalTarget, overwrite = true)
+                    stagedFile.delete()
+                }
+                newlyAddedModFiles.add(finalTarget)
+            }
+
+            // 5. Post-installation Verification
+            onProgress("Verifying instance mods...", 0.95f)
+            refreshManageData()
+            refreshMods(instance.id)
+
+            // Clean up temporary directories
+            stagingDir.deleteRecursively()
+            backupDir.deleteRecursively()
+
+            onProgress("Installed successfully", 1f)
+            ToastManager.show(
+                title = "Mod Installed",
+                description = "${project.title} (v${mainVersion.versionNumber}) installed to ${instance.name}",
+                type = ToastType.SUCCESS
+            )
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            // ROLLBACK: Undo changes on failure
+            println("[ModInstaller] Installation failed, rolling back: ${e.message}")
+            try {
+                // Delete newly added jars
+                newlyAddedModFiles.forEach { file ->
+                    if (file.exists()) file.delete()
+                }
+                // Restore old jars from backup
+                backedUpOldFiles.forEach { (originalFile, backupFile) ->
+                    if (backupFile.exists()) {
+                        backupFile.renameTo(originalFile)
+                    }
+                }
+                stagingDir.deleteRecursively()
+                backupDir.deleteRecursively()
+                refreshMods(instance.id)
+            } catch (rollbackEx: Throwable) {
+                println("[ModInstaller] Rollback encountered error: ${rollbackEx.message}")
+            }
+            Result.failure(e)
+        }
+    }
+
     fun installModrinthProject(hit: ModrinthProjectHit) {
+        openModInstaller(hit)
+    }
+
+    fun installModrinthVersion(projectTitle: String, version: ModrinthVersion) {
         val instance = _selectedInstance.value ?: return
         scope.launch {
-            modrinthDownloadingProject.value = hit.title
+            modrinthDownloadingProject.value = projectTitle
             modrinthDownloadProgress.value = 0f
             try {
-                val loaders = if (hit.projectType.equals("mod", ignoreCase = true) && instance.loaderType != LoaderType.VANILLA) {
-                    listOf(instance.loaderType.name.lowercase())
-                } else null
-                val versions = listOf(instance.minecraftVersion)
-                val projectVersions = modrinth.getProjectVersions(hit.projectId, loaders, versions)
-                val latest = projectVersions.firstOrNull() ?: modrinth.getProjectVersions(hit.projectId).firstOrNull()
-
-                if (latest != null && latest.files.isNotEmpty()) {
-                    val primaryFile = latest.files.firstOrNull { it.primary } ?: latest.files.first()
+                if (version.files.isNotEmpty()) {
+                    val primaryFile = version.files.firstOrNull { it.primary } ?: version.files.first()
                     val gameDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").toFile()
-                    
-                    // Strict directory destination checking
-                    val targetDir = when {
-                        hit.projectType.equals("resourcepack", ignoreCase = true) -> java.io.File(gameDir, "resourcepacks")
-                        hit.projectType.equals("shader", ignoreCase = true) -> java.io.File(gameDir, "shaderpacks")
-                        else -> java.io.File(gameDir, "mods")
-                    }
+                    val targetDir = java.io.File(gameDir, "mods")
                     targetDir.mkdirs()
                     val targetFile = java.io.File(targetDir, primaryFile.filename)
 
-                    val ok = modrinth.downloadContent(
+                    modrinth.downloadContent(
                         url = primaryFile.url,
                         targetFile = targetFile,
                         onProgress = { downloaded, total ->
@@ -1463,30 +2222,11 @@ class AppViewModel(
                             }
                         }
                     )
-
-                    // Also download required dependencies for mods
-                    if (ok && hit.projectType.equals("mod", ignoreCase = true) && latest.dependencies.isNotEmpty()) {
-                        for (dep in latest.dependencies) {
-                            val depProjId = dep.projectId
-                            if (dep.dependencyType == "required" && depProjId != null) {
-                                val depVersions = modrinth.getProjectVersions(depProjId, loaders, versions)
-                                val depLatest = depVersions.firstOrNull()
-                                if (depLatest != null && depLatest.files.isNotEmpty()) {
-                                    val depFile = depLatest.files.firstOrNull { it.primary } ?: depLatest.files.first()
-                                    val depTarget = java.io.File(targetDir, depFile.filename)
-                                    if (!depTarget.exists()) {
-                                        modrinth.downloadContent(depFile.url, depTarget) { _, _ -> }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
                     refreshManageData()
-                    if (hit.projectType.equals("mod", ignoreCase = true)) refreshMods(instance.id)
+                    refreshMods(instance.id)
                 }
             } catch (e: Throwable) {
-                println("Error installing Modrinth item: ${e.message}")
+                println("Error installing specific version: ${e.message}")
             } finally {
                 modrinthDownloadingProject.value = null
                 modrinthDownloadProgress.value = 0f
@@ -1500,7 +2240,8 @@ class AppViewModel(
             local.fileName.contains(hit.slug, ignoreCase = true) ||
             local.fileName.contains(hit.projectId, ignoreCase = true) ||
             local.name.equals(hit.title, ignoreCase = true) ||
-            local.id.equals(hit.slug, ignoreCase = true)
+            local.id.equals(hit.slug, ignoreCase = true) ||
+            local.id.equals(hit.projectId, ignoreCase = true)
         }
     }
 
@@ -1569,6 +2310,12 @@ class AppViewModel(
 
     fun selectVaultSkin(skin: VaultSkin?) {
         _selectedVaultSkin.value = skin
+        _selectedVaultSkinId.value = skin?.id
+    }
+
+    fun selectVaultSkinById(skinId: String?) {
+        _selectedVaultSkinId.value = skinId
+        _selectedVaultSkin.value = skinId?.let { vaultRepository.getSkin(it) }
     }
 
     fun importVaultSkin(
@@ -1582,24 +2329,173 @@ class AppViewModel(
             if (result.isSuccess) {
                 val imported = result.getOrNull()
                 _selectedVaultSkin.value = imported
-                val targetAccount = accountRepository.selectedAccount.value
-                if (targetAccount != null && (targetAccount.type == io.ezz.launcher.core.model.account.AccountType.OFFLINE)) {
-                    skinService.onSkinChanged(targetAccount, bytes)
-                }
+                _selectedVaultSkinId.value = imported?.id
+                _vaultVersion.value++
+                ToastManager.show(
+                    title = "Skin Imported",
+                    description = "'${imported?.name ?: "Skin"}' added to Vault.",
+                    type = ToastType.SUCCESS
+                )
             }
             onResult(result)
         }
     }
 
-    fun setActiveVaultSkin(skinId: String?, accountId: String? = null) {
+    fun importSkinFromUsername(
+        username: String,
+        explicitModel: SkinModelType? = null,
+        onResult: (Result<VaultSkin>) -> Unit
+    ) {
+        val trimmed = username.trim()
+        if (trimmed.isBlank()) {
+            onResult(Result.failure(IllegalArgumentException("Player username cannot be empty.")))
+            return
+        }
         scope.launch {
-            vaultRepository.setActiveSkin(skinId, accountId)
+            try {
+                val client = io.ezz.launcher.core.network.client.HttpClientFactory.create()
+                val urls = listOf(
+                    "https://minotar.net/skin/$trimmed",
+                    "https://mc-heads.net/download/$trimmed"
+                )
+                var fetchedBytes: ByteArray? = null
+                for (url in urls) {
+                    try {
+                        val response = client.get(url)
+                        if (response.status.value in 200..299) {
+                            val bytes: ByteArray = response.body()
+                            if (bytes.size >= 500 && bytes[0] == 0x89.toByte() && bytes[1] == 0x50.toByte()) {
+                                fetchedBytes = bytes
+                                break
+                            }
+                        }
+                    } catch (_: Exception) {}
+                }
+
+                if (fetchedBytes == null || fetchedBytes.isEmpty()) {
+                    val error = IllegalStateException("Could not find Minecraft skin for player '$trimmed'.")
+                    ToastManager.show("Skin Lookup Failed", error.message, ToastType.ERROR)
+                    onResult(Result.failure(error))
+                    return@launch
+                }
+
+                val result = vaultRepository.importSkin(fetchedBytes, preferredName = trimmed, explicitModel)
+                if (result.isSuccess) {
+                    val imported = result.getOrNull()
+                    _selectedVaultSkin.value = imported
+                    _selectedVaultSkinId.value = imported?.id
+                    _vaultVersion.value++
+                    ToastManager.show(
+                        title = "Skin Imported",
+                        description = "Imported skin from player '$trimmed'.",
+                        type = ToastType.SUCCESS
+                    )
+                }
+                onResult(result)
+            } catch (e: Exception) {
+                ToastManager.show("Import Failed", e.message ?: "Network error", ToastType.ERROR)
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
+    fun importSkinFromUrl(
+        url: String,
+        preferredName: String? = null,
+        explicitModel: SkinModelType? = null,
+        onResult: (Result<VaultSkin>) -> Unit
+    ) {
+        val trimmed = url.trim()
+        if (trimmed.isBlank()) {
+            onResult(Result.failure(IllegalArgumentException("URL cannot be empty.")))
+            return
+        }
+        scope.launch {
+            try {
+                val client = io.ezz.launcher.core.network.client.HttpClientFactory.create()
+                val response = client.get(trimmed)
+                if (response.status.value !in 200..299) {
+                    val error = IllegalStateException("Failed to download skin (HTTP ${response.status.value}).")
+                    ToastManager.show("Import Failed", error.message, ToastType.ERROR)
+                    onResult(Result.failure(error))
+                    return@launch
+                }
+                val bytes: ByteArray = response.body()
+                if (bytes.isEmpty() || bytes[0] != 0x89.toByte() || bytes[1] != 0x50.toByte()) {
+                    val error = IllegalArgumentException("The URL does not point to a valid PNG image.")
+                    ToastManager.show("Invalid Image", error.message, ToastType.ERROR)
+                    onResult(Result.failure(error))
+                    return@launch
+                }
+                val defaultName = preferredName?.takeIf { it.isNotBlank() } ?: "Web Skin"
+                val result = vaultRepository.importSkin(bytes, preferredName = defaultName, explicitModel)
+                if (result.isSuccess) {
+                    val imported = result.getOrNull()
+                    _selectedVaultSkin.value = imported
+                    _selectedVaultSkinId.value = imported?.id
+                    _vaultVersion.value++
+                    ToastManager.show(
+                        title = "Skin Imported",
+                        description = "Imported '${imported?.name ?: defaultName}'.",
+                        type = ToastType.SUCCESS
+                    )
+                }
+                onResult(result)
+            } catch (e: Exception) {
+                ToastManager.show("Import Failed", e.message ?: "Download error", ToastType.ERROR)
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
+    fun exportSkinToFile(skin: VaultSkin, targetFile: java.io.File, onResult: ((Result<Unit>) -> Unit)? = null) {
+        scope.launch {
+            try {
+                val bytes = vaultRepository.getSkinBytes(skin)
+                if (bytes == null || bytes.isEmpty()) {
+                    val error = IllegalStateException("Skin file bytes not found.")
+                    ToastManager.show("Export Failed", error.message, ToastType.ERROR)
+                    onResult?.invoke(Result.failure(error))
+                    return@launch
+                }
+                targetFile.writeBytes(bytes)
+                ToastManager.show(
+                    title = "Skin Exported",
+                    description = "Saved to ${targetFile.name}",
+                    type = ToastType.SUCCESS
+                )
+                onResult?.invoke(Result.success(Unit))
+            } catch (e: Exception) {
+                ToastManager.show("Export Error", e.message ?: "Failed to write file", ToastType.ERROR)
+                onResult?.invoke(Result.failure(e))
+            }
+        }
+    }
+
+    fun setActiveVaultSkin(skinId: String?, accountId: String? = null, onComplete: (() -> Unit)? = null) {
+        scope.launch {
+            val targetAccount = accountId?.let { id -> accountRepository.accounts.value.find { it.id == id } }
+                ?: accountRepository.selectedAccount.value
+            val effectiveAccountId = targetAccount?.id
+
+            vaultRepository.setActiveSkin(skinId, effectiveAccountId)
             val skin = skinId?.let { vaultRepository.getSkin(it) }
             val skinBytes = skin?.let { vaultRepository.getSkinBytes(it) }
-            val targetAccount = accountId?.let { id -> accountRepository.accounts.value.find { it.id == id } } ?: accountRepository.selectedAccount.value
-            if (targetAccount != null && (targetAccount.type == io.ezz.launcher.core.model.account.AccountType.OFFLINE)) {
+
+            if (targetAccount != null) {
                 skinService.onSkinChanged(targetAccount, skinBytes)
             }
+
+            _selectedVaultSkinId.value = skinId
+            _selectedVaultSkin.value = skin
+            _vaultVersion.value++
+
+            ToastManager.show(
+                title = "Skin Applied",
+                description = if (skin != null) "'${skin.name}' applied to ${targetAccount?.username ?: "account"}." else "Reset to default Steve skin.",
+                type = ToastType.SUCCESS
+            )
+            onComplete?.invoke()
         }
     }
 
@@ -1609,6 +2505,7 @@ class AppViewModel(
             if (result.isSuccess && _selectedVaultSkin.value?.id == skinId) {
                 _selectedVaultSkin.value = result.getOrNull()
             }
+            _vaultVersion.value++
             onResult?.invoke(result)
         }
     }
@@ -1625,14 +2522,16 @@ class AppViewModel(
             if (targetAccount != null && (targetAccount.type == io.ezz.launcher.core.model.account.AccountType.OFFLINE)) {
                 skinService.onSkinChanged(targetAccount, skinBytes)
             }
+            _vaultVersion.value++
         }
     }
 
     fun deleteVaultSkin(skinId: String) {
         scope.launch {
-            val isCurrentSelected = _selectedVaultSkin.value?.id == skinId
+            val isCurrentSelected = _selectedVaultSkinId.value == skinId || _selectedVaultSkin.value?.id == skinId
             vaultRepository.deleteSkin(skinId)
             if (isCurrentSelected) {
+                _selectedVaultSkinId.value = null
                 _selectedVaultSkin.value = vaultRepository.skins.value.firstOrNull()
             }
             val targetAccount = accountRepository.selectedAccount.value
@@ -1641,6 +2540,12 @@ class AppViewModel(
                 val skinBytes = activeSkin?.let { vaultRepository.getSkinBytes(it) }
                 skinService.onSkinChanged(targetAccount, skinBytes)
             }
+            _vaultVersion.value++
+            ToastManager.show(
+                title = "Skin Deleted",
+                description = "Skin removed from Vault.",
+                type = ToastType.INFO
+            )
         }
     }
 

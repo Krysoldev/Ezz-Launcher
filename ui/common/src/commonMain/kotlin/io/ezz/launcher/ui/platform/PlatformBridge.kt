@@ -9,13 +9,17 @@ interface PlatformBridge {
     fun openUrl(url: String)
     fun copyToClipboard(text: String)
     fun pickImageFile(title: String = "Select Instance Icon"): java.io.File?
+    fun pickImportInstanceFile(title: String = "Select Modrinth Modpack (*.mrpack)"): java.io.File?
+    fun pickExportInstanceFile(defaultName: String, title: String = "Export Modrinth Modpack (*.mrpack)"): java.io.File?
 }
 
 class DefaultPlatformBridge(
     private val onOpenFolder: ((Path) -> Unit)? = null,
     private val onOpenUrl: ((String) -> Unit)? = null,
     private val onCopyToClipboard: ((String) -> Unit)? = null,
-    private val onPickImageFile: ((String) -> java.io.File?)? = null
+    private val onPickImageFile: ((String) -> java.io.File?)? = null,
+    private val onPickImportFile: ((String) -> java.io.File?)? = null,
+    private val onPickExportFile: ((String, String) -> java.io.File?)? = null
 ) : PlatformBridge {
     override fun openFolder(path: Path) {
         onOpenFolder?.invoke(path)
@@ -66,6 +70,81 @@ class DefaultPlatformBridge(
                 val res = chooser.showOpenDialog(null)
                 if (res == javax.swing.JFileChooser.APPROVE_OPTION) {
                     chooser.selectedFile
+                } else null
+            } catch (e2: Throwable) {
+                null
+            }
+        }
+    }
+
+    override fun pickImportInstanceFile(title: String): java.io.File? {
+        if (onPickImportFile != null) {
+            return onPickImportFile.invoke(title)
+        }
+        return try {
+            val dialog = java.awt.FileDialog(null as java.awt.Frame?, title, java.awt.FileDialog.LOAD)
+            dialog.setFilenameFilter { _, name ->
+                val lower = name.lowercase()
+                lower.endsWith(".mrpack") || lower.endsWith(".zip")
+            }
+            dialog.isVisible = true
+            val dir = dialog.directory
+            val file = dialog.file
+            if (dir != null && file != null) {
+                java.io.File(dir, file)
+            } else {
+                null
+            }
+        } catch (e: Throwable) {
+            try {
+                val chooser = javax.swing.JFileChooser()
+                chooser.dialogTitle = title
+                chooser.fileFilter = javax.swing.filechooser.FileNameExtensionFilter(
+                    "Modrinth Modpack (*.mrpack)", "mrpack", "zip"
+                )
+                val res = chooser.showOpenDialog(null)
+                if (res == javax.swing.JFileChooser.APPROVE_OPTION) {
+                    chooser.selectedFile
+                } else null
+            } catch (e2: Throwable) {
+                null
+            }
+        }
+    }
+
+    override fun pickExportInstanceFile(defaultName: String, title: String): java.io.File? {
+        if (onPickExportFile != null) {
+            return onPickExportFile.invoke(defaultName, title)
+        }
+        val fileNameWithExt = if (defaultName.endsWith(".mrpack", ignoreCase = true)) defaultName else "$defaultName.mrpack"
+        return try {
+            val dialog = java.awt.FileDialog(null as java.awt.Frame?, title, java.awt.FileDialog.SAVE)
+            dialog.file = fileNameWithExt
+            dialog.isVisible = true
+            val dir = dialog.directory
+            val file = dialog.file
+            if (dir != null && file != null) {
+                val chosen = java.io.File(dir, file)
+                if (chosen.name.endsWith(".mrpack", ignoreCase = true)) chosen else java.io.File(dir, "${chosen.name}.mrpack")
+            } else {
+                null
+            }
+        } catch (e: Throwable) {
+            try {
+                val chooser = javax.swing.JFileChooser()
+                chooser.dialogTitle = title
+                chooser.selectedFile = java.io.File(fileNameWithExt)
+                chooser.fileFilter = javax.swing.filechooser.FileNameExtensionFilter(
+                    "Modrinth Modpack (*.mrpack)", "mrpack"
+                )
+                val res = chooser.showSaveDialog(null)
+                if (res == javax.swing.JFileChooser.APPROVE_OPTION) {
+                    val chosen = chooser.selectedFile
+                    if (chosen != null && !chosen.name.endsWith(".mrpack", ignoreCase = true)) {
+                        java.io.File(chosen.parentFile, "${chosen.name}.mrpack")
+                    } else {
+                        chosen
+                    }
                 } else null
             } catch (e2: Throwable) {
                 null

@@ -37,6 +37,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.ezz.launcher.core.model.skin.SkinModelType
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
 import javax.imageio.ImageIO
@@ -63,6 +65,7 @@ import kotlin.math.sin
 fun MinecraftPlayerModel3DView(
     skinBytes: ByteArray?,
     modelType: SkinModelType = SkinModelType.STEVE,
+    skinKey: Any? = null,
     resetTrigger: Int = 0,
     modifier: Modifier = Modifier
 ) {
@@ -85,25 +88,37 @@ fun MinecraftPlayerModel3DView(
         }
     }
 
-    // Decode original 64x64 PNG losslessly
-    val skinImage = remember(skinBytes) {
-        if (skinBytes != null && skinBytes.isNotEmpty()) {
-            try {
-                val img = ImageIO.read(ByteArrayInputStream(skinBytes))
-                if (img != null) {
-                    img
-                } else {
+    // Decode 64x64 PNG texture reactively with cache-busting key
+    var skinImage by remember(skinKey) {
+        mutableStateOf(
+            if (skinBytes != null && skinBytes.isNotEmpty()) {
+                try {
+                    ImageIO.read(ByteArrayInputStream(skinBytes)) ?: generateDefaultSteveSkin()
+                } catch (e: Exception) {
                     generateDefaultSteveSkin()
                 }
-            } catch (e: Exception) {
+            } else {
                 generateDefaultSteveSkin()
             }
-        } else {
-            generateDefaultSteveSkin()
-        }
+        )
     }
 
-    // Frame-rate Independent Delta-Time Animation Loop for Smooth Damping (NO auto-rotation)
+    LaunchedEffect(skinKey, skinBytes, modelType) {
+        val img = withContext(Dispatchers.Default) {
+            if (skinBytes != null && skinBytes.isNotEmpty()) {
+                try {
+                    ImageIO.read(ByteArrayInputStream(skinBytes)) ?: generateDefaultSteveSkin()
+                } catch (e: Exception) {
+                    generateDefaultSteveSkin()
+                }
+            } else {
+                generateDefaultSteveSkin()
+            }
+        }
+        skinImage = img
+    }
+
+    // Frame-rate Independent Delta-Time Animation Loop for Smooth User-Control Damping (Pure static model when idle)
     LaunchedEffect(Unit) {
         var lastTimeNanos = 0L
         while (true) {
@@ -630,9 +645,10 @@ private class ZBufferRasterizer(val width: Int, val height: Int) {
 fun SkinAvatarHeadThumbnail(
     skinBytes: ByteArray?,
     size: Dp = 48.dp,
+    skinKey: Any? = null,
     modifier: Modifier = Modifier
 ) {
-    val bitmap = remember(skinBytes) {
+    val bitmap = remember(skinKey, skinBytes) {
         try {
             val img = if (skinBytes != null && skinBytes.isNotEmpty()) {
                 ImageIO.read(ByteArrayInputStream(skinBytes))

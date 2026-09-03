@@ -40,23 +40,47 @@ import java.io.File
 @Composable
 fun InstanceArtworkIcon(
     instance: Instance,
-    size: Dp = 64.dp,
+    size: Dp = 48.dp,
     modifier: Modifier = Modifier,
     customFile: File? = null,
-    showBadge: Boolean = true
+    showBadge: Boolean = false
 ) {
-    val cornerRadius = (size.value * 0.18f).dp
+    val cornerRadius = when {
+        size >= 64.dp -> 12.dp
+        size >= 40.dp -> 8.dp
+        else -> 6.dp
+    }
 
     // Resolve local custom icon file
     val iconFile = remember(instance.id, instance.customIconPath, customFile) {
-        if (customFile != null && customFile.exists()) {
+        if (customFile != null && customFile.exists() && customFile.length() > 0L) {
             customFile
         } else {
             val path = instance.customIconPath
-            if (!path.isNullOrBlank()) {
+            val primaryFile = if (!path.isNullOrBlank()) {
                 val f = File(path)
-                if (f.exists() && f.length() > 0) f else null
+                if (f.exists() && f.length() > 0L) f else null
             } else null
+
+            primaryFile ?: run {
+                // Fallback: Check standard instance directory locations
+                val userHome = System.getProperty("user.home") ?: "."
+                val possibleRoots = listOf(
+                    File(userHome, ".ezz/instances/${instance.id}"),
+                    File(userHome, "AppData/Roaming/.ezz/instances/${instance.id}")
+                )
+
+                possibleRoots.flatMap { root ->
+                    listOf(
+                        File(root, "icon.png"),
+                        File(root, "pack.png"),
+                        File(root, "icon.webp"),
+                        File(root, "icon.jpg"),
+                        File(root, ".minecraft/icon.png"),
+                        File(root, ".minecraft/pack.png")
+                    )
+                }.firstOrNull { it.exists() && it.length() > 0L }
+            }
         }
     }
 
@@ -71,10 +95,10 @@ fun InstanceArtworkIcon(
             .clip(RoundedCornerShape(cornerRadius))
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(Color(0xFF222222), Color(0xFF141414))
+                    colors = listOf(Color(0xFF1C1C22), Color(0xFF0F0F13))
                 )
             )
-            .border(1.dp, Color(0xFF333333), RoundedCornerShape(cornerRadius)),
+            .border(1.dp, Color(0xFF2B2B33), RoundedCornerShape(cornerRadius)),
         contentAlignment = Alignment.Center
     ) {
         if (customBitmap != null) {
@@ -91,28 +115,8 @@ fun InstanceArtworkIcon(
             // Isometric Minecraft 3D block rendering
             IsometricBlockCanvas(
                 loaderType = instance.loaderType,
-                modifier = Modifier.size(size * 0.68f)
+                modifier = Modifier.size(size * 0.72f)
             )
-        }
-
-        // Version badge overlay in bottom-right
-        if (showBadge && size >= 40.dp) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .clip(RoundedCornerShape(topStart = 4.dp))
-                    .background(Color(0xFF0A0A0A).copy(alpha = 0.9f))
-                    .border(0.5.dp, Color(0xFF2A2A2A), RoundedCornerShape(topStart = 4.dp))
-                    .padding(horizontal = 4.dp, vertical = 1.dp)
-            ) {
-                val shortVer = instance.minecraftVersion
-                Text(
-                    text = shortVer,
-                    color = Color(0xFFCCCCCC),
-                    fontSize = if (size >= 64.dp) 8.sp else 7.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
         }
     }
 }
@@ -215,5 +219,75 @@ private fun IsometricBlockCanvas(
         drawLine(Color(0xFF101010), center, bottomVertex, strokeWidth = 1.2f)
         drawLine(Color(0xFF101010), center, leftTop, strokeWidth = 1.2f)
         drawLine(Color(0xFF101010), center, rightTop, strokeWidth = 1.2f)
+    }
+}
+
+/**
+ * Bulletproof, single-line instance metadata row.
+ * Uses non-breaking spaces (\u00A0) and softWrap=false to completely prevent RAM/version vertical fragmentation.
+ */
+@Composable
+fun InstanceMetadataRow(
+    instance: Instance,
+    modifier: Modifier = Modifier,
+    fontSize: androidx.compose.ui.unit.TextUnit = 12.sp,
+    modCount: Int? = null
+) {
+    val javaReq = io.ezz.launcher.core.minecraft.version.JavaCompatibility.getRequiredJavaMajorVersion(instance.minecraftVersion)
+    val ramText = "${instance.maxMemoryMb / 1024}\u00A0GB\u00A0RAM"
+    val mcText = "Minecraft\u00A0${instance.minecraftVersion}"
+    val loaderText = instance.loaderType.name
+    val javaText = "Java\u00A0$javaReq"
+
+    androidx.compose.foundation.layout.Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(5.dp)
+    ) {
+        Text(
+            text = mcText,
+            color = Color(0xFFA1A1AA),
+            fontSize = fontSize,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            softWrap = false
+        )
+        Text(text = "•", color = Color(0xFF52525B), fontSize = fontSize, maxLines = 1, softWrap = false)
+        Text(
+            text = loaderText,
+            color = Color.White,
+            fontSize = fontSize,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            softWrap = false
+        )
+        Text(text = "•", color = Color(0xFF52525B), fontSize = fontSize, maxLines = 1, softWrap = false)
+        Text(
+            text = javaText,
+            color = Color(0xFFA1A1AA),
+            fontSize = fontSize,
+            maxLines = 1,
+            softWrap = false
+        )
+        Text(text = "•", color = Color(0xFF52525B), fontSize = fontSize, maxLines = 1, softWrap = false)
+        Text(
+            text = ramText,
+            color = Color(0xFF94A3B8),
+            fontSize = fontSize,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            softWrap = false
+        )
+        if (modCount != null && modCount > 0) {
+            Text(text = "•", color = Color(0xFF52525B), fontSize = fontSize, maxLines = 1, softWrap = false)
+            Text(
+                text = "$modCount\u00A0${if (modCount == 1) "Mod" else "Mods"}",
+                color = Color.White,
+                fontSize = fontSize,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
     }
 }

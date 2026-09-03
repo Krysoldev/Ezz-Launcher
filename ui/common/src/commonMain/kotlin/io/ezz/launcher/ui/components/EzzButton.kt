@@ -76,28 +76,28 @@ fun EzzButton(
 
     val (containerColor, contentColor, borderStroke) = when (variant) {
         EzzButtonVariant.PRIMARY -> Triple(
-            if (isHovered) Color(0xFFE5E5E5) else Color(0xFFFFFFFF),
-            Color(0xFF050505),
-            null
+            if (isHovered) Color(0xFFE2E8F0) else Color(0xFFFFFFFF),
+            Color(0xFF07080A),
+            BorderStroke(1.dp, Color(0xFFFFFFFF))
         )
         EzzButtonVariant.SECONDARY -> Triple(
-            if (isHovered) Color(0xFF1E1E1E) else Color(0xFF151515),
-            Color(0xFFFFFFFF),
-            BorderStroke(1.dp, if (isHovered) Color(0xFF404040) else Color(0xFF242424))
+            if (isHovered) Color(0xFF181C28) else Color(0xFF141720),
+            if (isHovered) Color.White else Color(0xFFE2E8F0),
+            BorderStroke(1.dp, if (isHovered) Color(0xFF323A4E) else Color(0xFF222735))
         )
         EzzButtonVariant.OUTLINE -> Triple(
-            if (isHovered) Color(0xFF1A1A1A) else Color.Transparent,
-            Color(0xFFFFFFFF),
-            BorderStroke(1.dp, if (isHovered) Color(0xFFFFFFFF) else Color(0xFF303030))
+            if (isHovered) Color(0xFF141720) else Color.Transparent,
+            if (isHovered) Color.White else Color(0xFFCBD5E1),
+            BorderStroke(1.dp, if (isHovered) Color(0xFF323A4E) else Color(0xFF222735))
         )
         EzzButtonVariant.DANGER -> Triple(
-            if (isHovered) Color(0xFFDC2626) else Color(0xFFEF4444),
-            Color.White,
-            null
+            if (isHovered) Color(0xFF7F1D1D) else Color(0xFF450A0A),
+            Color(0xFFFCA5A5),
+            BorderStroke(1.dp, if (isHovered) Color(0xFFEF4444) else Color(0xFF991B1B))
         )
         EzzButtonVariant.GHOST -> Triple(
-            if (isHovered) Color(0xFF171717) else Color.Transparent,
-            if (isHovered) Color(0xFFFFFFFF) else Color(0xFFB8B8B8),
+            if (isHovered) Color(0xFF141720) else Color.Transparent,
+            if (isHovered) Color.White else Color(0xFF94A3B8),
             null
         )
     }
@@ -184,11 +184,11 @@ fun EzzIconButton(
     }
 
     val (bg, fg) = when (variant) {
-        EzzButtonVariant.PRIMARY -> Pair(Color.White, Color(0xFF050505))
-        EzzButtonVariant.SECONDARY -> Pair(Color(0xFF151515), Color(0xFFFFFFFF))
-        EzzButtonVariant.OUTLINE -> Pair(Color.Transparent, Color(0xFFB8B8B8))
-        EzzButtonVariant.DANGER -> Pair(Color(0xFF2B1212), Color(0xFFEF4444))
-        EzzButtonVariant.GHOST -> Pair(Color.Transparent, Color(0xFFB8B8B8))
+        EzzButtonVariant.PRIMARY -> Pair(Color(0xFFFFFFFF), Color(0xFF07080A))
+        EzzButtonVariant.SECONDARY -> Pair(Color(0xFF141720), Color(0xFFCBD5E1))
+        EzzButtonVariant.OUTLINE -> Pair(Color.Transparent, Color(0xFFCBD5E1))
+        EzzButtonVariant.DANGER -> Pair(Color(0xFF450A0A), Color(0xFFF87171))
+        EzzButtonVariant.GHOST -> Pair(Color.Transparent, Color(0xFF94A3B8))
     }
 
     EzzIconButton(
@@ -210,7 +210,7 @@ fun EzzIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
-    tint: Color = Color(0xFFB8B8B8),
+    tint: Color = Color(0xFF94A3B8),
     backgroundColor: Color = Color.Transparent,
     size: Dp = 34.dp,
     iconSize: Dp = 16.dp,
@@ -222,16 +222,16 @@ fun EzzIconButton(
     Surface(
         modifier = modifier
             .size(size)
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(8.dp))
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 enabled = enabled,
                 onClick = onClick
             ),
-        shape = RoundedCornerShape(6.dp),
-        color = if (isHovered) Color(0xFF222222) else backgroundColor,
-        border = BorderStroke(1.dp, if (isHovered) Color(0xFF383838) else Color(0xFF242424))
+        shape = RoundedCornerShape(8.dp),
+        color = if (isHovered) Color(0xFF181C28) else backgroundColor,
+        border = BorderStroke(1.dp, if (isHovered) Color(0xFF323A4E) else Color(0xFF222735))
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(

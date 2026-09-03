@@ -27,4 +27,5 @@ include(":core:minecraft")
 include(":core:runtime")
 include(":ui:common")
 include(":app:desktop")
+include(":ezz-skin-mod")
 

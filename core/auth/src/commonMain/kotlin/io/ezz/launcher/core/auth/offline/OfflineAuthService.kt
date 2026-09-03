@@ -13,7 +13,7 @@ object OfflineAuthService {
 
         // Generate offline Minecraft UUID (UUID v3 based on MD5 of "OfflinePlayer:<username>")
         val offlineUuid = UUID.nameUUIDFromBytes("OfflinePlayer:$trimmed".toByteArray(StandardCharsets.UTF_8)).toString()
-        val accountId = UUID.randomUUID().toString()
+        val accountId = "offline_$offlineUuid"
 
         return OfflineAccount(
             id = accountId,

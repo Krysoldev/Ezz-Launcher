@@ -41,7 +41,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -70,10 +72,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -87,7 +87,12 @@ import io.ezz.launcher.core.model.instance.LoaderType
 import io.ezz.launcher.core.model.minecraft.VersionSummary
 import io.ezz.launcher.ui.components.EzzBadge
 import io.ezz.launcher.ui.components.EzzBadgeVariant
+import io.ezz.launcher.ui.components.EzzButton
+import io.ezz.launcher.ui.components.EzzButtonSize
+import io.ezz.launcher.ui.components.EzzButtonVariant
 import io.ezz.launcher.ui.components.EzzIconButton
+import io.ezz.launcher.ui.components.EzzSearchField
+import io.ezz.launcher.ui.components.EzzTextField
 import io.ezz.launcher.ui.components.EzzToggle
 import io.ezz.launcher.ui.components.InstanceArtworkIcon
 import io.ezz.launcher.ui.viewmodel.AppViewModel
@@ -97,7 +102,7 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 /**
- * Ezz Launcher — Create Instance Studio (Rebuilt from Scratch)
+ * Ezz Launcher — Create Instance Studio
  * Full-frame, studio-grade creation experience for Minecraft Java Edition.
  */
 @Composable
@@ -231,7 +236,7 @@ fun CreateInstanceDialog(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xE6050505))
+            .background(Color(0xE607080A))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -243,9 +248,9 @@ fun CreateInstanceDialog(
             modifier = Modifier
                 .widthIn(min = 960.dp, max = 1060.dp)
                 .heightIn(min = 640.dp, max = 740.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFF0D0D0D))
-                .border(1.dp, Color(0xFF262626), RoundedCornerShape(20.dp))
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFF101318))
+                .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(16.dp))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -307,8 +312,9 @@ fun CreateInstanceDialog(
                                     Box(
                                         modifier = Modifier
                                             .size(36.dp)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(Color(0xFF1E1E1E))
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color(0xFF141720))
+                                            .border(1.dp, Color(0xFF222735), RoundedCornerShape(8.dp))
                                             .clickable(onClick = onDismiss),
                                         contentAlignment = Alignment.Center
                                     ) {
@@ -328,33 +334,56 @@ fun CreateInstanceDialog(
                                                 Box(
                                                     modifier = Modifier
                                                         .clip(RoundedCornerShape(4.dp))
-                                                        .background(Color(0xFF142414))
+                                                        .background(Color(0xFF064E3B).copy(alpha = 0.5f))
+                                                        .border(1.dp, Color(0xFF059669).copy(alpha = 0.4f), RoundedCornerShape(4.dp))
                                                         .padding(horizontal = 6.dp, vertical = 2.dp)
                                                 ) {
-                                                    Text("OFFICIAL MOJANG MANIFEST", color = Color(0xFF4CAF50), fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
+                                                    Text("OFFICIAL MOJANG MANIFEST", color = Color(0xFF34D399), fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
                                                 }
                                             }
                                         }
                                         Text(
                                             text = "Set up an isolated instance with custom loader, memory, and runtime settings",
-                                            color = Color(0xFF777777),
+                                            color = Color(0xFF64748B),
                                             fontSize = 11.5.sp
                                         )
                                     }
                                 }
 
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    EzzButton(
+                                        text = "Modpacks",
+                                        icon = Icons.Default.GridView,
+                                        variant = EzzButtonVariant.SECONDARY,
+                                        size = EzzButtonSize.SMALL,
+                                        onClick = {
+                                            onDismiss()
+                                            viewModel.showModpackBrowserDialog.value = true
+                                        }
+                                    )
+
+                                    EzzButton(
+                                        text = "Import",
+                                        icon = Icons.Default.FileDownload,
+                                        variant = EzzButtonVariant.SECONDARY,
+                                        size = EzzButtonSize.SMALL,
+                                        onClick = {
+                                            onDismiss()
+                                            viewModel.openImportModpack()
+                                        }
+                                    )
+
                                     EzzIconButton(
                                         icon = Icons.Default.Refresh,
                                         onClick = { viewModel.refreshAvailableVersions(forceRefresh = true) },
-                                        size = io.ezz.launcher.ui.components.EzzButtonSize.SMALL,
-                                        variant = io.ezz.launcher.ui.components.EzzButtonVariant.GHOST
+                                        size = EzzButtonSize.SMALL,
+                                        variant = EzzButtonVariant.GHOST
                                     )
                                     EzzIconButton(
                                         icon = Icons.Default.Close,
                                         onClick = onDismiss,
-                                        size = io.ezz.launcher.ui.components.EzzButtonSize.SMALL,
-                                        variant = io.ezz.launcher.ui.components.EzzButtonVariant.GHOST
+                                        size = EzzButtonSize.SMALL,
+                                        variant = EzzButtonVariant.GHOST
                                     )
                                 }
                             }
@@ -389,8 +418,8 @@ fun CreateInstanceDialog(
                                                 modifier = Modifier
                                                     .size(72.dp)
                                                     .clip(RoundedCornerShape(12.dp))
-                                                    .background(Color(0xFF141414))
-                                                    .border(1.dp, Color(0xFF333333), RoundedCornerShape(12.dp))
+                                                    .background(Color(0xFF141720))
+                                                    .border(1.dp, Color(0xFF222735), RoundedCornerShape(12.dp))
                                                     .clickable {
                                                         val picked = viewModel.platformBridge.pickImageFile("Select Instance Icon (PNG, JPG, WEBP)")
                                                         if (picked != null && picked.exists()) {
@@ -417,8 +446,8 @@ fun CreateInstanceDialog(
                                                 modifier = Modifier.weight(1f),
                                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                                             ) {
-                                                Text("Instance Name", color = Color(0xFFAAAAAA), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                                                io.ezz.launcher.ui.components.EzzTextField(
+                                                Text("Instance Name", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                                EzzTextField(
                                                     value = name,
                                                     onValueChange = {
                                                         name = it
@@ -434,7 +463,7 @@ fun CreateInstanceDialog(
                                                 ) {
                                                     Text(
                                                         text = if (customIconFile != null) "Custom Icon: ${customIconFile?.name}" else "Click square to upload PNG / JPG / WEBP",
-                                                        color = Color(0xFF666666),
+                                                        color = Color(0xFF64748B),
                                                         fontSize = 10.sp
                                                     )
                                                     if (customIconFile != null) {
@@ -490,17 +519,17 @@ fun CreateInstanceDialog(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .clip(RoundedCornerShape(8.dp))
-                                                        .background(Color(0xFF141414))
-                                                        .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
+                                                        .background(Color(0xFF141720))
+                                                        .border(1.dp, Color(0xFF222735), RoundedCornerShape(8.dp))
                                                         .padding(horizontal = 12.dp, vertical = 8.dp),
                                                     horizontalArrangement = Arrangement.SpaceBetween,
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Text("Fabric Loader Version", color = Color(0xFF888888), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                                    Text("Fabric Loader Version", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Medium)
                                                     if (isLoadingFabricLoaders) {
                                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                                             CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 1.5.dp, color = Color.White)
-                                                            Text("Resolving compatible loader...", color = Color(0xFF666666), fontSize = 11.sp)
+                                                            Text("Resolving compatible loader...", color = Color(0xFF64748B), fontSize = 11.sp)
                                                         }
                                                     } else if (fabricLoaders.isEmpty()) {
                                                         Text("No compatible Fabric loader for $selectedMcVersion", color = Color(0xFFEF5350), fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -519,13 +548,13 @@ fun CreateInstanceDialog(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .clip(RoundedCornerShape(8.dp))
-                                                        .background(Color(0xFF141414))
-                                                        .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
+                                                        .background(Color(0xFF141720))
+                                                        .border(1.dp, Color(0xFF222735), RoundedCornerShape(8.dp))
                                                         .padding(horizontal = 12.dp, vertical = 8.dp),
                                                     horizontalArrangement = Arrangement.SpaceBetween,
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Text("OptiFine Edition", color = Color(0xFF888888), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                                    Text("OptiFine Edition", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Medium)
                                                     if (!isSupported) {
                                                         Text("Not supported for $selectedMcVersion", color = Color(0xFFEF5350), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                                     } else {
@@ -545,7 +574,7 @@ fun CreateInstanceDialog(
                                     StudioCard(title = "MINECRAFT RELEASE VERSION") {
                                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                             // Search Input
-                                            io.ezz.launcher.ui.components.EzzSearchField(
+                                            EzzSearchField(
                                                 value = versionSearchQuery,
                                                 onValueChange = { versionSearchQuery = it },
                                                 placeholder = "Search release versions (e.g. 1.21, 1.20, 1.12, 1.8)...",
@@ -558,20 +587,20 @@ fun CreateInstanceDialog(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .clip(RoundedCornerShape(6.dp))
-                                                        .background(Color(0xFF121B12))
-                                                        .border(1.dp, Color(0xFF233B23), RoundedCornerShape(6.dp))
+                                                        .background(Color(0xFF064E3B).copy(alpha = 0.4f))
+                                                        .border(1.dp, Color(0xFF059669).copy(alpha = 0.4f), RoundedCornerShape(6.dp))
                                                         .padding(horizontal = 10.dp, vertical = 5.dp),
                                                     horizontalArrangement = Arrangement.SpaceBetween,
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
                                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(12.dp))
-                                                        Text("Latest Release: Minecraft $latestReleaseId", color = Color(0xFFA5D6A7), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF34D399), modifier = Modifier.size(12.dp))
+                                                        Text("Latest Release: Minecraft $latestReleaseId", color = Color(0xFF34D399), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                                     }
                                                     Box(
                                                         modifier = Modifier
                                                             .clip(RoundedCornerShape(4.dp))
-                                                            .background(Color(0xFF233B23))
+                                                            .background(Color(0xFF064E3B))
                                                             .clickable { selectedMcVersion = latestReleaseId }
                                                             .padding(horizontal = 8.dp, vertical = 2.dp)
                                                     ) {
@@ -586,14 +615,14 @@ fun CreateInstanceDialog(
                                                     .fillMaxWidth()
                                                     .height(130.dp)
                                                     .clip(RoundedCornerShape(8.dp))
-                                                    .background(Color(0xFF0F0F0F))
-                                                    .border(1.dp, Color(0xFF1E1E1E), RoundedCornerShape(8.dp))
+                                                    .background(Color(0xFF141720))
+                                                    .border(1.dp, Color(0xFF222735), RoundedCornerShape(8.dp))
                                             ) {
                                                 if (isManifestLoading) {
                                                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                             CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color.White)
-                                                            Text("Loading official version manifest...", color = Color(0xFF777777), fontSize = 11.sp)
+                                                            Text("Loading official version manifest...", color = Color(0xFF64748B), fontSize = 11.sp)
                                                         }
                                                     }
                                                 } else if (manifestError != null && filteredVersions.isEmpty()) {
@@ -612,7 +641,7 @@ fun CreateInstanceDialog(
                                                     }
                                                 } else if (filteredVersions.isEmpty()) {
                                                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                                        Text("No versions match '$versionSearchQuery'", color = Color(0xFF555555), fontSize = 11.sp)
+                                                        Text("No versions match '$versionSearchQuery'", color = Color(0xFF64748B), fontSize = 11.sp)
                                                     }
                                                 } else {
                                                     LazyColumn(modifier = Modifier.fillMaxSize().padding(4.dp)) {
@@ -623,8 +652,8 @@ fun CreateInstanceDialog(
                                                                 modifier = Modifier
                                                                     .fillMaxWidth()
                                                                     .clip(RoundedCornerShape(6.dp))
-                                                                    .background(if (isSelected) Color(0xFF222222) else Color.Transparent)
-                                                                    .border(1.dp, if (isSelected) Color(0xFF444444) else Color.Transparent, RoundedCornerShape(6.dp))
+                                                                    .background(if (isSelected) Color(0xFF1A1E29) else Color.Transparent)
+                                                                    .border(1.dp, if (isSelected) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
                                                                     .clickable { selectedMcVersion = ver.id }
                                                                     .padding(horizontal = 10.dp, vertical = 5.dp),
                                                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -633,7 +662,7 @@ fun CreateInstanceDialog(
                                                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                                                     Text(
                                                                         text = ver.id,
-                                                                        color = if (isSelected) Color.White else Color(0xFFBBBBBB),
+                                                                        color = if (isSelected) Color.White else Color(0xFFCBD5E1),
                                                                         fontSize = 12.sp,
                                                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                                                                     )
@@ -641,17 +670,17 @@ fun CreateInstanceDialog(
                                                                         Box(
                                                                             modifier = Modifier
                                                                                 .clip(RoundedCornerShape(3.dp))
-                                                                                .background(Color(0xFF1E281E))
+                                                                                .background(Color(0xFF064E3B).copy(alpha = 0.5f))
                                                                                 .padding(horizontal = 4.dp, vertical = 1.dp)
                                                                         ) {
-                                                                            Text("LATEST", color = Color(0xFF4CAF50), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                                                            Text("LATEST", color = Color(0xFF34D399), fontSize = 8.sp, fontWeight = FontWeight.Bold)
                                                                         }
                                                                     }
                                                                 }
 
                                                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                                                    Text("Java $reqJava", color = Color(0xFF555555), fontSize = 10.sp)
-                                                                    Text(ver.releaseTime.take(10), color = Color(0xFF444444), fontSize = 10.sp)
+                                                                    Text("Java $reqJava", color = Color(0xFF64748B), fontSize = 10.sp)
+                                                                    Text(ver.releaseTime.take(10), color = Color(0xFF475569), fontSize = 10.sp)
                                                                     if (isSelected) {
                                                                         Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
                                                                     }
@@ -674,16 +703,17 @@ fun CreateInstanceDialog(
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Column {
-                                                    Text("Java Environment", color = Color(0xFF888888), fontSize = 10.sp)
+                                                    Text("Java Environment", color = Color(0xFF64748B), fontSize = 10.sp)
                                                     Text("Recommended: Java $requiredJavaMajor (${JavaCompatibility.getJavaRequirementDescription(requiredJavaMajor)})", color = Color.White, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
                                                 }
                                                 Box(
                                                     modifier = Modifier
                                                         .clip(RoundedCornerShape(4.dp))
-                                                        .background(Color(0xFF1E281E))
+                                                        .background(Color(0xFF064E3B).copy(alpha = 0.5f))
+                                                        .border(1.dp, Color(0xFF059669).copy(alpha = 0.4f), RoundedCornerShape(4.dp))
                                                         .padding(horizontal = 6.dp, vertical = 2.dp)
                                                 ) {
-                                                    Text("AUTO-RESOLVED", color = Color(0xFF4CAF50), fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
+                                                    Text("AUTO-RESOLVED", color = Color(0xFF34D399), fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
                                                 }
                                             }
 
@@ -697,80 +727,39 @@ fun CreateInstanceDialog(
                                                     Box(
                                                         modifier = Modifier
                                                             .clip(RoundedCornerShape(4.dp))
-                                                            .background(if (isAuto) Color(0xFF262626) else Color(0xFF141414))
-                                                            .border(1.dp, if (isAuto) Color.White else Color(0xFF222222), RoundedCornerShape(4.dp))
+                                                            .background(if (isAuto) Color(0xFF1A1E29) else Color(0xFF141720))
+                                                            .border(1.dp, if (isAuto) Color.White else Color(0xFF222735), RoundedCornerShape(4.dp))
                                                             .clickable { selectedJavaPath = null }
                                                             .padding(horizontal = 8.dp, vertical = 4.dp)
                                                     ) {
-                                                        Text("Auto (Java $requiredJavaMajor)", color = if (isAuto) Color.White else Color(0xFF777777), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                        Text("Auto Runtime", color = if (isAuto) Color.White else Color(0xFF94A3B8), fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
                                                     }
-
-                                                    detectedJavaRuntimes.take(3).forEach { rt ->
-                                                        val isSelected = selectedJavaPath == rt.path
-                                                        val isCompatible = JavaCompatibility.isJavaVersionCompatible(rt.majorVersion, requiredJavaMajor)
+                                                    detectedJavaRuntimes.take(2).forEach { jvm ->
+                                                        val isJvmSel = selectedJavaPath == jvm.path.toString()
                                                         Box(
                                                             modifier = Modifier
                                                                 .clip(RoundedCornerShape(4.dp))
-                                                                .background(if (isSelected) Color(0xFF262626) else Color(0xFF141414))
-                                                                .border(1.dp, if (isSelected) Color.White else Color(0xFF222222), RoundedCornerShape(4.dp))
-                                                                .clickable { selectedJavaPath = rt.path }
+                                                                .background(if (isJvmSel) Color(0xFF1A1E29) else Color(0xFF141720))
+                                                                .border(1.dp, if (isJvmSel) Color.White else Color(0xFF222735), RoundedCornerShape(4.dp))
+                                                                .clickable { selectedJavaPath = jvm.path.toString() }
                                                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                                                         ) {
-                                                            Text(
-                                                                "Java ${rt.majorVersion}${if (isCompatible) " ✓" else ""}",
-                                                                color = if (isSelected) Color.White else if (isCompatible) Color(0xFFB0BEC5) else Color(0xFF78909C),
-                                                                fontSize = 10.sp,
-                                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                                            )
+                                                            Text("Java ${jvm.majorVersion}", color = if (isJvmSel) Color.White else Color(0xFF94A3B8), fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
                                                         }
                                                     }
                                                 }
                                             }
 
-                                            // RAM Allocation with Quick Presets & Slider
-                                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            // RAM Slider
+                                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth(),
                                                     horizontalArrangement = Arrangement.SpaceBetween,
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Text("RAM Allocation", color = Color(0xFF888888), fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                                                    Text(
-                                                        text = "${maxRamMb.toInt()} MB (${maxRamMb.toInt() / 1024} GB)",
-                                                        color = Color.White,
-                                                        fontSize = 12.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        fontFamily = FontFamily.Monospace
-                                                    )
+                                                    Text("Maximum Memory Allocation", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                                                    Text("${(maxRamMb / 1024).toInt()} GB (${maxRamMb.toInt()} MB)", color = Color.White, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                                                 }
-
-                                                // Quick Presets Row
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                                ) {
-                                                    listOf(2048 to "2 GB", 4096 to "4 GB", 6144 to "6 GB", 8192 to "8 GB", 12288 to "12 GB").forEach { (mb, label) ->
-                                                        val isSelected = maxRamMb.toInt() == mb
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .weight(1f)
-                                                                .clip(RoundedCornerShape(4.dp))
-                                                                .background(if (isSelected) Color(0xFF262626) else Color(0xFF141414))
-                                                                .border(1.dp, if (isSelected) Color(0xFF444444) else Color(0xFF222222), RoundedCornerShape(4.dp))
-                                                                .clickable { maxRamMb = mb.toFloat() }
-                                                                .padding(vertical = 4.dp),
-                                                            contentAlignment = Alignment.Center
-                                                        ) {
-                                                            Text(
-                                                                text = label,
-                                                                color = if (isSelected) Color.White else Color(0xFF777777),
-                                                                fontSize = 10.sp,
-                                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                                            )
-                                                        }
-                                                    }
-                                                }
-
                                                 Slider(
                                                     value = maxRamMb,
                                                     onValueChange = { maxRamMb = it },
@@ -779,107 +768,76 @@ fun CreateInstanceDialog(
                                                     colors = SliderDefaults.colors(
                                                         thumbColor = Color.White,
                                                         activeTrackColor = Color.White,
-                                                        inactiveTrackColor = Color(0xFF222222)
-                                                    )
+                                                        inactiveTrackColor = Color(0xFF222735)
+                                                    ),
+                                                    modifier = Modifier.fillMaxWidth()
                                                 )
                                             }
                                         }
                                     }
 
-                                    // 5. ADVANCED OPTIONS (Accordion)
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(Color(0xFF101010))
-                                            .border(1.dp, Color(0xFF202020), RoundedCornerShape(10.dp))
-                                            .padding(12.dp)
-                                    ) {
+                                    // 5. ADVANCED TOGGLE SECTION
+                                    StudioCard(title = "ADVANCED SETTINGS") {
                                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .clickable { isAdvancedExpanded = !isAdvancedExpanded },
+                                                    .clickable { isAdvancedExpanded = !isAdvancedExpanded }
+                                                    .padding(vertical = 4.dp),
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                                ) {
-                                                    Icon(Icons.Default.Tune, contentDescription = null, tint = Color(0xFF777777), modifier = Modifier.size(13.dp))
-                                                    Text("ADVANCED SETTINGS", color = Color(0xFFBBBBBB), fontSize = 10.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+                                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                    Icon(Icons.Default.Tune, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(15.dp))
+                                                    Text("Resolution & JVM Flags", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                                 }
                                                 Icon(
                                                     imageVector = if (isAdvancedExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                                                     contentDescription = null,
-                                                    tint = Color(0xFF777777),
-                                                    modifier = Modifier.size(16.dp)
+                                                    tint = Color(0xFF94A3B8),
+                                                    modifier = Modifier.size(18.dp)
                                                 )
                                             }
 
                                             AnimatedVisibility(
                                                 visible = isAdvancedExpanded,
-                                                enter = expandVertically() + fadeIn(),
-                                                exit = shrinkVertically() + fadeOut()
+                                                enter = fadeIn() + expandVertically(),
+                                                exit = fadeOut() + shrinkVertically()
                                             ) {
-                                                Column(
-                                                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                                                    modifier = Modifier.padding(top = 6.dp)
-                                                ) {
-                                                    // Window Resolution
-                                                    Row(
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                                    ) {
-                                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                                            Text("Width", color = Color(0xFF777777), fontSize = 10.sp)
-                                                            io.ezz.launcher.ui.components.EzzTextField(
-                                                                value = windowWidth.toString(),
-                                                                onValueChange = { windowWidth = it.toIntOrNull() ?: 1280 },
-                                                                modifier = Modifier.fillMaxWidth()
-                                                            )
-                                                        }
-                                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                                            Text("Height", color = Color(0xFF777777), fontSize = 10.sp)
-                                                            io.ezz.launcher.ui.components.EzzTextField(
-                                                                value = windowHeight.toString(),
-                                                                onValueChange = { windowHeight = it.toIntOrNull() ?: 720 },
-                                                                modifier = Modifier.fillMaxWidth()
-                                                            )
-                                                        }
-                                                    }
-
-                                                    // Fullscreen Toggle
-                                                    Row(
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        Text("Launch in Fullscreen Mode", color = Color(0xFFBBBBBB), fontSize = 11.sp)
-                                                        EzzToggle(
-                                                            checked = isFullscreen,
-                                                            onCheckedChange = { isFullscreen = it }
+                                                Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 6.dp)) {
+                                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                                                        EzzTextField(
+                                                            value = "$windowWidth",
+                                                            onValueChange = { w -> w.toIntOrNull()?.let { windowWidth = it } },
+                                                            label = "Width (px)",
+                                                            modifier = Modifier.weight(1f)
+                                                        )
+                                                        EzzTextField(
+                                                            value = "$windowHeight",
+                                                            onValueChange = { h -> h.toIntOrNull()?.let { windowHeight = it } },
+                                                            label = "Height (px)",
+                                                            modifier = Modifier.weight(1f)
                                                         )
                                                     }
-
-                                                    // Custom JVM Args
-                                                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                                        Text("Custom JVM Arguments", color = Color(0xFF777777), fontSize = 10.sp)
-                                                        io.ezz.launcher.ui.components.EzzTextField(
-                                                            value = customJvmArgs,
-                                                            onValueChange = { customJvmArgs = it },
-                                                            placeholder = "e.g. -XX:+UseG1GC",
-                                                            modifier = Modifier.fillMaxWidth()
-                                                        )
-                                                    }
+                                                    EzzToggle(
+                                                        checked = isFullscreen,
+                                                        onCheckedChange = { isFullscreen = it },
+                                                        label = "Start in Fullscreen"
+                                                    )
+                                                    EzzTextField(
+                                                        value = customJvmArgs,
+                                                        onValueChange = { customJvmArgs = it },
+                                                        label = "Custom JVM Arguments",
+                                                        placeholder = "-XX:+UseG1GC",
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    )
                                                 }
                                             }
                                         }
                                     }
                                 }
 
-                                // RIGHT COLUMN (~36%): Hero Live Preview Panel
+                                // RIGHT COLUMN (~36%): Live Specifications Summary Card
                                 Column(
                                     modifier = Modifier
                                         .weight(0.36f)
@@ -887,113 +845,27 @@ fun CreateInstanceDialog(
                                     verticalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        Text(
-                                            text = "LIVE PREVIEW",
-                                            color = Color(0xFF666666),
-                                            fontSize = 10.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            letterSpacing = 0.8.sp
-                                        )
-
-                                        // Hero Preview Card
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .background(
-                                                    Brush.verticalGradient(
-                                                        colors = listOf(Color(0xFF161616), Color(0xFF0D0D0D))
-                                                    )
-                                                )
-                                                .border(1.dp, Color(0xFF262626), RoundedCornerShape(12.dp))
-                                                .padding(18.dp)
-                                        ) {
-                                            Column(
-                                                verticalArrangement = Arrangement.spacedBy(14.dp),
-                                                horizontalAlignment = Alignment.CenterHorizontally,
-                                                modifier = Modifier.fillMaxWidth()
-                                            ) {
-                                                // Center Artwork Icon
-                                                InstanceArtworkIcon(
-                                                    instance = Instance(
-                                                        id = "preview_hero",
-                                                        name = if (name.isBlank()) "Minecraft $selectedMcVersion" else name,
-                                                        minecraftVersion = selectedMcVersion,
-                                                        loaderType = selectedLoader
-                                                    ),
-                                                    size = 72.dp,
-                                                    customFile = customIconFile,
-                                                    showBadge = true
-                                                )
-
-                                                // Title & Subtitle
-                                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                                    Text(
-                                                        text = if (name.isBlank()) "New Instance" else name,
-                                                        color = Color.White,
-                                                        fontSize = 16.sp,
-                                                        fontWeight = FontWeight.Black,
-                                                        maxLines = 1
-                                                    )
-                                                    Text(
-                                                        text = "Minecraft $selectedMcVersion",
-                                                        color = Color(0xFF888888),
-                                                        fontSize = 11.5.sp
-                                                    )
+                                        StudioCard(title = "PROFILE SPECIFICATIONS") {
+                                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                                StudioMetaRow("Instance Name", trimmedName.ifBlank { "Untitled" })
+                                                StudioMetaRow("Minecraft Version", selectedMcVersion)
+                                                StudioMetaRow("Mod Engine", selectedLoader.name)
+                                                if (selectedLoader == LoaderType.FABRIC && selectedFabricLoader != null) {
+                                                    StudioMetaRow("Fabric Loader", selectedFabricLoader!!)
                                                 }
-
-                                                // Dynamic Badges Row
-                                                Row(
-                                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    EzzBadge(
-                                                        text = selectedLoader.name,
-                                                        variant = when (selectedLoader) {
-                                                            LoaderType.FABRIC -> EzzBadgeVariant.SUCCESS
-                                                            LoaderType.OPTIFINE -> EzzBadgeVariant.INFO
-                                                            LoaderType.VANILLA -> EzzBadgeVariant.NEUTRAL
-                                                        }
-                                                    )
-                                                    EzzBadge(
-                                                        text = "Java $requiredJavaMajor",
-                                                        variant = EzzBadgeVariant.NEUTRAL
-                                                    )
-                                                    EzzBadge(
-                                                        text = "${maxRamMb.toInt() / 1024} GB",
-                                                        variant = EzzBadgeVariant.NEUTRAL
-                                                    )
-                                                }
-
-                                                // Metadata Breakdown
-                                                Column(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .clip(RoundedCornerShape(8.dp))
-                                                        .background(Color(0xFF080808))
-                                                        .border(1.dp, Color(0xFF1A1A1A), RoundedCornerShape(8.dp))
-                                                        .padding(10.dp),
-                                                    verticalArrangement = Arrangement.spacedBy(5.dp)
-                                                ) {
-                                                    StudioMetaRow("Engine", selectedLoader.name)
-                                                    if (selectedLoader == LoaderType.FABRIC && selectedFabricLoader != null) {
-                                                        StudioMetaRow("Fabric Loader", selectedFabricLoader ?: "")
-                                                    } else if (selectedLoader == LoaderType.OPTIFINE && selectedOptiFineVersion != null) {
-                                                        StudioMetaRow("OptiFine", selectedOptiFineVersion ?: "")
-                                                    }
-                                                    StudioMetaRow("RAM Limit", "${maxRamMb.toInt()} MB")
-                                                    StudioMetaRow("Local Path", "instances/${trimmedName.ifBlank { "new_instance" }}")
-                                                }
+                                                StudioMetaRow("Required Java", "Java $requiredJavaMajor")
+                                                StudioMetaRow("Allocated Memory", "${(maxRamMb / 1024).toInt()} GB RAM")
+                                                StudioMetaRow("Ezz Skin System", "Active (Protected)")
                                             }
                                         }
 
-                                        // Status / Validation Alert Box
+                                        // Live Validation Status Banner
                                         if (validationError != null) {
                                             Box(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .clip(RoundedCornerShape(6.dp))
-                                                    .background(Color(0xFF261212))
+                                                    .background(Color(0xFF2A1515))
                                                     .border(1.dp, Color(0xFFEF5350).copy(alpha = 0.4f), RoundedCornerShape(6.dp))
                                                     .padding(horizontal = 10.dp, vertical = 8.dp)
                                             ) {
@@ -1010,16 +882,16 @@ fun CreateInstanceDialog(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .clip(RoundedCornerShape(6.dp))
-                                                    .background(Color(0xFF111E11))
-                                                    .border(1.dp, Color(0xFF4CAF50).copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                                                    .background(Color(0xFF064E3B).copy(alpha = 0.3f))
+                                                    .border(1.dp, Color(0xFF059669).copy(alpha = 0.4f), RoundedCornerShape(6.dp))
                                                     .padding(horizontal = 10.dp, vertical = 8.dp)
                                             ) {
                                                 Row(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                                 ) {
-                                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(13.dp))
-                                                    Text("Configuration ready to launch", color = Color(0xFFA5D6A7), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF34D399), modifier = Modifier.size(13.dp))
+                                                    Text("Configuration ready to create", color = Color(0xFF34D399), fontSize = 11.sp, fontWeight = FontWeight.Medium)
                                                 }
                                             }
                                         }
@@ -1031,17 +903,16 @@ fun CreateInstanceDialog(
                                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        OutlinedButton(
+                                        EzzButton(
+                                            text = "Cancel",
                                             onClick = onDismiss,
-                                            modifier = Modifier.weight(1f).height(44.dp),
-                                            shape = RoundedCornerShape(8.dp),
-                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF888888)),
-                                            border = BorderStroke(1.dp, Color(0xFF282828))
-                                        ) {
-                                            Text("Cancel", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                        }
+                                            variant = EzzButtonVariant.SECONDARY,
+                                            size = EzzButtonSize.MEDIUM,
+                                            modifier = Modifier.weight(1f)
+                                        )
 
-                                        Button(
+                                        EzzButton(
+                                            text = "Create Instance",
                                             onClick = {
                                                 if (isFormReady) {
                                                     coroutineScope.launch {
@@ -1093,23 +964,16 @@ fun CreateInstanceDialog(
                                                                 }
                                                             )
                                                         } catch (e: Exception) {
-                                                            creationErrorMessage = "Failed to create instance: ${e.message}"
+                                                            creationErrorMessage = e.message ?: "Failed to create instance"
                                                         }
                                                     }
                                                 }
                                             },
                                             enabled = isFormReady,
-                                            modifier = Modifier.weight(1.5f).height(44.dp),
-                                            shape = RoundedCornerShape(8.dp),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = Color.White,
-                                                contentColor = Color.Black,
-                                                disabledContainerColor = Color(0xFF1E1E1E),
-                                                disabledContentColor = Color(0xFF555555)
-                                            )
-                                        ) {
-                                            Text("CREATE INSTANCE", fontSize = 12.sp, fontWeight = FontWeight.Black, letterSpacing = 0.5.sp)
-                                        }
+                                            variant = EzzButtonVariant.PRIMARY,
+                                            size = EzzButtonSize.MEDIUM,
+                                            modifier = Modifier.weight(1.5f)
+                                        )
                                     }
                                 }
                             }
@@ -1141,24 +1005,23 @@ private fun StudioProgressView(
                 Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFEF5350), modifier = Modifier.size(42.dp))
                 Text("Creation Failed", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                 Text(errorMessage, color = Color(0xFFEF9A9A), fontSize = 12.sp)
-                Button(
+                EzzButton(
+                    text = "Back to Configuration",
                     onClick = onRetry,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("Back to Configuration", fontWeight = FontWeight.Bold)
-                }
+                    variant = EzzButtonVariant.PRIMARY,
+                    size = EzzButtonSize.MEDIUM
+                )
             } else {
                 CircularProgressIndicator(modifier = Modifier.size(44.dp), strokeWidth = 3.dp, color = Color.White)
                 Text("Creating $instanceName...", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Black, letterSpacing = 0.4.sp)
-                Text("Minecraft $minecraftVersion • ${loaderType.name}", color = Color(0xFF777777), fontSize = 12.sp)
+                Text("Minecraft $minecraftVersion • ${loaderType.name}", color = Color(0xFF64748B), fontSize = 12.sp)
 
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF121212))
-                        .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
+                        .background(Color(0xFF141720))
+                        .border(1.dp, Color(0xFF222735), RoundedCornerShape(8.dp))
                         .padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -1168,7 +1031,7 @@ private fun StudioProgressView(
                     StudioProgressStepRow("4. Finalizing local registration", isDone = currentStep > 4, isActive = currentStep == 4)
                 }
 
-                Text(progressText, color = Color(0xFF888888), fontSize = 11.sp)
+                Text(progressText, color = Color(0xFF94A3B8), fontSize = 11.sp)
             }
         }
     }
@@ -1183,12 +1046,12 @@ private fun StudioProgressStepRow(label: String, isDone: Boolean, isActive: Bool
     ) {
         Text(
             text = label,
-            color = if (isDone || isActive) Color.White else Color(0xFF555555),
+            color = if (isDone || isActive) Color.White else Color(0xFF64748B),
             fontSize = 11.5.sp,
             fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal
         )
         if (isDone) {
-            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(13.dp))
+            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(13.dp))
         } else if (isActive) {
             CircularProgressIndicator(modifier = Modifier.size(11.dp), strokeWidth = 1.5.dp, color = Color.White)
         }
@@ -1219,7 +1082,7 @@ private fun StudioSuccessView(
             Text("INSTANCE CREATED SUCCESSFULLY", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Black, letterSpacing = 0.6.sp)
             Text(
                 text = "${instance.name} is ready with Minecraft ${instance.minecraftVersion} (${instance.loaderType.name})",
-                color = Color(0xFF888888),
+                color = Color(0xFF64748B),
                 fontSize = 12.sp
             )
 
@@ -1227,40 +1090,30 @@ private fun StudioSuccessView(
                 modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Button(
+                EzzButton(
+                    text = "Play Now",
                     onClick = onPlayNow,
-                    modifier = Modifier.weight(1f).height(44.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Text("PLAY NOW", fontSize = 12.sp, fontWeight = FontWeight.Black)
-                    }
-                }
+                    icon = Icons.Default.PlayArrow,
+                    variant = EzzButtonVariant.PRIMARY,
+                    size = EzzButtonSize.MEDIUM,
+                    modifier = Modifier.weight(1f)
+                )
 
-                OutlinedButton(
+                EzzButton(
+                    text = "Manage",
                     onClick = onOpenInstance,
-                    modifier = Modifier.weight(1f).height(44.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                    border = BorderStroke(1.dp, Color(0xFF333333))
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Text("MANAGE", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
+                    icon = Icons.Default.FolderOpen,
+                    variant = EzzButtonVariant.SECONDARY,
+                    size = EzzButtonSize.MEDIUM,
+                    modifier = Modifier.weight(1f)
+                )
 
-                OutlinedButton(
+                EzzButton(
+                    text = "Done",
                     onClick = onDone,
-                    modifier = Modifier.height(44.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF888888)),
-                    border = BorderStroke(1.dp, Color(0xFF222222))
-                ) {
-                    Text("DONE", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
+                    variant = EzzButtonVariant.SECONDARY,
+                    size = EzzButtonSize.MEDIUM
+                )
             }
         }
     }
@@ -1275,14 +1128,14 @@ private fun StudioCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(Color(0xFF111111))
-            .border(1.dp, Color(0xFF202020), RoundedCornerShape(10.dp))
+            .background(Color(0xFF101318))
+            .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp))
             .padding(14.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = title,
-                color = Color(0xFF888888),
+                color = Color(0xFF64748B),
                 fontSize = 10.5.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 0.6.sp
@@ -1301,8 +1154,8 @@ private fun StudioLoaderCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val bg by animateColorAsState(if (isSelected) Color(0xFF222222) else Color(0xFF131313))
-    val borderCol by animateColorAsState(if (isSelected) Color.White else Color(0xFF222222))
+    val bg by animateColorAsState(if (isSelected) Color(0xFF1A1E29) else Color(0xFF141720))
+    val borderCol by animateColorAsState(if (isSelected) Color.White else Color(0xFF222735))
 
     Box(
         modifier = modifier
@@ -1321,7 +1174,7 @@ private fun StudioLoaderCard(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = if (isSelected) Color.White else Color(0xFF666666),
+                    tint = if (isSelected) Color.White else Color(0xFF64748B),
                     modifier = Modifier.size(15.dp)
                 )
                 if (isSelected) {
@@ -1329,19 +1182,19 @@ private fun StudioLoaderCard(
                         modifier = Modifier
                             .size(5.dp)
                             .clip(CircleShape)
-                            .background(Color.White)
+                            .background(Color(0xFF10B981))
                     )
                 }
             }
             Text(
                 text = title,
-                color = if (isSelected) Color.White else Color(0xFF999999),
+                color = if (isSelected) Color.White else Color(0xFFCBD5E1),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
                 text = description,
-                color = Color(0xFF555555),
+                color = if (isSelected) Color(0xFFE2E8F0) else Color(0xFF64748B),
                 fontSize = 9.5.sp,
                 maxLines = 1
             )
@@ -1356,7 +1209,7 @@ private fun StudioMetaRow(label: String, value: String) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, color = Color(0xFF666666), fontSize = 10.sp)
-        Text(text = value, color = Color(0xFFCCCCCC), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+        Text(text = label, color = Color(0xFF64748B), fontSize = 10.5.sp)
+        Text(text = value, color = Color(0xFFE2E8F0), fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold)
     }
 }

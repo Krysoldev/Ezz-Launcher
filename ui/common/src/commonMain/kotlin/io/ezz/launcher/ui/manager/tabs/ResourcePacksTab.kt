@@ -3,6 +3,8 @@ package io.ezz.launcher.ui.manager.tabs
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,10 +26,17 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ToggleOff
+import androidx.compose.material.icons.filled.ToggleOn
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -50,13 +59,17 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import okio.Path.Companion.toPath
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LocalResourcePack
 import io.ezz.launcher.core.model.modrinth.ModrinthBrowseState
 import io.ezz.launcher.core.model.modrinth.ModrinthProjectHit
+import io.ezz.launcher.ui.components.EzzButton
+import io.ezz.launcher.ui.components.EzzButtonSize
+import io.ezz.launcher.ui.components.EzzButtonVariant
 import io.ezz.launcher.ui.components.ModrinthAsyncImage
 import io.ezz.launcher.ui.components.PaginationBar
-import io.ezz.launcher.ui.theme.EzzTheme
+import io.ezz.launcher.ui.manager.dialogs.ModInspectDialog
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 
 private enum class PacksSubTab(val title: String) {
@@ -79,12 +92,13 @@ fun ResourcePacksTab(
 
     var localSearch by remember { mutableStateOf("") }
     var localFilter by remember { mutableStateOf("ALL") }
+    var selectedPackFiles by remember { mutableStateOf(setOf<String>()) }
+    var inspectPackHit by remember { mutableStateOf<ModrinthProjectHit?>(null) }
 
     Column(
         modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         // Sub-Navigation Bar
         Row(
@@ -95,8 +109,8 @@ fun ResourcePacksTab(
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF141414))
-                    .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp))
                     .padding(4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
@@ -107,14 +121,15 @@ fun ResourcePacksTab(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(if (isActive) Color(0xFF222222) else Color.Transparent)
+                            .background(if (isActive) Color(0xFF1A1E29) else Color.Transparent)
+                            .border(1.dp, if (isActive) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
                             .clickable {
                                 subTab = tab
                                 if (tab == PacksSubTab.BROWSE && browseState.items.isEmpty()) {
                                     viewModel.searchResourcePacks()
                                 }
                             }
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Row(
@@ -123,22 +138,23 @@ fun ResourcePacksTab(
                         ) {
                             Text(
                                 text = tab.title,
-                                color = if (isActive) Color.White else Color(0xFF888888),
-                                fontSize = 13.sp,
-                                fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal
+                                color = if (isActive) Color.White else Color(0xFF94A3B8),
+                                fontSize = 12.5.sp,
+                                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium
                             )
                             if (badgeCount != null && badgeCount > 0) {
                                 Box(
                                     modifier = Modifier
-                                        .clip(CircleShape)
-                                        .background(Color(0xFF333333))
-                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Color(0xFF141720))
+                                        .border(1.dp, Color(0xFF222735), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 5.dp, vertical = 1.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
                                         text = badgeCount.toString(),
                                         color = Color.White,
-                                        fontSize = 11.sp,
+                                        fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
@@ -150,28 +166,13 @@ fun ResourcePacksTab(
 
             // Quick Actions
             if (subTab == PacksSubTab.INSTALLED) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFF1C1C1C))
-                        .border(1.dp, Color(0xFF2A2A2A), RoundedCornerShape(6.dp))
-                        .clickable { viewModel.openInstanceFolder(instance.id) }
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FolderOpen,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text("Open Folder", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                    }
-                }
+                EzzButton(
+                    text = "Open Resourcepacks Folder",
+                    onClick = { viewModel.openInstanceFolder(instance.id) },
+                    icon = Icons.Default.FolderOpen,
+                    variant = EzzButtonVariant.SECONDARY,
+                    size = EzzButtonSize.SMALL
+                )
             }
         }
 
@@ -181,24 +182,25 @@ fun ResourcePacksTab(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF141414))
-                    .border(1.dp, Color(0xFF2E7D32).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF10B981).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
                     .padding(12.dp)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "Installing $downloadingProject...",
                             color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
                         Text(
                             text = "${(downloadProgress * 100).toInt()}%",
-                            color = Color(0xFF4CAF50),
+                            color = Color(0xFF10B981),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -209,8 +211,8 @@ fun ResourcePacksTab(
                             .fillMaxWidth()
                             .height(4.dp)
                             .clip(RoundedCornerShape(2.dp)),
-                        color = Color(0xFF4CAF50),
-                        trackColor = Color(0xFF222222)
+                        color = Color(0xFF10B981),
+                        trackColor = Color(0xFF141720)
                     )
                 }
             }
@@ -220,13 +222,19 @@ fun ResourcePacksTab(
         when (subTab) {
             PacksSubTab.INSTALLED -> {
                 InstalledPacksView(
+                    instance = instance,
+                    viewModel = viewModel,
                     installedPacks = installedPacks,
                     localSearch = localSearch,
                     onSearchChange = { localSearch = it },
                     localFilter = localFilter,
                     onFilterChange = { localFilter = it },
+                    selectedPackFiles = selectedPackFiles,
+                    onSelectionChange = { selectedPackFiles = it },
                     onTogglePack = { pack -> viewModel.toggleManageResourcePack(pack.fileName, !pack.enabled) },
                     onDeletePack = { pack -> viewModel.deleteManageResourcePack(pack.fileName) },
+                    onBulkToggle = { files, enable -> viewModel.bulkToggleResourcePacks(files, enable) },
+                    onBulkDelete = { files -> viewModel.bulkDeleteResourcePacks(files) },
                     onBrowseClick = {
                         subTab = PacksSubTab.BROWSE
                         if (browseState.items.isEmpty()) viewModel.searchResourcePacks()
@@ -238,63 +246,85 @@ fun ResourcePacksTab(
                     instance = instance,
                     viewModel = viewModel,
                     browseState = browseState,
+                    onInspect = { hit -> inspectPackHit = hit },
                     onInstall = { hit -> viewModel.installModrinthProject(hit) }
                 )
             }
         }
     }
+
+    // Inspect Modal
+    val activeInspectHit = inspectPackHit
+    if (activeInspectHit != null) {
+        ModInspectDialog(
+            projectHit = activeInspectHit,
+            instance = instance,
+            viewModel = viewModel,
+            onDismiss = { inspectPackHit = null }
+        )
+    }
 }
 
 @Composable
 private fun InstalledPacksView(
+    instance: Instance,
+    viewModel: AppViewModel,
     installedPacks: List<LocalResourcePack>,
     localSearch: String,
     onSearchChange: (String) -> Unit,
     localFilter: String,
     onFilterChange: (String) -> Unit,
+    selectedPackFiles: Set<String>,
+    onSelectionChange: (Set<String>) -> Unit,
     onTogglePack: (LocalResourcePack) -> Unit,
     onDeletePack: (LocalResourcePack) -> Unit,
+    onBulkToggle: (List<String>, Boolean) -> Unit,
+    onBulkDelete: (List<String>) -> Unit,
     onBrowseClick: () -> Unit
 ) {
-    val filtered = installedPacks.filter { pack ->
-        val matchesSearch = localSearch.isBlank() ||
+    val filtered = remember(installedPacks, localSearch, localFilter) {
+        installedPacks.filter { pack ->
+            val matchesSearch = localSearch.isBlank() ||
                 pack.name.contains(localSearch, ignoreCase = true) ||
-                pack.fileName.contains(localSearch, ignoreCase = true)
-        val matchesFilter = when (localFilter) {
-            "ENABLED" -> pack.enabled
-            "DISABLED" -> !pack.enabled
-            else -> true
+                pack.fileName.contains(localSearch, ignoreCase = true) ||
+                (pack.description?.contains(localSearch, ignoreCase = true) == true)
+            val matchesFilter = when (localFilter) {
+                "ENABLED" -> pack.enabled
+                "DISABLED" -> !pack.enabled
+                else -> true
+            }
+            matchesSearch && matchesFilter
         }
-        matchesSearch && matchesFilter
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // Search Toolbar
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Search & Filter Toolbar
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             TextField(
                 value = localSearch,
                 onValueChange = onSearchChange,
-                placeholder = { Text("Filter installed resource packs...", color = Color(0xFF666666), fontSize = 13.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF666666), modifier = Modifier.size(16.dp)) },
+                placeholder = { Text("Search installed resource packs...", color = Color(0xFF64748B), fontSize = 13.sp) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF64748B), modifier = Modifier.size(16.dp)) },
                 trailingIcon = {
                     if (localSearch.isNotBlank()) {
                         IconButton(onClick = { onSearchChange("") }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF666666), modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF64748B), modifier = Modifier.size(16.dp))
                         }
                     }
                 },
                 modifier = Modifier
-                    .weight(1f)
-                    .height(44.dp)
+                    .width(280.dp)
+                    .height(38.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF141414)),
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp)),
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFF141414),
-                    unfocusedContainerColor = Color(0xFF141414),
+                    focusedContainerColor = Color(0xFF101318),
+                    unfocusedContainerColor = Color(0xFF101318),
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                     focusedTextColor = Color.White,
@@ -307,25 +337,99 @@ private fun InstalledPacksView(
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF141414))
-                    .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp))
                     .padding(3.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                listOf("ALL" to "All", "ENABLED" to "Enabled", "DISABLED" to "Disabled").forEach { (key, label) ->
+                listOf(
+                    "ALL" to "All (${installedPacks.size})",
+                    "ENABLED" to "Enabled (${installedPacks.count { it.enabled }})",
+                    "DISABLED" to "Disabled (${installedPacks.count { !it.enabled }})"
+                ).forEach { (key, label) ->
                     val isSelected = localFilter == key
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(if (isSelected) Color(0xFF242424) else Color.Transparent)
+                            .background(if (isSelected) Color(0xFF1A1E29) else Color.Transparent)
+                            .border(1.dp, if (isSelected) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
                             .clickable { onFilterChange(key) }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
                             text = label,
-                            color = if (isSelected) Color.White else Color(0xFF888888),
+                            color = if (isSelected) Color.White else Color(0xFF94A3B8),
                             fontSize = 12.sp,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+
+        // Bulk Actions Bar
+        if (selectedPackFiles.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF141720))
+                    .border(1.dp, Color(0xFF222735), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "${selectedPackFiles.size} packs selected",
+                            color = Color.White,
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFF101318))
+                                .clickable { onSelectionChange(emptySet()) }
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text("Clear Selection", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        EzzButton(
+                            text = "Enable",
+                            onClick = {
+                                onBulkToggle(selectedPackFiles.toList(), true)
+                                onSelectionChange(emptySet())
+                            },
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.SMALL
+                        )
+                        EzzButton(
+                            text = "Disable",
+                            onClick = {
+                                onBulkToggle(selectedPackFiles.toList(), false)
+                                onSelectionChange(emptySet())
+                            },
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.SMALL
+                        )
+                        EzzButton(
+                            text = "Delete",
+                            onClick = {
+                                onBulkDelete(selectedPackFiles.toList())
+                                onSelectionChange(emptySet())
+                            },
+                            variant = EzzButtonVariant.DANGER,
+                            size = EzzButtonSize.SMALL
                         )
                     }
                 }
@@ -336,36 +440,67 @@ private fun InstalledPacksView(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(260.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF121212))
-                    .border(1.dp, Color(0xFF1E1E1E), RoundedCornerShape(12.dp)),
+                    .height(280.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.padding(24.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Palette,
-                        contentDescription = null,
-                        tint = Color(0xFF444444),
-                        modifier = Modifier.size(44.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF141720))
+                            .border(1.dp, Color(0xFF222735), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Palette,
+                            contentDescription = null,
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                    Text(
+                        text = if (installedPacks.isEmpty()) "No Resource Packs Installed" else "No Matching Packs Found",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
                     )
                     Text(
-                        text = if (installedPacks.isEmpty()) "No resource packs installed in this instance." else "No resource packs matched your filter.",
-                        color = Color(0xFF888888),
-                        fontSize = 14.sp
+                        text = if (installedPacks.isEmpty())
+                            "Install resource packs from Modrinth or drop .zip files into your resourcepacks folder."
+                        else
+                            "Try searching with a different name or clearing your active filters.",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 12.5.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                     if (installedPacks.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color.White)
-                                .clickable { onBrowseClick() }
-                                .padding(horizontal = 16.dp, vertical = 10.dp)
-                        ) {
-                            Text("Browse Resource Packs", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            EzzButton(
+                                text = "Browse Resource Packs",
+                                onClick = onBrowseClick,
+                                icon = Icons.Default.Download,
+                                variant = EzzButtonVariant.PRIMARY,
+                                size = EzzButtonSize.MEDIUM
+                            )
+                            EzzButton(
+                                text = "Open Packs Folder",
+                                onClick = {
+                                    val rpDir = viewModel.pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("resourcepacks").toFile()
+                                    if (!rpDir.exists()) rpDir.mkdirs()
+                                    viewModel.platformBridge.openFolder(rpDir.absolutePath.toPath())
+                                },
+                                icon = Icons.Default.FolderOpen,
+                                variant = EzzButtonVariant.SECONDARY,
+                                size = EzzButtonSize.MEDIUM
+                            )
                         }
                     }
                 }
@@ -376,8 +511,17 @@ private fun InstalledPacksView(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(filtered, key = { it.fileName }) { pack ->
+                    val isSelected = selectedPackFiles.contains(pack.fileName)
                     InstalledPackRow(
                         pack = pack,
+                        instance = instance,
+                        viewModel = viewModel,
+                        isSelected = isSelected,
+                        onSelectToggle = {
+                            onSelectionChange(
+                                if (isSelected) selectedPackFiles - pack.fileName else selectedPackFiles + pack.fileName
+                            )
+                        },
                         onToggle = { onTogglePack(pack) },
                         onDelete = { onDeletePack(pack) }
                     )
@@ -390,16 +534,22 @@ private fun InstalledPacksView(
 @Composable
 private fun InstalledPackRow(
     pack: LocalResourcePack,
+    instance: Instance,
+    viewModel: AppViewModel,
+    isSelected: Boolean,
+    onSelectToggle: () -> Unit,
     onToggle: () -> Unit,
     onDelete: () -> Unit
 ) {
+    var showMenu by remember { mutableStateOf(false) }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF141414))
-            .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .background(Color(0xFF101318))
+            .border(1.dp, if (isSelected) Color.White else Color(0xFF1A1D26), RoundedCornerShape(8.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -411,34 +561,38 @@ private fun InstalledPackRow(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (pack.enabled) Color(0xFF1E1E1E) else Color(0xFF161616))
-                        .border(1.dp, Color(0xFF2A2A2A), RoundedCornerShape(6.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Palette,
-                        contentDescription = null,
-                        tint = if (pack.enabled) Color(0xFF2196F3) else Color(0xFF666666),
-                        modifier = Modifier.size(20.dp)
+                // Checkbox
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onSelectToggle() },
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = Color.White,
+                        checkmarkColor = Color(0xFF07080A),
+                        uncheckedColor = Color(0xFF64748B)
                     )
-                }
+                )
 
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                // Real Thumbnail on Left
+                ModrinthAsyncImage(
+                    url = pack.iconPath,
+                    imageLoader = viewModel.imageLoader,
+                    placeholderIcon = Icons.Default.Palette,
+                    modifier = Modifier.size(46.dp),
+                    shape = RoundedCornerShape(8.dp)
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(
                         text = pack.name,
-                        color = if (pack.enabled) Color.White else Color(0xFF777777),
-                        fontSize = 14.sp,
+                        color = if (pack.enabled) Color.White else Color(0xFF64748B),
+                        fontSize = 13.5.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                     val desc = pack.description
                     Text(
                         text = if (!desc.isNullOrBlank()) desc else pack.fileName,
-                        color = Color(0xFF666666),
-                        fontSize = 12.sp,
+                        color = Color(0xFF64748B),
+                        fontSize = 11.5.sp,
                         maxLines = 1
                     )
                 }
@@ -446,30 +600,81 @@ private fun InstalledPackRow(
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Switch(
                     checked = pack.enabled,
                     onCheckedChange = { onToggle() },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
-                        checkedTrackColor = Color(0xFF1976D2),
-                        uncheckedThumbColor = Color(0xFF888888),
-                        uncheckedTrackColor = Color(0xFF242424),
-                        uncheckedBorderColor = Color(0xFF333333)
+                        checkedTrackColor = Color(0xFF10B981),
+                        uncheckedThumbColor = Color(0xFF94A3B8),
+                        uncheckedTrackColor = Color(0xFF141720),
+                        uncheckedBorderColor = Color(0xFF222735)
                     )
                 )
 
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete Pack",
-                        tint = Color(0xFFE53935),
-                        modifier = Modifier.size(16.dp)
-                    )
+                // Three-dot Action Menu
+                Box {
+                    IconButton(
+                        onClick = { showMenu = true },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Pack Actions",
+                            tint = Color(0xFFCBD5E1),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                        modifier = Modifier
+                            .background(Color(0xFF141720))
+                            .border(1.dp, Color(0xFF222735), RoundedCornerShape(8.dp))
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(if (pack.enabled) "Disable Pack" else "Enable Pack", color = Color.White, fontSize = 13.sp) },
+                            leadingIcon = {
+                                Icon(
+                                    if (pack.enabled) Icons.Default.ToggleOff else Icons.Default.ToggleOn,
+                                    contentDescription = null,
+                                    tint = if (pack.enabled) Color(0xFF94A3B8) else Color(0xFF10B981),
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            },
+                            onClick = {
+                                showMenu = false
+                                onToggle()
+                            }
+                        )
+
+                        DropdownMenuItem(
+                            text = { Text("Open File Location", color = Color.White, fontSize = 13.sp) },
+                            leadingIcon = {
+                                Icon(Icons.Default.FolderOpen, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
+                            },
+                            onClick = {
+                                showMenu = false
+                                val rpDir = viewModel.pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("resourcepacks").toFile()
+                                if (!rpDir.exists()) rpDir.mkdirs()
+                                viewModel.platformBridge.openFolder(rpDir.absolutePath.toPath())
+                            }
+                        )
+
+                        DropdownMenuItem(
+                            text = { Text("Delete Pack", color = Color(0xFFEF4444), fontSize = 13.sp) },
+                            leadingIcon = {
+                                Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(15.dp))
+                            },
+                            onClick = {
+                                showMenu = false
+                                onDelete()
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -481,11 +686,12 @@ private fun BrowseResourcePacksView(
     instance: Instance,
     viewModel: AppViewModel,
     browseState: ModrinthBrowseState,
+    onInspect: (ModrinthProjectHit) -> Unit,
     onInstall: (ModrinthProjectHit) -> Unit
 ) {
     var searchQuery by remember(browseState.searchQuery) { mutableStateOf(browseState.searchQuery) }
 
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // Search & Sort Bar
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -498,26 +704,27 @@ private fun BrowseResourcePacksView(
                     searchQuery = it
                     viewModel.searchResourcePacks(query = it, debounceMs = 350L)
                 },
-                placeholder = { Text("Search Modrinth Resource Packs (e.g. Faithful, Bare Bones, Fresh Animations)...", color = Color(0xFF666666), fontSize = 13.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF666666), modifier = Modifier.size(16.dp)) },
+                placeholder = { Text("Search Modrinth resource packs (e.g. Faithful, Bare Bones, Fresh Animations)...", color = Color(0xFF94A3B8), fontSize = 13.sp) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(16.dp)) },
                 trailingIcon = {
                     if (searchQuery.isNotBlank()) {
                         IconButton(onClick = {
                             searchQuery = ""
                             viewModel.searchResourcePacks(query = "")
                         }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF666666), modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF94A3B8), modifier = Modifier.size(16.dp))
                         }
                     }
                 },
                 modifier = Modifier
                     .weight(1f)
-                    .height(44.dp)
+                    .height(42.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF141414)),
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp)),
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFF141414),
-                    unfocusedContainerColor = Color(0xFF141414),
+                    focusedContainerColor = Color(0xFF101318),
+                    unfocusedContainerColor = Color(0xFF101318),
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                     focusedTextColor = Color.White,
@@ -530,8 +737,8 @@ private fun BrowseResourcePacksView(
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF141414))
-                    .border(1.dp, Color(0xFF222222), RoundedCornerShape(8.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp))
                     .padding(3.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
@@ -545,36 +752,30 @@ private fun BrowseResourcePacksView(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(if (isSelected) Color(0xFF242424) else Color.Transparent)
+                            .background(if (isSelected) Color(0xFF1A1E29) else Color.Transparent)
+                            .border(1.dp, if (isSelected) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
                             .clickable { viewModel.searchResourcePacks(sort = sortKey) }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
                             text = sortLabel,
-                            color = if (isSelected) Color.White else Color(0xFF888888),
+                            color = if (isSelected) Color.White else Color(0xFF94A3B8),
                             fontSize = 12.sp,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                         )
                     }
                 }
             }
         }
 
-        // Active Version Badge
+        // Active Version Filter Banner
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text("Filtering Resource Packs for:", color = Color(0xFF666666), fontSize = 12.sp)
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color(0xFF1976D2).copy(alpha = 0.15f))
-                    .border(1.dp, Color(0xFF1976D2).copy(alpha = 0.3f), RoundedCornerShape(4.dp))
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
-            ) {
-                Text("MC ${instance.minecraftVersion}", color = Color(0xFF1976D2), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            }
+            Text("Filtered for:", color = Color(0xFF94A3B8), fontSize = 11.5.sp)
+            FilterBadge(text = "MC ${instance.minecraftVersion}", color = Color.White)
+            FilterBadge(text = "Resource Packs Only", color = Color(0xFF10B981))
         }
 
         // Results Container
@@ -592,26 +793,23 @@ private fun BrowseResourcePacksView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(240.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF141414))
-                    .border(1.dp, Color(0xFF222222), RoundedCornerShape(12.dp)),
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFE53935), modifier = Modifier.size(36.dp))
-                    Text(browseState.error ?: "Error fetching resource packs", color = Color(0xFF888888), fontSize = 13.sp)
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFF222222))
-                            .clickable { viewModel.searchResourcePacks() }
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
-                    ) {
-                        Text("Retry", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
+                    Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(36.dp))
+                    Text(browseState.error ?: "Error fetching resource packs", color = Color(0xFF94A3B8), fontSize = 13.sp)
+                    EzzButton(
+                        text = "Retry",
+                        onClick = { viewModel.searchResourcePacks() },
+                        variant = EzzButtonVariant.SECONDARY,
+                        size = EzzButtonSize.SMALL
+                    )
                 }
             }
         } else if (browseState.items.isEmpty()) {
@@ -619,22 +817,23 @@ private fun BrowseResourcePacksView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(240.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF141414))
-                    .border(1.dp, Color(0xFF222222), RoundedCornerShape(12.dp)),
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No resource packs found matching your query.", color = Color(0xFF888888), fontSize = 14.sp)
+                Text("No resource packs found matching your query.", color = Color(0xFF94A3B8), fontSize = 14.sp)
             }
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(browseState.items, key = { it.projectId }) { hit ->
-                    ResourcePackBrowseCard(
+                    PackBrowseCard(
                         hit = hit,
                         viewModel = viewModel,
+                        onInspect = { onInspect(hit) },
                         onInstall = { onInstall(hit) }
                     )
                 }
@@ -655,9 +854,10 @@ private fun BrowseResourcePacksView(
 }
 
 @Composable
-private fun ResourcePackBrowseCard(
+private fun PackBrowseCard(
     hit: ModrinthProjectHit,
     viewModel: AppViewModel,
+    onInspect: () -> Unit,
     onInstall: () -> Unit
 ) {
     val isInstalled = viewModel.isResourcePackInstalled(hit)
@@ -666,8 +866,9 @@ private fun ResourcePackBrowseCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(Color(0xFF141414))
-            .border(1.dp, Color(0xFF222222), RoundedCornerShape(10.dp))
+            .background(Color(0xFF101318))
+            .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp))
+            .clickable { onInspect() }
             .padding(14.dp)
     ) {
         Row(
@@ -683,7 +884,7 @@ private fun ResourcePackBrowseCard(
                 ModrinthAsyncImage(
                     url = hit.previewImageUrl,
                     imageLoader = viewModel.imageLoader,
-                    modifier = Modifier.size(54.dp),
+                    modifier = Modifier.size(50.dp).clip(RoundedCornerShape(6.dp)),
                     placeholderIcon = Icons.Default.Palette,
                     contentScale = ContentScale.Crop
                 )
@@ -699,22 +900,22 @@ private fun ResourcePackBrowseCard(
                         Text(
                             text = hit.title,
                             color = Color.White,
-                            fontSize = 15.sp,
+                            fontSize = 14.5.sp,
                             fontWeight = FontWeight.Bold
                         )
                         if (hit.author.isNotBlank()) {
                             Text(
                                 text = "by ${hit.author}",
-                                color = Color(0xFF777777),
-                                fontSize = 12.sp
+                                color = Color(0xFF94A3B8),
+                                fontSize = 11.5.sp
                             )
                         }
                     }
 
                     Text(
                         text = hit.description,
-                        color = Color(0xFFAAAAAA),
-                        fontSize = 13.sp,
+                        color = Color(0xFFCBD5E1),
+                        fontSize = 12.5.sp,
                         maxLines = 2
                     )
 
@@ -725,7 +926,7 @@ private fun ResourcePackBrowseCard(
                     ) {
                         Text(
                             text = "${formatDownloads(hit.downloads)} downloads",
-                            color = Color(0xFF777777),
+                            color = Color(0xFF94A3B8),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium
                         )
@@ -734,12 +935,13 @@ private fun ResourcePackBrowseCard(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
-                                    .background(Color(0xFF202020))
+                                    .background(Color(0xFF141720))
+                                    .border(1.dp, Color(0xFF222735), RoundedCornerShape(4.dp))
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
                                     text = cat,
-                                    color = Color(0xFF888888),
+                                    color = Color(0xFFCBD5E1),
                                     fontSize = 10.sp
                                 )
                             }
@@ -755,8 +957,8 @@ private fun ResourcePackBrowseCard(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFF1E281E))
-                        .border(1.dp, Color(0xFF2E7D32).copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                        .background(Color(0xFF10B981).copy(alpha = 0.15f))
+                        .border(1.dp, Color(0xFF10B981), RoundedCornerShape(6.dp))
                         .padding(horizontal = 14.dp, vertical = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -767,46 +969,40 @@ private fun ResourcePackBrowseCard(
                         Icon(
                             imageVector = Icons.Default.Check,
                             contentDescription = null,
-                            tint = Color(0xFF4CAF50),
+                            tint = Color(0xFF10B981),
                             modifier = Modifier.size(14.dp)
                         )
                         Text(
                             text = "INSTALLED",
-                            color = Color(0xFF4CAF50),
-                            fontSize = 12.sp,
+                            color = Color(0xFF10B981),
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
             } else {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color.White)
-                        .clickable { onInstall() }
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Download,
-                            contentDescription = null,
-                            tint = Color.Black,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = "INSTALL",
-                            color = Color.Black,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
+                EzzButton(
+                    text = "INSTALL",
+                    onClick = onInstall,
+                    icon = Icons.Default.Download,
+                    variant = EzzButtonVariant.PRIMARY,
+                    size = EzzButtonSize.SMALL
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun FilterBadge(text: String, color: Color) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(Color(0xFF141720))
+            .border(1.dp, Color(0xFF222735), RoundedCornerShape(4.dp))
+            .padding(horizontal = 7.dp, vertical = 2.dp)
+    ) {
+        Text(text = text, color = color, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 

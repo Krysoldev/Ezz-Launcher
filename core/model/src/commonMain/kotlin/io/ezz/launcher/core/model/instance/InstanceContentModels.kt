@@ -32,7 +32,10 @@ data class LocalMod(
     val author: String? = null,
     val description: String? = null,
     val iconPath: String? = null,
-    val isModrinthLinked: Boolean = false
+    val isModrinthLinked: Boolean = false,
+    val dependencies: Map<String, String> = emptyMap(),
+    val breaks: Map<String, String> = emptyMap(),
+    val conflicts: Map<String, String> = emptyMap()
 )
 
 /**
@@ -101,9 +104,6 @@ data class LocalScreenshot(
     val lastModified: Long = 0L
 )
 
-/**
- * Local Log File (latest.log, crash reports, launcher logs).
- */
 @Serializable
 data class InstanceLogEntry(
     val fileName: String,
@@ -111,6 +111,34 @@ data class InstanceLogEntry(
     val sizeBytes: Long = 0L,
     val lastModified: Long = 0L,
     val isCrashReport: Boolean = false
+)
+
+@Serializable
+enum class LogSeverityLevel {
+    INFO,
+    WARN,
+    ERROR,
+    DEBUG,
+    UNKNOWN
+}
+
+@Serializable
+data class LogLine(
+    val lineNumber: Int,
+    val text: String,
+    val level: LogSeverityLevel = LogSeverityLevel.INFO
+)
+
+@Serializable
+data class LogReadResult(
+    val fileName: String,
+    val filePath: String,
+    val lines: List<LogLine> = emptyList(),
+    val totalSizeBytes: Long = 0L,
+    val isTruncated: Boolean = false,
+    val errorCount: Int = 0,
+    val warnCount: Int = 0,
+    val infoCount: Int = 0
 )
 
 /**

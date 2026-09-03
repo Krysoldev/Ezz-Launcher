@@ -65,7 +65,7 @@ fun ConsoleScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF050505))
+            .background(Color(0xFF07080B))
             .padding(26.dp)
     ) {
         // Header
@@ -91,7 +91,7 @@ fun ConsoleScreen(
                 }
                 Text(
                     text = "Live STDOUT and STDERR stream from Minecraft process execution",
-                    color = Color(0xFF888888),
+                    color = Color(0xFF64748B),
                     fontSize = 12.sp
                 )
             }
@@ -130,16 +130,16 @@ fun ConsoleScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF080808))
-                .border(1.dp, Color(0xFF202020), RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF0E1018))
+                .border(1.dp, Color(0xFF1B1E2D), RoundedCornerShape(10.dp))
                 .padding(14.dp)
         ) {
             if (logs.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
                         text = "No logs yet. Launch an instance to view live output stream.",
-                        color = Color(0xFF555555),
+                        color = Color(0xFF64748B),
                         fontSize = 12.sp
                     )
                 }
@@ -151,9 +151,9 @@ fun ConsoleScreen(
                     items(logs) { log ->
                         val logColor = when {
                             log.isError -> Color(0xFFEF4444)
-                            log.message.startsWith("===") -> Color.White
+                            log.message.startsWith("===") -> Color(0xFFA5B4FC)
                             log.message.contains("WARN", ignoreCase = true) -> Color(0xFFF59E0B)
-                            else -> Color(0xFFB0B0B0)
+                            else -> Color(0xFFCBD5E1)
                         }
                         Text(
                             text = log.message,
