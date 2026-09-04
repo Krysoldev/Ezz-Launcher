@@ -66,6 +66,7 @@ class LaunchEngine(
         account: Account? = null
     ): Flow<LaunchEvent> = flow {
         val launchPreparationStartTime = System.currentTimeMillis()
+        var runningPid: Long = 0L
 
         try {
             emit(LaunchEvent.StateChanged(ProcessState.Preparing("Preparing launch environment...")))
@@ -364,7 +365,6 @@ class LaunchEngine(
             emit(LaunchEvent.StateChanged(ProcessState.Preparing("Starting Minecraft Java Process...", 0.99f)))
 
             val launchStartTime = System.currentTimeMillis()
-            var runningPid: Long = 0L
 
             processLauncher.launch(
                 command = launchCommand,
@@ -390,7 +390,7 @@ class LaunchEngine(
                             }
                         }
 
-                        discordRpcService?.updateActivity(
+                        discordRpcService?.setMinecraftPresence(
                             playerUsername = validAccount.username,
                             minecraftVersion = instance.minecraftVersion,
                             instanceName = instance.name,
@@ -412,7 +412,7 @@ class LaunchEngine(
                         emit(LaunchEvent.LogReceived(event.line, event.isError))
                     }
                     is ProcessEvent.Terminated -> {
-                        discordRpcService?.clearActivity(processId = runningPid)
+                        discordRpcService?.onMinecraftExited(processId = runningPid)
                         val playTimeSeconds = (System.currentTimeMillis() - launchStartTime) / 1000L
 
                         if (event.exitCode == 0) {
@@ -458,7 +458,7 @@ class LaunchEngine(
                         emit(LaunchEvent.StateChanged(ProcessState.Exited(event.exitCode)))
                     }
                     is ProcessEvent.Error -> {
-                        discordRpcService?.clearActivity()
+                        discordRpcService?.onMinecraftExited(processId = runningPid)
                         emit(LaunchEvent.LogReceived("=== Process Execution Error: ${event.message} ===", isError = true))
                         emit(LaunchEvent.StateChanged(ProcessState.Failed(LaunchError.ExecutionFailed(event.message, event.cause))))
                     }
@@ -466,7 +466,7 @@ class LaunchEngine(
             }
 
         } catch (e: Exception) {
-            discordRpcService?.clearActivity()
+            discordRpcService?.onMinecraftExited(processId = runningPid)
             emit(LaunchEvent.StateChanged(ProcessState.Failed(LaunchError.ExecutionFailed(e.message ?: "Launch failed", e))))
         }
     }

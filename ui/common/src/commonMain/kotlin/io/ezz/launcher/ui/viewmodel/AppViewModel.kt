@@ -536,9 +536,22 @@ class AppViewModel(
 
         scope.launch {
             try {
+                val rpcEnabled = settingsRepository.settings.value.enableDiscordRpc
+                val currentAccount = accountRepository.selectedAccount.value
+                discordRpcService?.initialize(account = currentAccount, enabled = rpcEnabled)
+            } catch (e: Throwable) {
+                println("[DiscordRPC] RPC errors: Startup initialization failed: ${e.message}")
+            }
+        }
+
+        scope.launch {
+            try {
                 accountRepository.selectedAccount.collect { selAcc ->
                     // Reset ephemeral preview selection when switching accounts
                     _selectedVaultSkin.value = null
+                    val rpcEnabled = settingsRepository.settings.value.enableDiscordRpc
+                    discordRpcService?.setLauncherPresence(selAcc, enabled = rpcEnabled)
+
                     if (selAcc == null || selAcc !is MicrosoftAccount || selAcc.type != AccountType.MICROSOFT) {
                         _adminStatus.value = AdminStatus.NormalUser(
                             minecraftUsername = selAcc?.username ?: "",
@@ -906,9 +919,7 @@ class AppViewModel(
         scope.launch {
             try {
                 settingsRepository.updateSettings { it.copy(enableDiscordRpc = enabled) }
-                if (!enabled) {
-                    discordRpcService?.clearActivity()
-                }
+                discordRpcService?.setEnabled(enabled)
             } catch (e: Exception) {
                 println("Failed to update Discord RPC setting: ${e.message}")
             }

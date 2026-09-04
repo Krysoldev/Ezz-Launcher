@@ -7,13 +7,77 @@ import kotlinx.serialization.json.long
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class DiscordRpcPayloadTest {
 
     private val service = DiscordRpcService()
 
     @Test
-    fun testMicrosoftAccountPayload() {
+    fun testLauncherPresencePayloadWithAccount() {
+        val payloadJson = service.buildLauncherPayload(
+            username = "KrysolDev",
+            avatarUrl = null,
+            uuid = "ad17221c-781d-4ec5-aca6-f5069fbced7b",
+            processId = 1000L,
+            nonce = "test-launcher-nonce"
+        )
+
+        val json = Json.parseToJsonElement(payloadJson).jsonObject
+        assertEquals("SET_ACTIVITY", json["cmd"]?.jsonPrimitive?.content)
+        assertEquals("test-launcher-nonce", json["nonce"]?.jsonPrimitive?.content)
+
+        val args = json["args"]?.jsonObject
+        assertNotNull(args)
+
+        val activity = args["activity"]?.jsonObject
+        assertNotNull(activity)
+        assertEquals("KrysolDev", activity["name"]?.jsonPrimitive?.content)
+        assertEquals(0, activity["type"]?.jsonPrimitive?.long?.toInt())
+        assertEquals("Ezz Launcher", activity["details"]?.jsonPrimitive?.content)
+        assertEquals("Ready to play", activity["state"]?.jsonPrimitive?.content)
+
+        // No session timestamps for launcher presence
+        assertNull(activity["timestamps"])
+
+        val assets = activity["assets"]?.jsonObject
+        assertNotNull(assets)
+        assertEquals("ezzlauncher", assets["large_image"]?.jsonPrimitive?.content)
+        assertEquals("Ezz Launcher", assets["large_text"]?.jsonPrimitive?.content)
+        assertEquals(
+            "https://minotar.net/helm/ad17221c781d4ec5aca6f5069fbced7b/128.png",
+            assets["small_image"]?.jsonPrimitive?.content
+        )
+        assertEquals("KrysolDev", assets["small_text"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun testLauncherPresencePayloadWithoutAccount() {
+        val payloadJson = service.buildLauncherPayload(
+            username = null,
+            avatarUrl = null,
+            uuid = null,
+            processId = 1000L,
+            nonce = "test-guest-nonce"
+        )
+
+        val json = Json.parseToJsonElement(payloadJson).jsonObject
+        val activity = json["args"]?.jsonObject?.get("activity")?.jsonObject
+        assertNotNull(activity)
+        assertEquals("Ezz Launcher", activity["name"]?.jsonPrimitive?.content)
+        assertEquals("Ezz Launcher", activity["details"]?.jsonPrimitive?.content)
+        assertEquals("Ready to play", activity["state"]?.jsonPrimitive?.content)
+        assertNull(activity["timestamps"])
+
+        val assets = activity["assets"]?.jsonObject
+        assertNotNull(assets)
+        assertEquals("ezzlauncher", assets["large_image"]?.jsonPrimitive?.content)
+        assertEquals("Ezz Launcher", assets["large_text"]?.jsonPrimitive?.content)
+        assertNull(assets["small_image"])
+    }
+
+    @Test
+    fun testMicrosoftAccountMinecraftPayload() {
         val payloadJson = service.buildActivityPayload(
             playerUsername = "KrysolDev",
             minecraftVersion = "1.21.11",
