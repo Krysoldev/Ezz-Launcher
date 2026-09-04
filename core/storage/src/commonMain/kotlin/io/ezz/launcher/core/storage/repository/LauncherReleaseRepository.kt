@@ -8,12 +8,24 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 interface LauncherReleaseRepository {
     val latestRelease: StateFlow<SupabaseLauncherReleaseDto?>
     suspend fun getLatestRelease(platform: String = "windows"): SupabaseLauncherReleaseDto?
     suspend fun getAllReleases(platform: String = "windows"): List<SupabaseLauncherReleaseDto>
     suspend fun checkForUpdates(currentVersion: String, platform: String = "windows"): UpdateCheckResult
+    suspend fun isAdminUser(username: String): Boolean
+    suspend fun publishRelease(
+        adminUsername: String,
+        version: String,
+        platform: String = "windows",
+        downloadUrl: String?,
+        releaseNotes: String?,
+        isLatest: Boolean = true,
+        isRequired: Boolean = false
+    ): Result<Unit>
 }
 
 data class UpdateCheckResult(
@@ -82,6 +94,51 @@ class SupabaseLauncherReleaseRepository(
             currentVersion = currentVersion,
             latestRelease = latest
         )
+    }
+
+    override suspend fun isAdminUser(username: String): Boolean = withContext(dispatcher) {
+        try {
+            val response = supabaseClient.rpc(
+                functionName = "is_admin_user",
+                params = buildJsonObject {
+                    put("lookup_username", username)
+                }
+            )
+            response.trim().equals("true", ignoreCase = true)
+        } catch (e: Throwable) {
+            println("[SupabaseLauncherReleaseRepository] Warning checking admin status for '$username': ${e.message}")
+            false
+        }
+    }
+
+    override suspend fun publishRelease(
+        adminUsername: String,
+        version: String,
+        platform: String,
+        downloadUrl: String?,
+        releaseNotes: String?,
+        isLatest: Boolean,
+        isRequired: Boolean
+    ): Result<Unit> = withContext(dispatcher) {
+        try {
+            supabaseClient.rpc(
+                functionName = "publish_launcher_release",
+                params = buildJsonObject {
+                    put("p_admin_username", adminUsername)
+                    put("p_version", version)
+                    put("p_platform", platform)
+                    downloadUrl?.let { put("p_download_url", it) }
+                    releaseNotes?.let { put("p_release_notes", it) }
+                    put("p_is_latest", isLatest)
+                    put("p_is_required", isRequired)
+                }
+            )
+            // Immediately refresh the cached latest release so all subscribers get the updated version
+            getLatestRelease(platform)
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
     }
 
     private fun isNewerVersion(latest: String, current: String): Boolean {

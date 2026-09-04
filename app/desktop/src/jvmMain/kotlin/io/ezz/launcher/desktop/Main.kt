@@ -119,6 +119,7 @@ fun main() {
                         LocalMinecraftAccountRepository.isStartupPhase = true
                         val accountRepository = LocalMinecraftAccountRepository(pathProvider, secureVault)
                         val loadedAccounts = accountRepository.loadAll()
+                        println("-> Loaded ${loadedAccounts.size} account(s)")
                         val msalCacheDir = pathProvider.rootDirectory.resolve("cache").resolve("msal").toFile()
                         // Lazy MicrosoftAuthService: WAM broker is NOT initialized during startup
                         val microsoftAuthService = MicrosoftAuthService(httpClient, cacheDir = msalCacheDir)
@@ -149,6 +150,7 @@ fun main() {
                         val optiFineInstaller = OptiFineInstaller(pathProvider)
                         val processLauncher = DesktopProcessLauncher()
                         val vaultSkinRepository = LocalVaultSkinRepository(pathProvider)
+                        val discordRpcService = io.ezz.launcher.core.runtime.discord.DiscordRpcService()
 
                         val launchEngine = LaunchEngine(
                             pathProvider = pathProvider,
@@ -160,7 +162,9 @@ fun main() {
                             downloadManager = downloadManager,
                             instanceRepository = instanceRepository,
                             processLauncher = processLauncher,
-                            vaultSkinRepository = vaultSkinRepository
+                            vaultSkinRepository = vaultSkinRepository,
+                            settingsRepository = settingsRepository,
+                            discordRpcService = discordRpcService
                         )
 
                         val platformBridge = DefaultPlatformBridge(
@@ -193,6 +197,16 @@ fun main() {
                         val modrinthService = io.ezz.launcher.core.network.modrinth.ModrinthService(httpClient)
                         val curseForgeService = CurseForgeService()
 
+                        val adminAuthorizationService = io.ezz.launcher.core.auth.admin.AdminAuthorizationService(
+                            httpClient = httpClient,
+                            releaseRepository = releaseRepository
+                        )
+                        val gitHubReleaseService = io.ezz.launcher.core.storage.github.GitHubReleaseService(
+                            vault = secureVault,
+                            releaseRepository = releaseRepository,
+                            httpClient = httpClient
+                        )
+
                         val vm = AppViewModel(
                             instanceRepository = instanceRepository,
                             accountRepository = accountRepository,
@@ -219,7 +233,11 @@ fun main() {
                             modrinthService = modrinthService,
                             curseForgeService = curseForgeService,
                             vaultSkinRepository = vaultSkinRepository,
-                            platformBridge = platformBridge
+                            platformBridge = platformBridge,
+                            adminAuthorizationService = adminAuthorizationService,
+                            gitHubReleaseService = gitHubReleaseService,
+                            discordRpcService = discordRpcService,
+                            secureVault = secureVault
                         )
 
                         // Attach lazy HWND provider: only called when user clicks Microsoft login!

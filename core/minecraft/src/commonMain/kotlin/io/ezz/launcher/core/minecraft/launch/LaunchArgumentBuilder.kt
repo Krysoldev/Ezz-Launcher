@@ -33,7 +33,11 @@ object LaunchArgumentBuilder {
         gameDir: Path,
         javaBinaryPath: String,
         os: OperatingSystem = OperatingSystem.current,
-        arch: String = System.getProperty("os.arch") ?: "x86_64"
+        arch: String = System.getProperty("os.arch") ?: "x86_64",
+        defaultWindowWidth: Int = 1280,
+        defaultWindowHeight: Int = 720,
+        defaultFullscreen: Boolean = false,
+        globalJvmArgs: List<String> = emptyList()
     ): List<String> {
         val command = mutableListOf<String>()
         command.add(javaBinaryPath)
@@ -141,6 +145,13 @@ object LaunchArgumentBuilder {
             command.add("-Djava.net.preferIPv4Stack=true")
         }
 
+        // Add global JVM arguments from Settings (if not already present)
+        for (arg in globalJvmArgs) {
+            if (arg.isNotBlank() && !command.contains(arg)) {
+                command.add(arg)
+            }
+        }
+
         // Add instance custom JVM arguments (excluding empty entries)
         command.addAll(instance.customJvmArgs.filter { it.isNotBlank() })
 
@@ -160,11 +171,19 @@ object LaunchArgumentBuilder {
         }
 
         // Add resolution if specified and not already in game arguments
-        if (!command.contains("--width") && instance.windowWidth > 0 && instance.windowHeight > 0) {
+        val effectiveWidth = if (instance.windowWidth > 0 && instance.windowWidth != 1280) instance.windowWidth else defaultWindowWidth
+        val effectiveHeight = if (instance.windowHeight > 0 && instance.windowHeight != 720) instance.windowHeight else defaultWindowHeight
+
+        if (!command.contains("--width") && effectiveWidth > 0 && effectiveHeight > 0) {
             command.add("--width")
-            command.add(instance.windowWidth.toString())
+            command.add(effectiveWidth.toString())
             command.add("--height")
-            command.add(instance.windowHeight.toString())
+            command.add(effectiveHeight.toString())
+        }
+
+        // Launch in fullscreen if enabled
+        if (defaultFullscreen && !command.contains("--fullscreen")) {
+            command.add("--fullscreen")
         }
 
         return command

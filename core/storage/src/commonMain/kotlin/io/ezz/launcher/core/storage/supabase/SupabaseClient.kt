@@ -272,6 +272,30 @@ class SupabaseClient(
         }
     }
 
+    suspend fun rpc(
+        functionName: String,
+        params: JsonObject = buildJsonObject {}
+    ): String = withContext(dispatcher) {
+        val url = "${config.restUrl}/rpc/$functionName"
+        try {
+            val response: HttpResponse = httpClient.post(url) {
+                header("apikey", config.anonKey)
+                header(HttpHeaders.Authorization, "Bearer ${getAuthToken()}")
+                contentType(ContentType.Application.Json)
+                setBody(params.toString())
+            }
+            val body = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                handleError(body, response.status.value)
+            }
+            body
+        } catch (e: SupabaseException) {
+            throw e
+        } catch (e: Exception) {
+            throw SupabaseException("Supabase RPC failed for '$functionName': ${e.message}", cause = e)
+        }
+    }
+
     suspend fun signOut(): Unit = withContext(dispatcher) {
         val url = "${config.authUrl}/logout"
         try {

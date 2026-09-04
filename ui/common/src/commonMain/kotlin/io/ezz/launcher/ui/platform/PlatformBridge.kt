@@ -11,6 +11,8 @@ interface PlatformBridge {
     fun pickImageFile(title: String = "Select Instance Icon"): java.io.File?
     fun pickImportInstanceFile(title: String = "Select Modrinth Modpack (*.mrpack)"): java.io.File?
     fun pickExportInstanceFile(defaultName: String, title: String = "Export Modrinth Modpack (*.mrpack)"): java.io.File?
+    fun pickJavaExecutable(title: String = "Select Java Executable (java.exe)"): java.io.File?
+    fun pickReleaseArtifact(title: String = "Select Release Artifact (*.zip, *.exe, *.msi)"): java.io.File?
 }
 
 class DefaultPlatformBridge(
@@ -145,6 +147,64 @@ class DefaultPlatformBridge(
                     } else {
                         chosen
                     }
+                } else null
+            } catch (e2: Throwable) {
+                null
+            }
+        }
+    }
+
+    override fun pickJavaExecutable(title: String): java.io.File? {
+        return try {
+            val dialog = java.awt.FileDialog(null as java.awt.Frame?, title, java.awt.FileDialog.LOAD)
+            dialog.setFilenameFilter { _, name ->
+                val lower = name.lowercase()
+                lower == "java.exe" || lower == "javaw.exe" || lower == "java" || lower.endsWith(".exe")
+            }
+            dialog.isVisible = true
+            val dir = dialog.directory
+            val file = dialog.file
+            if (dir != null && file != null) {
+                java.io.File(dir, file)
+            } else {
+                null
+            }
+        } catch (e: Throwable) {
+            try {
+                val chooser = javax.swing.JFileChooser()
+                chooser.dialogTitle = title
+                val res = chooser.showOpenDialog(null)
+                if (res == javax.swing.JFileChooser.APPROVE_OPTION) {
+                    chooser.selectedFile
+                } else null
+            } catch (e2: Throwable) {
+                null
+            }
+        }
+    }
+
+    override fun pickReleaseArtifact(title: String): java.io.File? {
+        return try {
+            val dialog = java.awt.FileDialog(null as java.awt.Frame?, title, java.awt.FileDialog.LOAD)
+            dialog.setFilenameFilter { _, name ->
+                val lower = name.lowercase()
+                lower.endsWith(".zip") || lower.endsWith(".exe") || lower.endsWith(".msi") || lower.endsWith(".jar") || lower.endsWith(".tar.gz")
+            }
+            dialog.isVisible = true
+            val dir = dialog.directory
+            val file = dialog.file
+            if (dir != null && file != null) {
+                java.io.File(dir, file)
+            } else {
+                null
+            }
+        } catch (e: Throwable) {
+            try {
+                val chooser = javax.swing.JFileChooser()
+                chooser.dialogTitle = title
+                val res = chooser.showOpenDialog(null)
+                if (res == javax.swing.JFileChooser.APPROVE_OPTION) {
+                    chooser.selectedFile
                 } else null
             } catch (e2: Throwable) {
                 null

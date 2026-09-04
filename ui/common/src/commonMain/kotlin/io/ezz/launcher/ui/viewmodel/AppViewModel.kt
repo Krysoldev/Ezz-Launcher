@@ -33,7 +33,13 @@ import io.ezz.launcher.core.storage.repository.SettingsRepository
 import io.ezz.launcher.core.storage.repository.UpdateCheckResult
 import io.ezz.launcher.core.storage.supabase.SupabaseAnnouncementDto
 import io.ezz.launcher.core.storage.supabase.SupabaseClient
-import io.ezz.launcher.core.storage.supabase.SupabaseMinecraftVersionDto
+import io.ezz.launcher.core.auth.admin.AdminAuthorizationService
+import io.ezz.launcher.core.auth.admin.AdminStatus
+import io.ezz.launcher.core.storage.github.GitHubReleaseService
+import io.ezz.launcher.core.storage.github.GitHubConnectionStatus
+import io.ezz.launcher.core.storage.github.ReleasePublishState
+import io.ezz.launcher.core.runtime.discord.DiscordRpcService
+import io.ezz.launcher.core.storage.vault.SecureVault
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -130,6 +136,25 @@ data class ConsoleLogEntry(
     val isError: Boolean = false
 )
 
+sealed class JavaValidationResult {
+    object Empty : JavaValidationResult()
+    object Valid : JavaValidationResult()
+    object NotFound : JavaValidationResult()
+    object IsDirectory : JavaValidationResult()
+    object NotJavaExecutable : JavaValidationResult()
+}
+
+sealed class ReleasePublishStep {
+    object Idle : ReleasePublishStep()
+    object Preparing : ReleasePublishStep()
+    object Uploading : ReleasePublishStep()
+    object Publishing : ReleasePublishStep()
+    object SyncingSupabase : ReleasePublishStep()
+    data class Success(val releaseUrl: String) : ReleasePublishStep()
+    data class PartialSuccess(val message: String) : ReleasePublishStep()
+    data class Failed(val error: String) : ReleasePublishStep()
+}
+
 class AppViewModel(
     val instanceRepository: InstanceRepository,
     val accountRepository: AccountRepository,
@@ -157,6 +182,10 @@ class AppViewModel(
     val curseForgeService: io.ezz.launcher.core.network.curseforge.CurseForgeService? = null,
     val vaultSkinRepository: VaultSkinRepository? = null,
     val platformBridge: PlatformBridge = DefaultPlatformBridge(),
+    val adminAuthorizationService: AdminAuthorizationService? = null,
+    val gitHubReleaseService: GitHubReleaseService? = null,
+    val discordRpcService: DiscordRpcService? = null,
+    val secureVault: SecureVault? = null,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main)
 ) {
     val currentLauncherVersion = "1.0.0"
@@ -233,6 +262,7 @@ class AppViewModel(
 
     private val _detectedJavaRuntimes = MutableStateFlow<List<JavaRuntime>>(emptyList())
     val detectedJavaRuntimes: StateFlow<List<JavaRuntime>> = _detectedJavaRuntimes.asStateFlow()
+    val isDetectingJava = MutableStateFlow(false)
 
     private val _detectedGpus = MutableStateFlow<List<io.ezz.launcher.core.runtime.detector.DetectedGpu>>(emptyList())
     val detectedGpus: StateFlow<List<io.ezz.launcher.core.runtime.detector.DetectedGpu>> = _detectedGpus.asStateFlow()
@@ -269,6 +299,22 @@ class AppViewModel(
 
     private val _updateCheckResult = MutableStateFlow<UpdateCheckResult?>(null)
     val updateCheckResult: StateFlow<UpdateCheckResult?> = _updateCheckResult.asStateFlow()
+
+    val isCheckingForUpdates = MutableStateFlow(false)
+    val updateCheckError = MutableStateFlow<String?>(null)
+
+    // Admin & Release System State
+    private val _adminStatus = MutableStateFlow<AdminStatus>(AdminStatus.NormalUser())
+    val adminStatus: StateFlow<AdminStatus> = _adminStatus.asStateFlow()
+
+    val githubConnectionStatus: StateFlow<GitHubConnectionStatus> =
+        gitHubReleaseService?.connectionStatus ?: MutableStateFlow(GitHubConnectionStatus.Disconnected).asStateFlow()
+
+    private val _isCheckingAdmin = MutableStateFlow(false)
+    val isCheckingAdmin: StateFlow<Boolean> = _isCheckingAdmin.asStateFlow()
+
+    private val _releasePublishStep = MutableStateFlow<ReleasePublishStep>(ReleasePublishStep.Idle)
+    val releasePublishStep: StateFlow<ReleasePublishStep> = _releasePublishStep.asStateFlow()
 
     val featureFlags: StateFlow<Map<String, Boolean>> = featureFlagRepository?.flags ?: MutableStateFlow(emptyMap())
 
@@ -495,6 +541,7 @@ class AppViewModel(
                     if (selAcc != null) {
                         skinService.loadOrRefreshSkin(selAcc)
                     }
+                    refreshAdminStatus(selAcc)
                 }
             } catch (e: Throwable) {
                 println("Error collecting selectedAccount: ${e.message}")
@@ -778,19 +825,206 @@ class AppViewModel(
 
     fun checkForUpdates() {
         scope.launch {
-            releaseRepository?.let {
-                _updateCheckResult.value = it.checkForUpdates(currentLauncherVersion, platform = "windows")
+            isCheckingForUpdates.value = true
+            updateCheckError.value = null
+            try {
+                if (releaseRepository != null) {
+                    val result = withContext(Dispatchers.IO) {
+                        releaseRepository.checkForUpdates(currentLauncherVersion, platform = "windows")
+                    }
+                    _updateCheckResult.value = result
+                } else {
+                    updateCheckError.value = "Could not check for updates. Try again later."
+                }
+            } catch (e: Throwable) {
+                updateCheckError.value = "Could not check for updates. Try again later."
+            } finally {
+                isCheckingForUpdates.value = false
             }
         }
     }
 
+    fun validateCustomJavaPath(path: String): JavaValidationResult {
+        if (path.isBlank()) return JavaValidationResult.Empty
+        val file = java.io.File(path.trim())
+        if (!file.exists()) return JavaValidationResult.NotFound
+        if (file.isDirectory) return JavaValidationResult.IsDirectory
+        val name = file.name.lowercase()
+        val isWindows = System.getProperty("os.name", "").lowercase().contains("windows")
+        val isExecutable = if (isWindows) {
+            name == "java.exe" || name == "javaw.exe" || name.endsWith(".exe")
+        } else {
+            name == "java" || file.canExecute()
+        }
+        if (!isExecutable) return JavaValidationResult.NotJavaExecutable
+        return JavaValidationResult.Valid
+    }
+
+    fun updateCustomJavaPath(path: String) {
+        scope.launch {
+            try {
+                settingsRepository.updateSettings { it.copy(defaultJavaPath = path.trim()) }
+            } catch (e: Exception) {
+                println("Failed to update custom Java path: ${e.message}")
+            }
+        }
+    }
+
+    fun updateWindowDefaults(width: Int, height: Int, fullscreen: Boolean) {
+        scope.launch {
+            try {
+                settingsRepository.updateSettings {
+                    it.copy(
+                        defaultWindowWidth = width.coerceIn(320, 7680),
+                        defaultWindowHeight = height.coerceIn(240, 4320),
+                        defaultFullscreen = fullscreen
+                    )
+                }
+            } catch (e: Exception) {
+                println("Failed to update window defaults: ${e.message}")
+            }
+        }
+    }
+
+    fun updateDiscordRpc(enabled: Boolean) {
+        scope.launch {
+            try {
+                settingsRepository.updateSettings { it.copy(enableDiscordRpc = enabled) }
+                if (!enabled) {
+                    discordRpcService?.clearActivity()
+                }
+            } catch (e: Exception) {
+                println("Failed to update Discord RPC setting: ${e.message}")
+            }
+        }
+    }
+
+    fun refreshAdminStatus(account: Account? = accountRepository.selectedAccount.value) {
+        scope.launch {
+            _isCheckingAdmin.value = true
+            try {
+                val targetAccount = account ?: accountRepository.selectedAccount.value
+                if (targetAccount == null) {
+                    _adminStatus.value = AdminStatus.NormalUser()
+                    return@launch
+                }
+                if (adminAuthorizationService != null) {
+                    val status = withContext(Dispatchers.IO) {
+                        adminAuthorizationService.verifyAdminStatus(targetAccount)
+                    }
+                    _adminStatus.value = status
+                    if (status is AdminStatus.VerifiedAdmin) {
+                        checkGitHubStatus()
+                    }
+                } else {
+                    _adminStatus.value = AdminStatus.NormalUser(
+                        minecraftUsername = targetAccount.username,
+                        minecraftUuid = targetAccount.uuid,
+                        microsoftConnected = targetAccount is io.ezz.launcher.core.model.account.MicrosoftAccount
+                    )
+                }
+            } catch (e: Throwable) {
+                println("Admin verification notice: ${e.message}")
+                _adminStatus.value = AdminStatus.NormalUser()
+            } finally {
+                _isCheckingAdmin.value = false
+            }
+        }
+    }
+
+    fun checkGitHubStatus() {
+        gitHubReleaseService?.checkExistingToken()
+    }
+
+    fun connectGitHub(token: String, onResult: (Boolean, String?) -> Unit) {
+        scope.launch {
+            if (gitHubReleaseService != null) {
+                val status = withContext(Dispatchers.IO) {
+                    gitHubReleaseService.connectWithToken(token.trim())
+                }
+                if (status is GitHubConnectionStatus.Connected) {
+                    onResult(true, null)
+                } else if (status is GitHubConnectionStatus.Error) {
+                    onResult(false, status.message)
+                } else {
+                    onResult(false, "Failed to connect to GitHub")
+                }
+            } else {
+                onResult(false, "GitHub release service is unavailable")
+            }
+        }
+    }
+
+    fun disconnectGitHub() {
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                gitHubReleaseService?.disconnect()
+            }
+        }
+    }
+
+    fun publishAdminRelease(
+        version: String,
+        title: String,
+        changelog: String,
+        artifactFile: java.io.File?,
+        isDraft: Boolean
+    ) {
+        scope.launch {
+            val currentAccount = accountRepository.selectedAccount.value
+            if (currentAccount == null || adminStatus.value !is AdminStatus.VerifiedAdmin) {
+                _releasePublishStep.value = ReleasePublishStep.Failed("Unauthorized: verified admin account required.")
+                return@launch
+            }
+            if (gitHubReleaseService == null) {
+                _releasePublishStep.value = ReleasePublishStep.Failed("GitHub release service unavailable.")
+                return@launch
+            }
+
+            gitHubReleaseService.publishRelease(
+                adminUsername = currentAccount.username,
+                version = version,
+                releaseTitle = title,
+                releaseNotes = changelog,
+                artifactFile = artifactFile,
+                isDraft = isDraft
+            ).collect { state ->
+                when (state) {
+                    is ReleasePublishState.Idle -> _releasePublishStep.value = ReleasePublishStep.Idle
+                    is ReleasePublishState.Preparing -> _releasePublishStep.value = ReleasePublishStep.Preparing
+                    is ReleasePublishState.PublishingRelease -> _releasePublishStep.value = ReleasePublishStep.Publishing
+                    is ReleasePublishState.UploadingArtifact -> _releasePublishStep.value = ReleasePublishStep.Uploading
+                    is ReleasePublishState.SyncingSupabase -> _releasePublishStep.value = ReleasePublishStep.SyncingSupabase
+                    is ReleasePublishState.Published -> {
+                        _releasePublishStep.value = ReleasePublishStep.Success(state.gitHubUrl)
+                        checkForUpdates()
+                    }
+                    is ReleasePublishState.Failed -> {
+                        if (state.isPartialSuccess) {
+                            _releasePublishStep.value = ReleasePublishStep.PartialSuccess(state.error)
+                        } else {
+                            _releasePublishStep.value = ReleasePublishStep.Failed(state.error)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun resetReleasePublishState() {
+        _releasePublishStep.value = ReleasePublishStep.Idle
+    }
+
     fun refreshJavaRuntimes() {
         scope.launch(Dispatchers.IO) {
+            isDetectingJava.value = true
             try {
                 val detected = JavaRuntimeDetector.detectInstalledRuntimes()
                 _detectedJavaRuntimes.value = detected
             } catch (e: Exception) {
                 println("Warning: failed to detect Java runtimes: ${e.message}")
+            } finally {
+                isDetectingJava.value = false
             }
         }
     }

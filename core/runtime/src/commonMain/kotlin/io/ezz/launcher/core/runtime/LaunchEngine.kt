@@ -28,8 +28,11 @@ import io.ezz.launcher.core.runtime.detector.GpuDetector
 import io.ezz.launcher.core.runtime.detector.JavaRuntimeDetector
 import io.ezz.launcher.core.runtime.process.ProcessEvent
 import io.ezz.launcher.core.runtime.process.ProcessLauncher
+import io.ezz.launcher.core.model.runtime.LauncherSettings
+import io.ezz.launcher.core.runtime.discord.DiscordRpcService
 import io.ezz.launcher.core.storage.path.PathProvider
 import io.ezz.launcher.core.storage.repository.InstanceRepository
+import io.ezz.launcher.core.storage.repository.SettingsRepository
 import io.ezz.launcher.core.storage.repository.VaultSkinRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -53,7 +56,9 @@ class LaunchEngine(
     private val downloadManager: DownloadManager,
     private val processLauncher: ProcessLauncher,
     private val instanceRepository: InstanceRepository,
-    private val vaultSkinRepository: VaultSkinRepository? = null
+    private val vaultSkinRepository: VaultSkinRepository? = null,
+    private val settingsRepository: SettingsRepository? = null,
+    private val discordRpcService: DiscordRpcService? = null
 ) {
     fun launch(
         instance: Instance,
@@ -71,9 +76,10 @@ class LaunchEngine(
             )
 
             // Resolve and validate Java runtime
+            val currentSettings = settingsRepository?.settings?.value ?: LauncherSettings()
             emit(LaunchEvent.StateChanged(ProcessState.Preparing("Resolving Java Runtime...")))
             val requiredJavaMajor = JavaRuntimeDetector.getRequiredJavaMajorVersion(instance.minecraftVersion)
-            val javaRuntime = resolveJavaRuntime(instance)
+            val javaRuntime = resolveJavaRuntime(instance, currentSettings.defaultJavaPath)
 
             // Check if Java runtime binary actually exists
             val javaFile = File(javaRuntime.path)
@@ -296,7 +302,11 @@ class LaunchEngine(
                 nativesDir = nativesDir,
                 assetsDir = assetsDir,
                 gameDir = gameDir,
-                javaBinaryPath = effectiveJavaRuntime.path
+                javaBinaryPath = effectiveJavaRuntime.path,
+                defaultWindowWidth = currentSettings.defaultWindowWidth,
+                defaultWindowHeight = currentSettings.defaultWindowHeight,
+                defaultFullscreen = currentSettings.defaultFullscreen,
+                globalJvmArgs = currentSettings.globalJvmArgs
             )
 
             // Enforce Windows DirectX GPU Preference for high-performance dedicated graphics
@@ -366,6 +376,14 @@ class LaunchEngine(
                         emit(LaunchEvent.StateChanged(ProcessState.Running(processId = event.pid, startedAt = processStartedAt)))
                         emit(LaunchEvent.LogReceived("=== Process Started (PID: ${event.pid}) ===", isError = false))
 
+                        discordRpcService?.updateActivity(
+                            instanceName = instance.name,
+                            minecraftVersion = instance.minecraftVersion,
+                            startedAtMs = processStartedAt,
+                            processId = event.pid,
+                            enabled = currentSettings.enableDiscordRpc
+                        )
+
                         val activeNvidiaGpuInfo = GpuDetector.getActiveNvidiaGpuProcessInfo(event.pid)
                         if (activeNvidiaGpuInfo != null) {
                             emit(LaunchEvent.LogReceived("[GPU TELEMETRY] Confirmed Minecraft javaw.exe (PID: ${event.pid}) active on NVIDIA GPU ($activeNvidiaGpuInfo)", isError = false))
@@ -377,6 +395,7 @@ class LaunchEngine(
                         emit(LaunchEvent.LogReceived(event.line, event.isError))
                     }
                     is ProcessEvent.Terminated -> {
+                        discordRpcService?.clearActivity()
                         val playTimeSeconds = (System.currentTimeMillis() - launchStartTime) / 1000L
 
                         if (event.exitCode == 0) {
@@ -422,6 +441,7 @@ class LaunchEngine(
                         emit(LaunchEvent.StateChanged(ProcessState.Exited(event.exitCode)))
                     }
                     is ProcessEvent.Error -> {
+                        discordRpcService?.clearActivity()
                         emit(LaunchEvent.LogReceived("=== Process Execution Error: ${event.message} ===", isError = true))
                         emit(LaunchEvent.StateChanged(ProcessState.Failed(LaunchError.ExecutionFailed(event.message, event.cause))))
                     }
@@ -429,6 +449,7 @@ class LaunchEngine(
             }
 
         } catch (e: Exception) {
+            discordRpcService?.clearActivity()
             emit(LaunchEvent.StateChanged(ProcessState.Failed(LaunchError.ExecutionFailed(e.message ?: "Launch failed", e))))
         }
     }
@@ -464,8 +485,8 @@ class LaunchEngine(
         )
     }
 
-    private fun resolveJavaRuntime(instance: Instance): JavaRuntime {
-        val javaPath = instance.javaPath
+    private fun resolveJavaRuntime(instance: Instance, defaultJavaPath: String? = null): JavaRuntime {
+        val javaPath = if (!instance.javaPath.isNullOrBlank()) instance.javaPath else defaultJavaPath
         if (!javaPath.isNullOrBlank()) {
             val custom = JavaRuntimeDetector.inspectJavaHome(javaPath)
             if (custom != null) return custom
