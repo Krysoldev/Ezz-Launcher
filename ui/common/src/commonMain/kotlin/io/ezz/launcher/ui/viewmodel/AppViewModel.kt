@@ -7,6 +7,7 @@ import io.ezz.launcher.core.minecraft.loader.optifine.OptiFineCompatibilityValid
 import io.ezz.launcher.core.minecraft.manifest.VersionManifestService
 import io.ezz.launcher.core.model.account.Account
 import io.ezz.launcher.core.model.account.AccountType
+import io.ezz.launcher.core.model.account.MicrosoftAccount
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LoaderType
 import io.ezz.launcher.core.model.minecraft.VersionSummary
@@ -538,10 +539,19 @@ class AppViewModel(
                 accountRepository.selectedAccount.collect { selAcc ->
                     // Reset ephemeral preview selection when switching accounts
                     _selectedVaultSkin.value = null
-                    if (selAcc != null) {
+                    if (selAcc == null || selAcc !is MicrosoftAccount || selAcc.type != AccountType.MICROSOFT) {
+                        _adminStatus.value = AdminStatus.NormalUser(
+                            minecraftUsername = selAcc?.username ?: "",
+                            minecraftUuid = selAcc?.uuid ?: "",
+                            microsoftConnected = false
+                        )
+                        if (selAcc != null) {
+                            skinService.loadOrRefreshSkin(selAcc)
+                        }
+                    } else {
                         skinService.loadOrRefreshSkin(selAcc)
+                        refreshAdminStatus(selAcc)
                     }
-                    refreshAdminStatus(selAcc)
                 }
             } catch (e: Throwable) {
                 println("Error collecting selectedAccount: ${e.message}")
@@ -703,6 +713,12 @@ class AppViewModel(
     }
 
     fun selectAccount(account: Account) {
+        // Immediately reset admin status so stale state never leaks during account transition
+        _adminStatus.value = AdminStatus.NormalUser(
+            minecraftUsername = account.username,
+            minecraftUuid = account.uuid,
+            microsoftConnected = account is MicrosoftAccount && account.type == AccountType.MICROSOFT
+        )
         scope.launch {
             try {
                 accountRepository.selectAccount(account.id)
@@ -901,13 +917,18 @@ class AppViewModel(
 
     fun refreshAdminStatus(account: Account? = accountRepository.selectedAccount.value) {
         scope.launch {
+            val targetAccount = account ?: accountRepository.selectedAccount.value
+            if (targetAccount == null || targetAccount !is MicrosoftAccount || targetAccount.type != AccountType.MICROSOFT) {
+                _adminStatus.value = AdminStatus.NormalUser(
+                    minecraftUsername = targetAccount?.username ?: "",
+                    minecraftUuid = targetAccount?.uuid ?: "",
+                    microsoftConnected = false
+                )
+                return@launch
+            }
+
             _isCheckingAdmin.value = true
             try {
-                val targetAccount = account ?: accountRepository.selectedAccount.value
-                if (targetAccount == null) {
-                    _adminStatus.value = AdminStatus.NormalUser()
-                    return@launch
-                }
                 if (adminAuthorizationService != null) {
                     val status = withContext(Dispatchers.IO) {
                         adminAuthorizationService.verifyAdminStatus(targetAccount)
@@ -920,12 +941,16 @@ class AppViewModel(
                     _adminStatus.value = AdminStatus.NormalUser(
                         minecraftUsername = targetAccount.username,
                         minecraftUuid = targetAccount.uuid,
-                        microsoftConnected = targetAccount is io.ezz.launcher.core.model.account.MicrosoftAccount
+                        microsoftConnected = true
                     )
                 }
             } catch (e: Throwable) {
                 println("Admin verification notice: ${e.message}")
-                _adminStatus.value = AdminStatus.NormalUser()
+                _adminStatus.value = AdminStatus.NormalUser(
+                    minecraftUsername = targetAccount.username,
+                    minecraftUuid = targetAccount.uuid,
+                    microsoftConnected = true
+                )
             } finally {
                 _isCheckingAdmin.value = false
             }
@@ -973,8 +998,8 @@ class AppViewModel(
     ) {
         scope.launch {
             val currentAccount = accountRepository.selectedAccount.value
-            if (currentAccount == null || adminStatus.value !is AdminStatus.VerifiedAdmin) {
-                _releasePublishStep.value = ReleasePublishStep.Failed("Unauthorized: verified admin account required.")
+            if (currentAccount == null || currentAccount !is MicrosoftAccount || currentAccount.type != AccountType.MICROSOFT || adminStatus.value !is AdminStatus.VerifiedAdmin) {
+                _releasePublishStep.value = ReleasePublishStep.Failed("Unauthorized: verified Microsoft admin account required.")
                 return@launch
             }
             if (gitHubReleaseService == null) {

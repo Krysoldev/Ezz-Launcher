@@ -54,7 +54,8 @@ fun SettingsScreen(
     var showGitHubConnectModal by remember { mutableStateOf(false) }
     var showChangelogModal by remember { mutableStateOf<SupabaseLauncherReleaseDto?>(null) }
 
-    val isVerifiedAdmin = adminStatus is AdminStatus.VerifiedAdmin
+    val isMicrosoft = selectedAccount is MicrosoftAccount && selectedAccount?.type == io.ezz.launcher.core.model.account.AccountType.MICROSOFT
+    val isVerifiedAdmin = isMicrosoft && (adminStatus is AdminStatus.VerifiedAdmin)
     val currentVer = viewModel.currentLauncherVersion
     val latestRelease = updateResult?.latestRelease
     val latestVer = latestRelease?.version ?: currentVer
@@ -686,7 +687,6 @@ fun SettingsScreen(
                     modifier = Modifier.padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    val isMicrosoft = selectedAccount is MicrosoftAccount
                     val accountName = selectedAccount?.username ?: "No Active Account"
 
                     // Microsoft Account Row
@@ -707,7 +707,7 @@ fun SettingsScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (isMicrosoft) "Microsoft • CONNECTED" else "Offline • NOT CONNECTED",
+                                    text = if (isMicrosoft) "Microsoft • CONNECTED" else "Offline Account • NOT CONNECTED",
                                     color = if (isMicrosoft) Color(0xFF10B981) else Color(0xFFF59E0B),
                                     fontSize = 11.sp
                                 )
@@ -719,32 +719,40 @@ fun SettingsScreen(
                         }
                     }
 
-                    HorizontalDivider(color = Color(0xFF181C26))
+                    if (!isVerifiedAdmin) {
+                        Text(
+                            text = "Admin access requires the authorized Microsoft account.",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 12.sp
+                        )
+                    }
 
-                    // GitHub Pipeline Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text(text = "GitHub", color = Color(0xFF64748B), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            when (val gh = githubStatus) {
-                                is GitHubConnectionStatus.Connected -> {
-                                    Text(text = gh.username, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF10B981)))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(text = "CONNECTED • AUTHORIZED", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    // GitHub Pipeline Row: strictly accessible to verified admin only
+                    if (isVerifiedAdmin) {
+                        HorizontalDivider(color = Color(0xFF181C26))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text(text = "GitHub", color = Color(0xFF64748B), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                when (val gh = githubStatus) {
+                                    is GitHubConnectionStatus.Connected -> {
+                                        Text(text = gh.username, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF10B981)))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(text = "CONNECTED • AUTHORIZED", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                    else -> {
+                                        Text(text = "Ready to connect", color = Color(0xFF94A3B8), fontSize = 13.sp)
                                     }
                                 }
-                                else -> {
-                                    Text(text = if (isVerifiedAdmin) "Ready to connect" else "Not connected / Not authorized", color = Color(0xFF94A3B8), fontSize = 13.sp)
-                                }
                             }
-                        }
 
-                        if (isVerifiedAdmin) {
                             when (githubStatus) {
                                 is GitHubConnectionStatus.Connected -> {
                                     EzzButton(

@@ -120,5 +120,24 @@ class AdminAuthorizationServiceTest {
         val step5 = service.verifyAdminStatus(krysolDevAccount)
         assertTrue(step5 is AdminStatus.VerifiedAdmin)
         assertTrue(service.adminStatus.value.isAuthorizedAdmin)
+
+        // 6. Switch directly from KrysolDev (Microsoft) to KrysolDev (Offline) -> NOT AUTHORIZED
+        val step6 = service.verifyAdminStatus(offlineSpoofAccount)
+        assertTrue(step6 is AdminStatus.NormalUser)
+        assertFalse(step6.isAuthorizedAdmin)
+        assertFalse(step6.microsoftConnected)
+        assertFalse(service.adminStatus.value.isAuthorizedAdmin)
+
+        // 7. Switch back to KrysolDev (Microsoft) -> ADMIN VERIFIED restored
+        val step7 = service.verifyAdminStatus(krysolDevAccount)
+        assertTrue(step7 is AdminStatus.VerifiedAdmin)
+        assertTrue(service.adminStatus.value.isAuthorizedAdmin)
+
+        // 8. Switch to Regular Offline -> NOT AUTHORIZED
+        val step8 = service.verifyAdminStatus(regularOfflineAccount)
+        assertTrue(step8 is AdminStatus.NormalUser)
+        assertFalse(step8.isAuthorizedAdmin)
+        assertFalse(step8.microsoftConnected)
+        assertFalse(service.adminStatus.value.isAuthorizedAdmin)
     }
 }

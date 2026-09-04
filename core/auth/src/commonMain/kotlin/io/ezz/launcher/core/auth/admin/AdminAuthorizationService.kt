@@ -85,9 +85,9 @@ class AdminAuthorizationService(
         println("[AUTH_DIAGNOSTIC]    - UUID: '${account.uuid}'")
         println("[AUTH_DIAGNOSTIC]    - Persisted account ID: '${account.id}'")
 
-        if (account !is MicrosoftAccount) {
-            println("[AUTH_DIAGNOSTIC] 2. Account is OFFLINE. Offline accounts cannot be granted admin privileges.")
-            println("[AUTH_DIAGNOSTIC] 9. Final computed authorization state: NormalUser (offline)")
+        if (account !is MicrosoftAccount || account.type != io.ezz.launcher.core.model.account.AccountType.MICROSOFT) {
+            println("[AUTH_DIAGNOSTIC] 2. Account is OFFLINE / non-Microsoft. Offline accounts CANNOT be granted admin privileges under any circumstances.")
+            println("[AUTH_DIAGNOSTIC] 9. Final computed authorization state: NormalUser (offline/non-microsoft)")
             println("[AUTH_DIAGNOSTIC] === ADMIN AUTHORIZATION EVALUATION END ===")
             val status = AdminStatus.NormalUser(
                 minecraftUsername = account.username,
