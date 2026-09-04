@@ -87,8 +87,8 @@ fun EzzToggle(
                 .width(40.dp)
                 .height(22.dp)
                 .clip(RoundedCornerShape(11.dp))
-                .background(if (checked) Color(0xFFFFFFFF) else Color(0xFF141720))
-                .border(1.dp, if (checked) Color(0xFFFFFFFF) else Color(0xFF222735), RoundedCornerShape(11.dp)),
+                .background(if (checked) Color(0xFF8B5CF6) else Color(0xFF12151E))
+                .border(1.dp, if (checked) Color(0xFFA78BFA) else Color(0xFF222736), RoundedCornerShape(11.dp)),
             contentAlignment = Alignment.CenterStart
         ) {
             Box(
@@ -96,7 +96,7 @@ fun EzzToggle(
                     .offset(x = thumbOffset)
                     .size(16.dp)
                     .clip(CircleShape)
-                    .background(if (checked) Color(0xFF07080A) else Color(0xFF64748B))
+                    .background(if (checked) Color.White else Color(0xFF64748B))
             )
         }
     }
@@ -143,8 +143,8 @@ fun EzzSlider(
             enabled = enabled,
             colors = SliderDefaults.colors(
                 thumbColor = Color.White,
-                activeTrackColor = Color.White,
-                inactiveTrackColor = Color(0xFF242424)
+                activeTrackColor = Color(0xFF8B5CF6),
+                inactiveTrackColor = Color(0xFF1E2332)
             )
         )
     }

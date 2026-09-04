@@ -65,7 +65,7 @@ fun ConsoleScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF07080B))
+            .background(Color(0xFF07080A))
             .padding(26.dp)
     ) {
         // Header
@@ -86,7 +86,7 @@ fun ConsoleScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     EzzBadge(
                         text = "${logs.size} LINES",
-                        variant = EzzBadgeVariant.NEUTRAL
+                        variant = EzzBadgeVariant.PRIMARY
                     )
                 }
                 Text(
@@ -131,8 +131,8 @@ fun ConsoleScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFF0E1018))
-                .border(1.dp, Color(0xFF1B1E2D), RoundedCornerShape(10.dp))
+                .background(Color(0xFF0A0C12))
+                .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(10.dp))
                 .padding(14.dp)
         ) {
             if (logs.isEmpty()) {

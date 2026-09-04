@@ -279,13 +279,13 @@ fun VaultScreen(
                         .background(
                             brush = Brush.radialGradient(
                                 colors = listOf(
-                                    Color(0xFF161922),
-                                    Color(0xFF101318),
-                                    Color(0xFF0A0C10)
+                                    Color(0xFF161A24),
+                                    Color(0xFF10131A),
+                                    Color(0xFF07080A)
                                 )
                             )
                         )
-                        .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp))
+                        .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(10.dp))
                 ) {
                     // 3D Player Model Viewport with unique skinKey for instantaneous texture updates
                     MinecraftPlayerModel3DView(
@@ -308,8 +308,8 @@ fun VaultScreen(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(if (isResetHovered) Color(0xFF1E2433) else Color(0xCC101318))
-                                .border(1.dp, if (isResetHovered) Color(0xFF333D52) else Color(0xFF222735), RoundedCornerShape(6.dp))
+                                .background(if (isResetHovered) Color(0xFF1E2433) else Color(0xCC10131A))
+                                .border(1.dp, if (isResetHovered) Color(0xFF8B5CF6).copy(alpha = 0.6f) else Color(0xFF1B1F2C), RoundedCornerShape(6.dp))
                                 .clickable(
                                     interactionSource = resetInteraction,
                                     indication = null,
@@ -344,8 +344,8 @@ fun VaultScreen(
                         .weight(0.38f)
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF101318))
-                        .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp))
+                        .background(Color(0xFF10131A))
+                        .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(10.dp))
                         .padding(20.dp),
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -1151,10 +1151,10 @@ private fun SkinCard(
     )
 
     val borderColor = when {
-        isSelected -> Color.White
+        isSelected -> Color(0xFF8B5CF6)
         isActive -> Color(0xFF10B981)
-        isHovered -> Color(0xFF2E3648)
-        else -> Color(0xFF1A1D26)
+        isHovered -> Color(0xFF2D3448)
+        else -> Color(0xFF1B1F2C)
     }
 
     Box(
@@ -1163,8 +1163,8 @@ private fun SkinCard(
             .fillMaxHeight()
             .scale(scale)
             .clip(RoundedCornerShape(8.dp))
-            .background(if (isSelected) Color(0xFF181C28) else if (isHovered) Color(0xFF141720) else Color(0xFF101318))
-            .border(1.dp, borderColor, RoundedCornerShape(8.dp))
+            .background(if (isSelected) Color(0xFF131122) else if (isHovered) Color(0xFF161A24) else Color(0xFF10131A))
+            .border(if (isSelected || isActive) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(8.dp))
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,

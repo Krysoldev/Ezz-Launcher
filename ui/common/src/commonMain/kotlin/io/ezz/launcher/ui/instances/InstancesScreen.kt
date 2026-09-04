@@ -175,16 +175,62 @@ fun InstancesScreen(
                         .fillMaxWidth()
                         .weight(1f)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF101318))
-                        .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
+                        .background(Color(0xFF10131A))
+                        .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(10.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    EzzEmptyState(
-                        title = "No Minecraft instances yet",
-                        description = "Create your first instance, import a .mrpack, or browse community modpacks.",
-                        actionLabel = "＋ Create Instance",
-                        onAction = { viewModel.showCreateInstanceDialog.value = true }
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFF161A24))
+                                .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.GridView,
+                                contentDescription = null,
+                                tint = Color(0xFFA78BFA),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "No Instances Yet",
+                                color = Color.White,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Create an instance from scratch or import a Modrinth modpack (.mrpack).",
+                                color = Color(0xFF64748B),
+                                fontSize = 12.sp
+                            )
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            EzzButton(
+                                text = "Create Instance",
+                                onClick = { viewModel.showCreateInstanceDialog.value = true },
+                                icon = Icons.Default.Add,
+                                variant = EzzButtonVariant.PRIMARY,
+                                size = EzzButtonSize.MEDIUM
+                            )
+                            EzzButton(
+                                text = "Import .mrpack",
+                                onClick = { viewModel.openImportModpack() },
+                                icon = Icons.Default.FileDownload,
+                                variant = EzzButtonVariant.SECONDARY,
+                                size = EzzButtonSize.MEDIUM
+                            )
+                        }
+                    }
                 }
             } else {
                 LazyVerticalGrid(
@@ -305,10 +351,10 @@ private fun InstanceGridCard(
             .scale(scale)
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(if (isSelected) Color(0xFF141720) else if (isHovered) Color(0xFF12151D) else Color(0xFF101318))
+            .background(if (isSelected) Color(0xFF131122) else if (isHovered) Color(0xFF161A24) else Color(0xFF10131A))
             .border(
                 1.dp,
-                if (isSelected) Color.White.copy(alpha = 0.8f) else if (isHovered) Color(0xFF2E3648) else Color(0xFF1A1D26),
+                if (isSelected) Color(0xFF8B5CF6).copy(alpha = 0.85f) else if (isHovered) Color(0xFF2D3448) else Color(0xFF1B1F2C),
                 RoundedCornerShape(10.dp)
             )
             .clickable(
@@ -350,15 +396,16 @@ private fun InstanceGridCard(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
-                                    .background(Color(0xFF064E3B).copy(alpha = 0.5f))
-                                    .border(1.dp, Color(0xFF059669).copy(alpha = 0.4f), RoundedCornerShape(4.dp))
+                                    .background(Color(0x268B5CF6))
+                                    .border(1.dp, Color(0xFF6D28D9), RoundedCornerShape(4.dp))
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = "Active Target",
-                                    color = Color(0xFF34D399),
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
+                                    text = "ACTIVE TARGET",
+                                    color = Color(0xFFDDD6FE),
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.4.sp
                                 )
                             }
                         }

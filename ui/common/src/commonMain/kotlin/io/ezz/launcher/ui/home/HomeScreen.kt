@@ -217,8 +217,8 @@ private fun UserWelcomeCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(Color(0xFF101318))
-            .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp))
+            .background(Color(0xFF10131A))
+            .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(10.dp))
             .padding(horizontal = 18.dp, vertical = 14.dp)
     ) {
         Row(
@@ -239,13 +239,20 @@ private fun UserWelcomeCard(
 
                 Column(verticalArrangement = Arrangement.Center) {
                     Text(
-                        text = "Welcome back, ${account?.username ?: "Guest Player"}",
+                        text = "WELCOME BACK",
+                        color = Color(0xFFA78BFA),
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp
+                    )
+                    Text(
+                        text = account?.username ?: "Guest Player",
                         color = Color.White,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Black
                     )
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(3.dp))
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -255,13 +262,13 @@ private fun UserWelcomeCard(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFF141720))
-                                .border(1.dp, Color(0xFF222735), RoundedCornerShape(4.dp))
+                                .background(if (isMicrosoft) Color(0x268B5CF6) else Color(0xFF161A24))
+                                .border(1.dp, if (isMicrosoft) Color(0xFF6D28D9) else Color(0xFF1B1F2C), RoundedCornerShape(4.dp))
                                 .padding(horizontal = 7.dp, vertical = 2.dp)
                         ) {
                             Text(
                                 text = if (isMicrosoft) "Microsoft Account" else "Offline Account",
-                                color = if (isMicrosoft) Color.White else Color(0xFF94A3B8),
+                                color = if (isMicrosoft) Color(0xFFDDD6FE) else Color(0xFF94A3B8),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -279,40 +286,13 @@ private fun UserWelcomeCard(
             }
 
             // Right: Accounts Shortcut Button
-            val interactionSource = remember { MutableInteractionSource() }
-            val isHovered by interactionSource.collectIsHoveredAsState()
-
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (isHovered) Color(0xFF181C28) else Color(0xFF141720))
-                    .border(1.dp, if (isHovered) Color(0xFF323A4E) else Color(0xFF222735), RoundedCornerShape(8.dp))
-                    .clickable(
-                        interactionSource = interactionSource,
-                        indication = null,
-                        onClick = onOpenAccounts
-                    )
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = "Accounts",
-                        tint = Color(0xFFE2E8F0),
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Text(
-                        text = "Accounts",
-                        color = Color.White,
-                        fontSize = 12.5.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
+            EzzButton(
+                text = "Accounts",
+                onClick = onOpenAccounts,
+                variant = EzzButtonVariant.SECONDARY,
+                size = EzzButtonSize.SMALL,
+                icon = Icons.Default.Person
+            )
         }
     }
 }
@@ -508,15 +488,20 @@ private fun ActiveLaunchTargetCard(
                             .clip(RoundedCornerShape(8.dp))
                             .background(
                                 when {
-                                    isRunning -> Color(0xFF141720)
-                                    isPreparing -> Color(0xFF1E2330)
-                                    isHovered -> Color(0xFFE2E8F0)
-                                    else -> Color.White
+                                    isRunning -> Color(0xFF10131A)
+                                    isPreparing -> Color(0xFF261838)
+                                    isHovered -> Color(0xFF7C3AED)
+                                    else -> Color(0xFF8B5CF6)
                                 }
                             )
                             .border(
                                 1.dp,
-                                if (isRunning) Color(0xFF10B981) else Color.White,
+                                when {
+                                    isRunning -> Color(0xFF10B981)
+                                    isPreparing -> Color(0xFF6D28D9)
+                                    isHovered -> Color(0xFF9333EA)
+                                    else -> Color(0xFF8B5CF6)
+                                },
                                 RoundedCornerShape(8.dp)
                             )
                             .clickable(
@@ -550,13 +535,13 @@ private fun ActiveLaunchTargetCard(
                                 Icon(
                                     imageVector = Icons.Default.PlayArrow,
                                     contentDescription = "Play",
-                                    tint = Color(0xFF07080A),
+                                    tint = Color.White,
                                     modifier = Modifier.size(22.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = "PLAY MINECRAFT",
-                                    color = Color(0xFF07080A),
+                                    color = Color.White,
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Black,
                                     letterSpacing = 0.8.sp

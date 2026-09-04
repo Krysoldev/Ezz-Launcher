@@ -1,10 +1,13 @@
 package io.ezz.launcher.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -140,6 +143,107 @@ fun EzzTabs(
         onItemSelected = onTabSelected,
         modifier = modifier
     )
+}
+
+/**
+ * Premium Underline Tabs for section navigation (e.g. Instance Manager).
+ * Clean horizontal navigation with active accent underline, smooth transitions, and no oversized pills or badges.
+ */
+@Composable
+fun <T> EzzUnderlineTabs(
+    items: List<TabItem<T>>,
+    selectedItem: T,
+    onItemSelected: (T) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = EzzTheme.colors
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = colors.border,
+                shape = RoundedCornerShape(8.dp)
+            )
+            .background(colors.cardBackground, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        items.forEach { tab ->
+            val isSelected = tab.value == selectedItem
+            val interactionSource = remember { MutableInteractionSource() }
+            val isHovered by interactionSource.collectIsHoveredAsState()
+
+            val contentColor by animateColorAsState(
+                targetValue = when {
+                    isSelected -> colors.textPrimary
+                    isHovered -> colors.textPrimary
+                    else -> colors.textSecondary
+                },
+                animationSpec = tween(150)
+            )
+
+            val indicatorColor by animateColorAsState(
+                targetValue = if (isSelected) colors.primary else Color.Transparent,
+                animationSpec = tween(180)
+            )
+
+            val itemBg by animateColorAsState(
+                targetValue = when {
+                    isSelected -> colors.elevatedCard.copy(alpha = 0.5f)
+                    isHovered -> colors.elevatedCard.copy(alpha = 0.3f)
+                    else -> Color.Transparent
+                },
+                animationSpec = tween(150)
+            )
+
+            Column(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(itemBg)
+                    .clickable(
+                        interactionSource = interactionSource,
+                        indication = null,
+                        onClick = { onItemSelected(tab.value) }
+                    )
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    if (tab.icon != null) {
+                        Icon(
+                            imageVector = tab.icon,
+                            contentDescription = tab.title,
+                            tint = if (isSelected) colors.primary else contentColor,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+
+                    Text(
+                        text = tab.title,
+                        color = contentColor,
+                        fontSize = 12.5.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                    )
+                }
+
+                // Active Underline Accent Indicator
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .clip(RoundedCornerShape(1.dp))
+                        .background(indicatorColor)
+                )
+            }
+        }
+    }
 }
 
 @Composable

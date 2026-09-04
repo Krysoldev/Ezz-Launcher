@@ -38,7 +38,7 @@ fun EzzBadge(
     dotColor: Color? = null
 ) {
     val (bg, textColor, borderColor, defaultDot) = when (variant) {
-        EzzBadgeVariant.PRIMARY -> Tuple4(Color(0xFF1E2330), Color(0xFFFFFFFF), Color(0xFF323A4E), null)
+        EzzBadgeVariant.PRIMARY -> Tuple4(Color(0xFF261838), Color(0xFFDDD6FE), Color(0xFF6D28D9), Color(0xFF8B5CF6))
         EzzBadgeVariant.SUCCESS -> Tuple4(Color(0xFF064E3B).copy(alpha = 0.5f), Color(0xFF34D399), Color(0xFF059669).copy(alpha = 0.4f), Color(0xFF10B981))
         EzzBadgeVariant.WARNING -> Tuple4(Color(0xFF451A03).copy(alpha = 0.5f), Color(0xFFFBBF24), Color(0xFFB45309).copy(alpha = 0.4f), Color(0xFFF59E0B))
         EzzBadgeVariant.DANGER -> Tuple4(Color(0xFF450A0A).copy(alpha = 0.5f), Color(0xFFF87171), Color(0xFFDC2626).copy(alpha = 0.4f), Color(0xFFEF4444))

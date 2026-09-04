@@ -55,8 +55,8 @@ fun AddOfflineAccountDialog(
                 .widthIn(max = 420.dp)
                 .fillMaxWidth(0.95f)
                 .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFF0F1217))
-                .border(1.dp, Color(0xFF212633), RoundedCornerShape(12.dp))
+                .background(Color(0xFF10131A))
+                .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(12.dp))
                 .padding(22.dp)
         ) {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
@@ -179,8 +179,8 @@ fun RemoveAccountConfirmationDialog(
                 .widthIn(max = 400.dp)
                 .fillMaxWidth(0.92f)
                 .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFF0F1217))
-                .border(1.dp, Color(0xFF262A36), RoundedCornerShape(12.dp))
+                .background(Color(0xFF10131A))
+                .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(12.dp))
                 .padding(22.dp)
         ) {
             Column {

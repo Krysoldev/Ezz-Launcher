@@ -150,8 +150,8 @@ fun InstanceManagerScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF101318))
-                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp))
+                    .background(Color(0xFF10131A))
+                    .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(10.dp))
                     .padding(horizontal = 18.dp, vertical = 14.dp)
             ) {
                 Row(
@@ -363,8 +363,8 @@ fun InstanceManagerScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF101318))
-                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp))
+                    .background(Color(0xFF10131A))
+                    .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(10.dp))
                     .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
                 Row(
@@ -508,8 +508,8 @@ private fun ManagerHeaderBadge(text: String) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(Color(0xFF141720))
-            .border(1.dp, Color(0xFF222735), RoundedCornerShape(4.dp))
+            .background(Color(0xFF161A24))
+            .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(4.dp))
             .padding(horizontal = 7.dp, vertical = 3.dp)
     ) {
         Text(
@@ -524,7 +524,7 @@ private fun ManagerHeaderBadge(text: String) {
 }
 
 /**
- * Compact Pill Tab Item with hover animations (No numeric badges).
+ * Clean Horizontal Tab with active underline accent indicator (No numeric badges, no oversized pills).
  */
 @Composable
 private fun CompactPillTab(
@@ -536,31 +536,37 @@ private fun CompactPillTab(
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
 
-    val bg = when {
-        selected -> Color(0xFF1A1E29)
-        isHovered -> Color(0xFF141720)
-        else -> Color.Transparent
-    }
+    val contentColor by androidx.compose.animation.animateColorAsState(
+        targetValue = when {
+            selected -> Color.White
+            isHovered -> Color(0xFFF1F5F9)
+            else -> Color(0xFF94A3B8)
+        },
+        animationSpec = tween(150)
+    )
 
-    val border = when {
-        selected -> Color.White
-        isHovered -> Color(0xFF2E3648)
-        else -> Color.Transparent
-    }
+    val underlineColor by androidx.compose.animation.animateColorAsState(
+        targetValue = if (selected) Color(0xFF8B5CF6) else Color.Transparent,
+        animationSpec = tween(180)
+    )
 
-    val fg = when {
-        selected -> Color.White
-        isHovered -> Color.White
-        else -> Color(0xFF94A3B8)
-    }
+    val itemBg by androidx.compose.animation.animateColorAsState(
+        targetValue = when {
+            selected -> Color(0x1A8B5CF6)
+            isHovered -> Color(0xFF161A24)
+            else -> Color.Transparent
+        },
+        animationSpec = tween(150)
+    )
 
-    Box(
+    Column(
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
-            .background(bg)
-            .border(1.dp, border, RoundedCornerShape(6.dp))
+            .background(itemBg)
             .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -569,16 +575,25 @@ private fun CompactPillTab(
             Icon(
                 imageVector = icon,
                 contentDescription = tab.title,
-                tint = if (selected) Color.White else if (isHovered) Color.White else Color(0xFF64748B),
+                tint = if (selected) Color(0xFFA78BFA) else if (isHovered) Color.White else Color(0xFF64748B),
                 modifier = Modifier.size(14.dp)
             )
 
             Text(
                 text = tab.title,
-                color = fg,
+                color = contentColor,
                 fontSize = 12.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
             )
         }
+
+        // Active Underline Indicator
+        Box(
+            modifier = Modifier
+                .width(28.dp)
+                .height(2.dp)
+                .clip(RoundedCornerShape(1.dp))
+                .background(underlineColor)
+        )
     }
 }

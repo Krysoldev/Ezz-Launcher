@@ -90,8 +90,8 @@ fun Sidebar(
         modifier = modifier
             .fillMaxHeight()
             .width(220.dp)
-            .background(Color(0xFF0C0E12))
-            .border(androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1A1D26)))
+            .background(Color(0xFF0C0E14))
+            .border(androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1B1F2C)))
             .padding(vertical = 16.dp, horizontal = 10.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
@@ -138,8 +138,8 @@ fun Sidebar(
 
                 val backgroundColor by animateColorAsState(
                     targetValue = when {
-                        isSelected -> Color(0xFF1A1E29)
-                        isHovered -> Color(0xFF12151D)
+                        isSelected -> Color(0x1F8B5CF6)
+                        isHovered -> Color(0xFF161A24)
                         else -> Color.Transparent
                     },
                     animationSpec = tween(durationMillis = 150)
@@ -148,7 +148,7 @@ fun Sidebar(
                 val contentColor by animateColorAsState(
                     targetValue = when {
                         isSelected -> Color.White
-                        isHovered -> Color(0xFFE2E8F0)
+                        isHovered -> Color(0xFFF1F5F9)
                         else -> Color(0xFF94A3B8)
                     },
                     animationSpec = tween(durationMillis = 150)
@@ -174,7 +174,7 @@ fun Sidebar(
                                 .width(3.dp)
                                 .height(16.dp)
                                 .clip(RoundedCornerShape(2.dp))
-                                .background(Color.White)
+                                .background(Color(0xFF8B5CF6))
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                     } else {
@@ -184,7 +184,7 @@ fun Sidebar(
                     Icon(
                         imageVector = item.icon,
                         contentDescription = item.title,
-                        tint = contentColor,
+                        tint = if (isSelected) Color(0xFFA78BFA) else contentColor,
                         modifier = Modifier.size(17.dp)
                     )
 
@@ -379,12 +379,12 @@ fun Sidebar(
                                 Icon(
                                     imageVector = Icons.Default.ManageAccounts,
                                     contentDescription = null,
-                                    tint = Color(0xFF38BDF8),
+                                    tint = Color(0xFF8B5CF6),
                                     modifier = Modifier.size(14.dp)
                                 )
                                 Text(
                                     text = "Manage Accounts",
-                                    color = Color(0xFF38BDF8),
+                                    color = Color(0xFFA78BFA),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
@@ -401,10 +401,10 @@ fun Sidebar(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(9.dp))
-                        .background(if (isAccountHovered || showAccountSwitcher) Color(0xFF151923) else Color(0xFF10131A))
+                        .background(if (isAccountHovered || showAccountSwitcher) Color(0xFF161A24) else Color(0xFF10131A))
                         .border(
                             1.dp,
-                            if (isAccountHovered || showAccountSwitcher) Color(0xFF2D3548) else Color(0xFF1A1F2A),
+                            if (isAccountHovered || showAccountSwitcher) Color(0xFF8B5CF6).copy(alpha = 0.6f) else Color(0xFF1B1F2C),
                             RoundedCornerShape(9.dp)
                         )
                         .clickable(

@@ -232,10 +232,10 @@ private fun UnifiedAccountCard(
             .scale(scale)
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(if (isActive) Color(0xFF10141D) else if (isHovered) Color(0xFF101318) else Color(0xFF0C0E12))
+            .background(if (isActive) Color(0xFF131122) else if (isHovered) Color(0xFF161A24) else Color(0xFF10131A))
             .border(
                 1.dp,
-                if (isActive) Color(0xFF38BDF8).copy(alpha = 0.55f) else if (isHovered) Color(0xFF282F3E) else Color(0xFF181C26),
+                if (isActive) Color(0xFF8B5CF6).copy(alpha = 0.75f) else if (isHovered) Color(0xFF2D3448) else Color(0xFF1B1F2C),
                 RoundedCornerShape(10.dp)
             )
             .clickable(
@@ -287,7 +287,7 @@ private fun UnifiedAccountCard(
                         )
                         Text(
                             text = if (isMicrosoft) "Minecraft Java Edition" else "Local Profile",
-                            color = if (isMicrosoft) Color(0xFF38BDF8) else Color(0xFF64748B),
+                            color = if (isMicrosoft) Color(0xFFA78BFA) else Color(0xFF64748B),
                             fontSize = 11.5.sp,
                             fontWeight = if (isMicrosoft) FontWeight.SemiBold else FontWeight.Normal
                         )
@@ -359,8 +359,8 @@ private fun UnifiedAccountCard(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false },
                         modifier = Modifier
-                            .background(Color(0xFF10131B))
-                            .border(1.dp, Color(0xFF262C3D), RoundedCornerShape(8.dp))
+                            .background(Color(0xFF10131A))
+                            .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(8.dp))
                     ) {
                         if (!isActive) {
                             DropdownMenuItem(

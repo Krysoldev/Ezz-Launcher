@@ -75,15 +75,15 @@ fun EzzTextField(
 
         val borderColor = when {
             error != null -> colors.danger
-            isFocused -> Color(0xFFFFFFFF)
-            else -> Color(0xFF222735)
+            isFocused -> Color(0xFF8B5CF6)
+            else -> Color(0xFF1B1F2C)
         }
 
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(cornerRadius))
-                .background(Color(0xFF141720))
+                .background(Color(0xFF0A0C12))
                 .border(1.dp, borderColor, RoundedCornerShape(cornerRadius))
                 .padding(horizontal = 12.dp, vertical = 9.dp)
         ) {
@@ -95,7 +95,7 @@ fun EzzTextField(
                     Icon(
                         imageVector = leadingIcon,
                         contentDescription = null,
-                        tint = if (isFocused) Color.White else Color(0xFF64748B),
+                        tint = if (isFocused) Color(0xFF8B5CF6) else Color(0xFF64748B),
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -119,7 +119,7 @@ fun EzzTextField(
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Normal
                         ),
-                        cursorBrush = SolidColor(Color.White),
+                        cursorBrush = SolidColor(Color(0xFF8B5CF6)),
                         interactionSource = interactionSource,
                         enabled = enabled,
                         readOnly = readOnly,

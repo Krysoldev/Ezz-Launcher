@@ -97,8 +97,8 @@ fun SettingsScreen(
             EzzCard(
                 modifier = Modifier.fillMaxWidth(),
                 cornerRadius = 10.dp,
-                backgroundColor = Color(0xFF0F1116),
-                borderColor = Color(0xFF1A1F2B)
+                backgroundColor = Color(0xFF10131A),
+                borderColor = Color(0xFF1B1F2C)
             ) {
                 Column(
                     modifier = Modifier.padding(18.dp),
@@ -334,8 +334,8 @@ fun SettingsScreen(
             EzzCard(
                 modifier = Modifier.fillMaxWidth(),
                 cornerRadius = 10.dp,
-                backgroundColor = Color(0xFF0F1116),
-                borderColor = Color(0xFF1A1F2B)
+                backgroundColor = Color(0xFF10131A),
+                borderColor = Color(0xFF1B1F2C)
             ) {
                 Column(
                     modifier = Modifier.padding(18.dp),
@@ -477,8 +477,8 @@ fun SettingsScreen(
             EzzCard(
                 modifier = Modifier.fillMaxWidth(),
                 cornerRadius = 10.dp,
-                backgroundColor = Color(0xFF0F1116),
-                borderColor = Color(0xFF1A1F2B)
+                backgroundColor = Color(0xFF10131A),
+                borderColor = Color(0xFF1B1F2C)
             ) {
                 Row(
                     modifier = Modifier
@@ -524,8 +524,8 @@ fun SettingsScreen(
             EzzCard(
                 modifier = Modifier.fillMaxWidth(),
                 cornerRadius = 10.dp,
-                backgroundColor = Color(0xFF0F1116),
-                borderColor = Color(0xFF1A1F2B)
+                backgroundColor = Color(0xFF10131A),
+                borderColor = Color(0xFF1B1F2C)
             ) {
                 Column(
                     modifier = Modifier.padding(18.dp),
@@ -680,8 +680,8 @@ fun SettingsScreen(
             EzzCard(
                 modifier = Modifier.fillMaxWidth(),
                 cornerRadius = 10.dp,
-                backgroundColor = Color(0xFF0F1116),
-                borderColor = if (isVerifiedAdmin) Color(0xFF1B3D2B) else Color(0xFF1A1F2B)
+                backgroundColor = Color(0xFF10131A),
+                borderColor = if (isVerifiedAdmin) Color(0xFF1B3D2B) else Color(0xFF1B1F2C)
             ) {
                 Column(
                     modifier = Modifier.padding(18.dp),

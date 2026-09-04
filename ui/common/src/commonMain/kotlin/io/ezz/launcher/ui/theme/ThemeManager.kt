@@ -33,6 +33,7 @@ data class EzzColorScheme(
     val accent: Color,
     val accentHover: Color,
     val accentGlow: Color,
+    val success: Color,
     val warning: Color,
     val danger: Color,
     val dangerGlow: Color,
@@ -46,23 +47,24 @@ data class EzzColorScheme(
 )
 
 object EzzThemePresets {
-    // Official High-Contrast Ezz Desktop Theme (Pure Black, Charcoal & Crisp White)
+    // Official Ezz Dark Desktop Theme (Obsidian, Charcoal, Crisp White & Purple Accent)
     val BlackAndWhite = EzzColorScheme(
         isDark = true,
         background = Color(0xFF07080A),
-        surface = Color(0xFF0C0E12),
-        surfaceVariant = Color(0xFF101318),
-        surfaceLight = Color(0xFF141720),
-        cardBackground = Color(0xFF101318),
-        elevatedCard = Color(0xFF141720),
-        inputBackground = Color(0xFF141720),
-        primary = Color(0xFFFFFFFF),       // Crisp High-Contrast White CTA
-        primaryHover = Color(0xFFE2E8F0),  // Off-white Hover
-        primaryGlow = Color(0x1AFFFFFF),
+        surface = Color(0xFF0C0E14),
+        surfaceVariant = Color(0xFF10131A),
+        surfaceLight = Color(0xFF161A24),
+        cardBackground = Color(0xFF10131A),
+        elevatedCard = Color(0xFF161A24),
+        inputBackground = Color(0xFF0A0C12),
+        primary = Color(0xFF8B5CF6),       // Vibrant Purple Accent CTA
+        primaryHover = Color(0xFF7C3AED),  // Deep Purple Hover
+        primaryGlow = Color(0x338B5CF6),
         secondary = Color(0xFF94A3B8),
-        accent = Color(0xFF10B981),        // Minimal Emerald Status Green
-        accentHover = Color(0xFF34D399),
-        accentGlow = Color(0x2210B981),
+        accent = Color(0xFF8B5CF6),        // Signature Purple Accent
+        accentHover = Color(0xFF7C3AED),
+        accentGlow = Color(0x338B5CF6),
+        success = Color(0xFF10B981),       // Subtle Emerald Green
         warning = Color(0xFFF59E0B),       // Subtle Amber Warning
         danger = Color(0xFFEF4444),        // Subtle Red Danger
         dangerGlow = Color(0x22EF4444),
@@ -70,27 +72,28 @@ object EzzThemePresets {
         textSecondary = Color(0xFF94A3B8),
         textMuted = Color(0xFF64748B),
         textDisabled = Color(0xFF475569),
-        border = Color(0xFF1A1D26),
-        borderLight = Color(0xFF222735),
-        borderStrong = Color(0xFF323A4E)
+        border = Color(0xFF1B1F2C),
+        borderLight = Color(0xFF242A3B),
+        borderStrong = Color(0xFF37405A)
     )
 
     val Obsidian = EzzColorScheme(
         isDark = true,
-        background = Color(0xFF07080A),
-        surface = Color(0xFF0C0E12),
-        surfaceVariant = Color(0xFF101318),
-        surfaceLight = Color(0xFF141720),
-        cardBackground = Color(0xFF101318),
-        elevatedCard = Color(0xFF141720),
-        inputBackground = Color(0xFF141720),
-        primary = Color(0xFFFFFFFF),
-        primaryHover = Color(0xFFE2E8F0),
-        primaryGlow = Color(0x1AFFFFFF),
+        background = Color(0xFF050608),
+        surface = Color(0xFF0A0C12),
+        surfaceVariant = Color(0xFF0E1118),
+        surfaceLight = Color(0xFF141722),
+        cardBackground = Color(0xFF0E1118),
+        elevatedCard = Color(0xFF141722),
+        inputBackground = Color(0xFF08090E),
+        primary = Color(0xFF8B5CF6),
+        primaryHover = Color(0xFF7C3AED),
+        primaryGlow = Color(0x338B5CF6),
         secondary = Color(0xFF94A3B8),
-        accent = Color(0xFF10B981),
-        accentHover = Color(0xFF34D399),
-        accentGlow = Color(0x2210B981),
+        accent = Color(0xFF8B5CF6),
+        accentHover = Color(0xFF7C3AED),
+        accentGlow = Color(0x338B5CF6),
+        success = Color(0xFF10B981),
         warning = Color(0xFFF59E0B),
         danger = Color(0xFFEF4444),
         dangerGlow = Color(0x22EF4444),
@@ -98,9 +101,9 @@ object EzzThemePresets {
         textSecondary = Color(0xFF94A3B8),
         textMuted = Color(0xFF64748B),
         textDisabled = Color(0xFF475569),
-        border = Color(0xFF1A1D26),
-        borderLight = Color(0xFF222735),
-        borderStrong = Color(0xFF323A4E)
+        border = Color(0xFF161A26),
+        borderLight = Color(0xFF202638),
+        borderStrong = Color(0xFF2E374E)
     )
 
     val FrostMono = EzzColorScheme(
@@ -112,13 +115,14 @@ object EzzThemePresets {
         cardBackground = Color(0xFFFFFFFF),
         elevatedCard = Color(0xFFF8FAFC),
         inputBackground = Color(0xFFF1F5F9),
-        primary = Color(0xFF6D28D9),
-        primaryHover = Color(0xFF7C3AED),
-        primaryGlow = Color(0x226D28D9),
+        primary = Color(0xFF7C3AED),
+        primaryHover = Color(0xFF6D28D9),
+        primaryGlow = Color(0x227C3AED),
         secondary = Color(0xFF475569),
-        accent = Color(0xFF059669),
-        accentHover = Color(0xFF10B981),
-        accentGlow = Color(0x22059669),
+        accent = Color(0xFF7C3AED),
+        accentHover = Color(0xFF6D28D9),
+        accentGlow = Color(0x227C3AED),
+        success = Color(0xFF059669),
         warning = Color(0xFFD97706),
         danger = Color(0xFFDC2626),
         dangerGlow = Color(0x22DC2626),

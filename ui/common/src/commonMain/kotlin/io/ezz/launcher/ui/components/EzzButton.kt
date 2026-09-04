@@ -42,6 +42,7 @@ enum class EzzButtonVariant {
     SECONDARY,
     OUTLINE,
     DANGER,
+    SUCCESS,
     GHOST
 }
 
@@ -70,35 +71,40 @@ fun EzzButton(
     val isPressed by interactionSource.collectIsPressedAsState()
 
     val scale by animateFloatAsState(
-        targetValue = if (state.enableAnimations && isPressed) 0.97f else if (state.enableAnimations && isHovered) 1.02f else 1.0f,
-        animationSpec = tween(durationMillis = 140)
+        targetValue = if (state.enableAnimations && isPressed) 0.98f else if (state.enableAnimations && isHovered) 1.01f else 1.0f,
+        animationSpec = tween(durationMillis = 120)
     )
 
     val (containerColor, contentColor, borderStroke) = when (variant) {
         EzzButtonVariant.PRIMARY -> Triple(
-            if (isHovered) Color(0xFFE2E8F0) else Color(0xFFFFFFFF),
-            Color(0xFF07080A),
-            BorderStroke(1.dp, Color(0xFFFFFFFF))
+            if (isHovered) Color(0xFF7C3AED) else Color(0xFF8B5CF6),
+            Color.White,
+            BorderStroke(1.dp, if (isHovered) Color(0xFFA78BFA) else Color(0xFF8B5CF6))
         )
         EzzButtonVariant.SECONDARY -> Triple(
-            if (isHovered) Color(0xFF181C28) else Color(0xFF141720),
+            if (isHovered) Color(0xFF181D2A) else Color(0xFF12151E),
             if (isHovered) Color.White else Color(0xFFE2E8F0),
-            BorderStroke(1.dp, if (isHovered) Color(0xFF323A4E) else Color(0xFF222735))
+            BorderStroke(1.dp, if (isHovered) Color(0xFF2F374E) else Color(0xFF1E2332))
         )
         EzzButtonVariant.OUTLINE -> Triple(
-            if (isHovered) Color(0xFF141720) else Color.Transparent,
+            if (isHovered) Color(0xFF141722) else Color.Transparent,
             if (isHovered) Color.White else Color(0xFFCBD5E1),
-            BorderStroke(1.dp, if (isHovered) Color(0xFF323A4E) else Color(0xFF222735))
+            BorderStroke(1.dp, if (isHovered) Color(0xFF2F374E) else Color(0xFF1E2332))
         )
         EzzButtonVariant.DANGER -> Triple(
-            if (isHovered) Color(0xFF7F1D1D) else Color(0xFF450A0A),
-            Color(0xFFFCA5A5),
-            BorderStroke(1.dp, if (isHovered) Color(0xFFEF4444) else Color(0xFF991B1B))
+            if (isHovered) Color(0xFF381419) else Color(0xFF261215),
+            if (isHovered) Color.White else Color(0xFFFCA5A5),
+            BorderStroke(1.dp, if (isHovered) Color(0xFFEF4444) else Color(0xFF5A1E24))
+        )
+        EzzButtonVariant.SUCCESS -> Triple(
+            if (isHovered) Color(0xFF143324) else Color(0xFF0E2218),
+            if (isHovered) Color.White else Color(0xFF6EE7B7),
+            BorderStroke(1.dp, if (isHovered) Color(0xFF10B981) else Color(0xFF1B4D36))
         )
         EzzButtonVariant.GHOST -> Triple(
-            if (isHovered) Color(0xFF141720) else Color.Transparent,
+            if (isHovered) Color(0xFF141722) else Color.Transparent,
             if (isHovered) Color.White else Color(0xFF94A3B8),
-            null
+            if (isHovered) BorderStroke(1.dp, Color(0xFF1E2332)) else null
         )
     }
 
@@ -184,10 +190,11 @@ fun EzzIconButton(
     }
 
     val (bg, fg) = when (variant) {
-        EzzButtonVariant.PRIMARY -> Pair(Color(0xFFFFFFFF), Color(0xFF07080A))
-        EzzButtonVariant.SECONDARY -> Pair(Color(0xFF141720), Color(0xFFCBD5E1))
+        EzzButtonVariant.PRIMARY -> Pair(Color(0xFF8B5CF6), Color.White)
+        EzzButtonVariant.SECONDARY -> Pair(Color(0xFF12151E), Color(0xFFE2E8F0))
         EzzButtonVariant.OUTLINE -> Pair(Color.Transparent, Color(0xFFCBD5E1))
-        EzzButtonVariant.DANGER -> Pair(Color(0xFF450A0A), Color(0xFFF87171))
+        EzzButtonVariant.DANGER -> Pair(Color(0xFF261215), Color(0xFFFCA5A5))
+        EzzButtonVariant.SUCCESS -> Pair(Color(0xFF0E2218), Color(0xFF6EE7B7))
         EzzButtonVariant.GHOST -> Pair(Color.Transparent, Color(0xFF94A3B8))
     }
 
