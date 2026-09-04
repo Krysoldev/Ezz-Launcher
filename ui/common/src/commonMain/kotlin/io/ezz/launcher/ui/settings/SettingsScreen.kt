@@ -542,7 +542,12 @@ fun SettingsScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(end = 20.dp),
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
                                         Text(text = "Fullscreen", color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
                                         Text(text = "Launch Minecraft in fullscreen mode.", color = Color(0xFF64748B), fontSize = 11.5.sp)
                                     }
@@ -579,21 +584,17 @@ fun SettingsScreen(
                                 Column(
                                     modifier = Modifier
                                         .weight(1f)
-                                        .padding(end = 16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                                        .padding(end = 20.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Text(text = "Discord Rich Presence", color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
-                                        EzzBadge(
-                                            text = if (settings.enableDiscordRpc) "ACTIVE" else "OFF",
-                                            variant = if (settings.enableDiscordRpc) EzzBadgeVariant.SUCCESS else EzzBadgeVariant.NEUTRAL
-                                        )
-                                    }
                                     Text(
-                                        text = "Show your Minecraft activity in Discord.",
+                                        text = "Discord Rich Presence",
+                                        color = Color.White,
+                                        fontSize = 13.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Show active instance name, Minecraft version, and session playtime in your Discord status.",
                                         color = Color(0xFF64748B),
                                         fontSize = 11.5.sp
                                     )

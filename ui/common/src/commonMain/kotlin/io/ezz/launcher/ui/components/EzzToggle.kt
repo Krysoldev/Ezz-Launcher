@@ -50,19 +50,19 @@ fun EzzToggle(
         animationSpec = tween(durationMillis = 150)
     )
 
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                enabled = enabled,
-                onClick = { onCheckedChange(!checked) }
-            )
-            .padding(vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (label != null) {
+    if (label != null) {
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    enabled = enabled,
+                    onClick = { onCheckedChange(!checked) }
+                )
+                .padding(vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = label,
@@ -80,24 +80,54 @@ fun EzzToggle(
                 }
             }
             Spacer(modifier = Modifier.width(16.dp))
-        }
 
+            Box(
+                modifier = Modifier
+                    .width(40.dp)
+                    .height(22.dp)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(if (checked) Color(0xFF8B5CF6) else Color(0xFF12151E))
+                    .border(1.dp, if (checked) Color(0xFFA78BFA) else Color(0xFF222736), RoundedCornerShape(11.dp)),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Box(
+                    modifier = Modifier
+                        .offset(x = thumbOffset)
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(if (checked) Color.White else Color(0xFF64748B))
+                )
+            }
+        }
+    } else {
         Box(
-            modifier = Modifier
-                .width(40.dp)
-                .height(22.dp)
-                .clip(RoundedCornerShape(11.dp))
-                .background(if (checked) Color(0xFF8B5CF6) else Color(0xFF12151E))
-                .border(1.dp, if (checked) Color(0xFFA78BFA) else Color(0xFF222736), RoundedCornerShape(11.dp)),
-            contentAlignment = Alignment.CenterStart
+            modifier = modifier
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    enabled = enabled,
+                    onClick = { onCheckedChange(!checked) }
+                )
+                .padding(vertical = 4.dp),
+            contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
-                    .offset(x = thumbOffset)
-                    .size(16.dp)
-                    .clip(CircleShape)
-                    .background(if (checked) Color.White else Color(0xFF64748B))
-            )
+                    .width(40.dp)
+                    .height(22.dp)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(if (checked) Color(0xFF8B5CF6) else Color(0xFF12151E))
+                    .border(1.dp, if (checked) Color(0xFFA78BFA) else Color(0xFF222736), RoundedCornerShape(11.dp)),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Box(
+                    modifier = Modifier
+                        .offset(x = thumbOffset)
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(if (checked) Color.White else Color(0xFF64748B))
+                )
+            }
         }
     }
 }
