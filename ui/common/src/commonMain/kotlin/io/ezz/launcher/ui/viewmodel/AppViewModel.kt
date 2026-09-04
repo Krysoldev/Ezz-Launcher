@@ -934,6 +934,7 @@ class AppViewModel(
 
     fun checkGitHubStatus() {
         gitHubReleaseService?.checkExistingToken()
+        println("[AUTH_DIAGNOSTIC] 8. GitHub authorization state: ${githubConnectionStatus.value}")
     }
 
     fun connectGitHub(token: String, onResult: (Boolean, String?) -> Unit) {

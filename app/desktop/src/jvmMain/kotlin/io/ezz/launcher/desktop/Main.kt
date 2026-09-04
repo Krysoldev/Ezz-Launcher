@@ -199,7 +199,9 @@ fun main() {
 
                         val adminAuthorizationService = io.ezz.launcher.core.auth.admin.AdminAuthorizationService(
                             httpClient = httpClient,
-                            releaseRepository = releaseRepository
+                            releaseRepository = releaseRepository,
+                            supabaseClient = supabaseClient,
+                            microsoftAuthService = microsoftAuthService
                         )
                         val gitHubReleaseService = io.ezz.launcher.core.storage.github.GitHubReleaseService(
                             vault = secureVault,

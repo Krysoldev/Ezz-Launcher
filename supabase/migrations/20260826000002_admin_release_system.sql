@@ -5,15 +5,18 @@
 -- 1. Admin Users Table (Stores authorized admin identities)
 CREATE TABLE IF NOT EXISTS public.admin_users (
     username TEXT PRIMARY KEY,
+    minecraft_uuid TEXT,
     role TEXT NOT NULL DEFAULT 'ADMIN',
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Pre-seed verified admin identity
-INSERT INTO public.admin_users (username, role, is_active)
-VALUES ('KrysolDev', 'ADMIN', true)
-ON CONFLICT (username) DO NOTHING;
+-- Pre-seed verified admin identity with KrysolDev and immutable Mojang UUID
+INSERT INTO public.admin_users (username, minecraft_uuid, role, is_active)
+VALUES ('KrysolDev', 'ad17221c781d4ec5aca6f5069fbced7b', 'ADMIN', true)
+ON CONFLICT (username) DO UPDATE SET
+    minecraft_uuid = EXCLUDED.minecraft_uuid,
+    is_active = true;
 
 -- Enable RLS
 ALTER TABLE public.admin_users ENABLE ROW LEVEL SECURITY;
@@ -25,7 +28,7 @@ CREATE POLICY "Allow public read on admin_users"
     USING (true);
 
 -- ------------------------------------------------------------------------------
--- 2. Function: Check if username is an authorized admin
+-- 2. Function: Check if username or UUID is an authorized admin
 -- ------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.is_admin_user(lookup_username text)
 RETURNS boolean
@@ -40,7 +43,8 @@ BEGIN
 
     RETURN EXISTS (
         SELECT 1 FROM public.admin_users
-        WHERE lower(username) = lower(trim(lookup_username))
+        WHERE (lower(username) = lower(trim(lookup_username))
+               OR replace(lower(COALESCE(minecraft_uuid, '')), '-', '') = replace(lower(trim(lookup_username)), '-', ''))
           AND is_active = true
     );
 END;
@@ -50,7 +54,7 @@ GRANT EXECUTE ON FUNCTION public.is_admin_user(text) TO anon, authenticated;
 
 -- ------------------------------------------------------------------------------
 -- 3. Function: Secure Server-Enforced Release Publisher
--- Only authorized admin ('KrysolDev') can execute successfully.
+-- Only authorized admin ('KrysolDev' / UUID) can execute successfully.
 -- ------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.publish_launcher_release(
     p_admin_username text,
@@ -70,10 +74,11 @@ DECLARE
     is_authorized boolean;
     release_id uuid;
 BEGIN
-    -- Enforce admin authorization server-side
+    -- Enforce admin authorization server-side by username or UUID
     SELECT EXISTS (
         SELECT 1 FROM public.admin_users
-        WHERE lower(username) = lower(trim(p_admin_username))
+        WHERE (lower(username) = lower(trim(p_admin_username))
+               OR replace(lower(COALESCE(minecraft_uuid, '')), '-', '') = replace(lower(trim(p_admin_username)), '-', ''))
           AND is_active = true
     ) INTO is_authorized;
 
