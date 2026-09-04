@@ -5,8 +5,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -20,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -37,17 +34,6 @@ import io.ezz.launcher.ui.viewmodel.AppViewModel
 import io.ezz.launcher.ui.viewmodel.JavaValidationResult
 import io.ezz.launcher.ui.viewmodel.ReleasePublishStep
 import java.io.File
-
-/**
- * The 5 canonical Settings sections.
- */
-enum class SettingsSection(val title: String, val icon: ImageVector) {
-    JAVA_MEMORY("Java & Memory", Icons.Default.Memory),
-    MINECRAFT_WINDOW("Minecraft Window", Icons.Default.DesktopWindows),
-    DISCORD("Discord", Icons.Default.SportsEsports),
-    UPDATES_VERSION("Updates & Version", Icons.Default.SystemUpdate),
-    ADMIN_IDENTITY("Admin Identity", Icons.Default.Security)
-}
 
 @Composable
 fun SettingsScreen(
@@ -68,8 +54,6 @@ fun SettingsScreen(
     val isCheckingUpdates by viewModel.isCheckingForUpdates.collectAsState()
     val updateError by viewModel.updateCheckError.collectAsState()
 
-    var selectedSection by remember { mutableStateOf(SettingsSection.JAVA_MEMORY) }
-
     var showAdminReleaseModal by remember { mutableStateOf(false) }
     var showGitHubConnectModal by remember { mutableStateOf(false) }
     var showChangelogModal by remember { mutableStateOf<SupabaseLauncherReleaseDto?>(null) }
@@ -88,150 +72,797 @@ fun SettingsScreen(
 
     AnimatedVisibility(
         visible = isPageVisible,
-        enter = fadeIn(animationSpec = tween(220)) + slideInVertically(animationSpec = tween(220)) { 15 }
+        enter = fadeIn(animationSpec = tween(200)) + slideInVertically(animationSpec = tween(200)) { 8 }
     ) {
         Box(
             modifier = modifier
                 .fillMaxSize()
                 .background(Color(0xFF07080A))
         ) {
+            val pageScrollState = rememberScrollState()
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 36.dp, vertical = 24.dp)
+                    .verticalScroll(pageScrollState)
+                    .padding(horizontal = 40.dp, vertical = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Top Header
+                // Centered Content Column with comfortable max width
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                        .widthIn(max = 780.dp),
+                    verticalArrangement = Arrangement.spacedBy(32.dp)
                 ) {
-                    Text(
-                        text = "SETTINGS",
-                        color = Color.White,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 0.5.sp
-                    )
-                    Text(
-                        text = "Configure Java, Minecraft window defaults, Discord presence, and launcher updates.",
-                        color = Color(0xFF64748B),
-                        fontSize = 12.sp
-                    )
-                }
-
-                // Two-Column Master-Detail Layout
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.spacedBy(28.dp)
-                ) {
-                    // Left Navigation Panel
-                    Column(
-                        modifier = Modifier
-                            .width(220.dp)
-                            .fillMaxHeight(),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
+                    // =========================================================
+                    // TOP PAGE HEADER
+                    // =========================================================
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "CATEGORIES",
-                            color = Color(0xFF64748B),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            text = "SETTINGS",
+                            color = Color.White,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 0.5.sp
                         )
+                        Text(
+                            text = "Manage how Ezz Launcher runs Minecraft.",
+                            color = Color(0xFF64748B),
+                            fontSize = 12.5.sp
+                        )
+                    }
 
-                        SettingsSection.values().forEach { section ->
-                            SettingsNavTabItem(
-                                section = section,
-                                isSelected = selectedSection == section,
-                                onClick = { selectedSection = section }
-                            )
+                    // =========================================================
+                    // SECTION 1: JAVA & MEMORY
+                    // =========================================================
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        SettingsSectionHeader("JAVA & MEMORY")
+
+                        // Java Runtimes Group
+                        EzzCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            cornerRadius = 10.dp,
+                            backgroundColor = Color(0xFF10131A),
+                            borderColor = Color(0xFF1B1F2C)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(18.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(
+                                            text = "Java Runtime",
+                                            color = Color.White,
+                                            fontSize = 13.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "Java environments detected for Minecraft execution.",
+                                            color = Color(0xFF64748B),
+                                            fontSize = 11.5.sp
+                                        )
+                                    }
+
+                                    EzzButton(
+                                        text = "Manage Java Runtimes",
+                                        icon = Icons.Default.OpenInNew,
+                                        size = EzzButtonSize.SMALL,
+                                        variant = EzzButtonVariant.SECONDARY,
+                                        onClick = { viewModel.platformBridge.openUrl("https://adoptium.net/temurin/releases/") }
+                                    )
+                                }
+
+                                val runtimes = listOf(
+                                    JavaRuntimeInfo(8, "Java 8", "Legacy Minecraft support (<= 1.16.5)"),
+                                    JavaRuntimeInfo(17, "Java 17", "Recommended for supported versions (1.17 – 1.20.4)"),
+                                    JavaRuntimeInfo(21, "Java 21", "Recommended for modern Minecraft (1.20.5+)"),
+                                    JavaRuntimeInfo(25, "Java 25", "Latest runtime (Experimental)")
+                                )
+
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFF0A0C12))
+                                        .border(1.dp, Color(0xFF161A24), RoundedCornerShape(8.dp))
+                                ) {
+                                    runtimes.forEachIndexed { index, rt ->
+                                        val isInstalled = detectedRuntimes.any { it.majorVersion == rt.version }
+                                        CleanJavaRuntimeRow(
+                                            title = rt.title,
+                                            description = rt.description,
+                                            isInstalled = isInstalled
+                                        )
+                                        if (index < runtimes.lastIndex) {
+                                            HorizontalDivider(color = Color(0xFF141722), thickness = 1.dp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Maximum RAM Group
+                        val totalRamMb = memoryInfo.totalRamMb.coerceAtLeast(4096)
+                        val ramGbFormatted = String.format("%.1f", settings.defaultMaxMemoryMb / 1024.0)
+
+                        EzzCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            cornerRadius = 10.dp,
+                            backgroundColor = Color(0xFF10131A),
+                            borderColor = Color(0xFF1B1F2C)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(18.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(
+                                            text = "Default Maximum RAM",
+                                            color = Color.White,
+                                            fontSize = 13.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "Memory available to Minecraft when no instance-specific value is set.",
+                                            color = Color(0xFF64748B),
+                                            fontSize = 11.5.sp
+                                        )
+                                    }
+
+                                    Row(
+                                        verticalAlignment = Alignment.Bottom,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "${settings.defaultMaxMemoryMb}",
+                                            color = Color.White,
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.Black
+                                        )
+                                        Text(
+                                            text = "MB",
+                                            color = Color(0xFF8B5CF6),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(bottom = 2.dp)
+                                        )
+                                        Text(
+                                            text = "($ramGbFormatted GB)",
+                                            color = Color(0xFF94A3B8),
+                                            fontSize = 11.5.sp,
+                                            modifier = Modifier.padding(bottom = 2.dp)
+                                        )
+                                    }
+                                }
+
+                                EzzSlider(
+                                    value = settings.defaultMaxMemoryMb.toFloat().coerceIn(1024f, totalRamMb.toFloat()),
+                                    onValueChange = { newMb ->
+                                        val rounded = (newMb / 512).toInt() * 512
+                                        viewModel.updateMemorySettings(settings.defaultMinMemoryMb, rounded)
+                                    },
+                                    valueRange = 1024f..totalRamMb.toFloat(),
+                                    steps = ((totalRamMb - 1024) / 512).coerceAtLeast(1)
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(text = "1024 MB (1.0 GB)", color = Color(0xFF475569), fontSize = 10.5.sp)
+                                    Text(
+                                        text = "$totalRamMb MB (${String.format("%.1f", totalRamMb / 1024.0)} GB System)",
+                                        color = Color(0xFF475569),
+                                        fontSize = 10.5.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        // Java Executable Group
+                        var javaPathInput by remember(settings.defaultJavaPath) {
+                            mutableStateOf<String>(settings.defaultJavaPath ?: "")
+                        }
+                        val pathValidation = remember(javaPathInput) {
+                            viewModel.validateCustomJavaPath(javaPathInput)
+                        }
+
+                        EzzCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            cornerRadius = 10.dp,
+                            backgroundColor = Color(0xFF10131A),
+                            borderColor = Color(0xFF1B1F2C)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(18.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(
+                                            text = "Java Executable",
+                                            color = Color.White,
+                                            fontSize = 13.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "Custom path to javaw.exe or java binary (leave blank for automatic selection).",
+                                            color = Color(0xFF64748B),
+                                            fontSize = 11.5.sp
+                                        )
+                                    }
+
+                                    when (pathValidation) {
+                                        JavaValidationResult.Empty -> {
+                                            Text(text = "Auto system default", color = Color(0xFF64748B), fontSize = 11.sp)
+                                        }
+                                        JavaValidationResult.Valid -> {
+                                            EzzBadge(text = "Valid Executable", variant = EzzBadgeVariant.SUCCESS)
+                                        }
+                                        JavaValidationResult.NotFound -> {
+                                            EzzBadge(text = "Not Found", variant = EzzBadgeVariant.WARNING)
+                                        }
+                                        JavaValidationResult.IsDirectory -> {
+                                            EzzBadge(text = "Is Directory", variant = EzzBadgeVariant.WARNING)
+                                        }
+                                        JavaValidationResult.NotJavaExecutable -> {
+                                            EzzBadge(text = "Invalid Java Binary", variant = EzzBadgeVariant.DANGER)
+                                        }
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    EzzTextField(
+                                        value = javaPathInput,
+                                        onValueChange = {
+                                            javaPathInput = it
+                                            viewModel.updateCustomJavaPath(it)
+                                        },
+                                        placeholder = "C:\\Program Files\\Java\\...\\bin\\javaw.exe",
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    EzzButton(
+                                        text = "Browse",
+                                        icon = Icons.Default.FolderOpen,
+                                        size = EzzButtonSize.MEDIUM,
+                                        variant = EzzButtonVariant.SECONDARY,
+                                        onClick = {
+                                            val picked = viewModel.platformBridge.pickJavaExecutable()
+                                            if (picked != null) {
+                                                javaPathInput = picked.absolutePath
+                                                viewModel.updateCustomJavaPath(picked.absolutePath)
+                                            }
+                                        }
+                                    )
+                                    EzzButton(
+                                        text = if (isDetectingJava) "Scanning..." else "Auto-Detect",
+                                        icon = Icons.Default.Search,
+                                        size = EzzButtonSize.MEDIUM,
+                                        variant = EzzButtonVariant.SECONDARY,
+                                        isLoading = isDetectingJava,
+                                        onClick = { viewModel.refreshJavaRuntimes() }
+                                    )
+                                }
+                            }
+                        }
+
+                        // JVM Launch Arguments Group
+                        var jvmArgsInput by remember(settings.globalJvmArgs) {
+                            mutableStateOf(settings.globalJvmArgs.joinToString(" "))
+                        }
+
+                        EzzCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            cornerRadius = 10.dp,
+                            backgroundColor = Color(0xFF10131A),
+                            borderColor = Color(0xFF1B1F2C)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(18.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "Custom JVM Launch Arguments",
+                                    color = Color.White,
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Optional arguments passed to Minecraft.",
+                                    color = Color(0xFF64748B),
+                                    fontSize = 11.5.sp
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                EzzTextField(
+                                    value = jvmArgsInput,
+                                    onValueChange = {
+                                        jvmArgsInput = it
+                                        val tokens = it.split(" ").map { t -> t.trim() }.filter { t -> t.isNotEmpty() }
+                                        viewModel.updateGlobalJvmArgs(tokens)
+                                    },
+                                    placeholder = "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200",
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     }
 
-                    // Vertical Divider
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .fillMaxHeight()
-                            .background(Color(0xFF1B1F2C))
-                    )
+                    // =========================================================
+                    // SECTION 2: MINECRAFT WINDOW
+                    // =========================================================
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        SettingsSectionHeader("MINECRAFT WINDOW")
 
-                    // Right Content Panel (Single Primary Scroll Container)
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                    ) {
-                        AnimatedContent(
-                            targetState = selectedSection,
-                            transitionSpec = {
-                                (fadeIn(animationSpec = tween(180)) + slideInVertically(animationSpec = tween(180)) { 10 })
-                                    .togetherWith(fadeOut(animationSpec = tween(120)))
-                            },
-                            label = "SettingsSectionTransition"
-                        ) { targetSection ->
-                            val scrollState = rememberScrollState()
+                        var widthInput by remember(settings.defaultWindowWidth) {
+                            mutableStateOf<String>(settings.defaultWindowWidth.toString())
+                        }
+                        var heightInput by remember(settings.defaultWindowHeight) {
+                            mutableStateOf<String>(settings.defaultWindowHeight.toString())
+                        }
+
+                        val presets = listOf(
+                            Pair(854, 480) to "854 × 480",
+                            Pair(1280, 720) to "1280 × 720",
+                            Pair(1920, 1080) to "1920 × 1080",
+                            Pair(2560, 1440) to "2560 × 1440"
+                        )
+
+                        EzzCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            cornerRadius = 10.dp,
+                            backgroundColor = Color(0xFF10131A),
+                            borderColor = Color(0xFF1B1F2C)
+                        ) {
                             Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .verticalScroll(scrollState)
-                                    .padding(end = 8.dp, bottom = 24.dp),
+                                modifier = Modifier.padding(18.dp),
                                 verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
-                                when (targetSection) {
-                                    SettingsSection.JAVA_MEMORY -> {
-                                        JavaMemorySection(
-                                            settings = settings,
-                                            detectedRuntimes = detectedRuntimes,
-                                            isDetectingJava = isDetectingJava,
-                                            memoryInfo = memoryInfo,
-                                            viewModel = viewModel
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        text = "Window Dimensions",
+                                        color = Color.White,
+                                        fontSize = 13.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Choose the default Minecraft window size.",
+                                        color = Color(0xFF64748B),
+                                        fontSize = 11.5.sp
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(text = "WIDTH", color = Color(0xFF64748B), fontSize = 10.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        EzzTextField(
+                                            value = widthInput,
+                                            onValueChange = { raw ->
+                                                val digits = raw.filter { it.isDigit() }
+                                                widthInput = digits
+                                                val num = digits.toIntOrNull()
+                                                if (num != null && num in 320..7680) {
+                                                    viewModel.updateWindowDefaults(num, settings.defaultWindowHeight, settings.defaultFullscreen)
+                                                }
+                                            },
+                                            placeholder = "1280",
+                                            modifier = Modifier.fillMaxWidth()
                                         )
                                     }
-                                    SettingsSection.MINECRAFT_WINDOW -> {
-                                        MinecraftWindowSection(
-                                            settings = settings,
-                                            viewModel = viewModel
+
+                                    Text(
+                                        text = "×",
+                                        color = Color(0xFF475569),
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(top = 18.dp)
+                                    )
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(text = "HEIGHT", color = Color(0xFF64748B), fontSize = 10.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        EzzTextField(
+                                            value = heightInput,
+                                            onValueChange = { raw ->
+                                                val digits = raw.filter { it.isDigit() }
+                                                heightInput = digits
+                                                val num = digits.toIntOrNull()
+                                                if (num != null && num in 240..4320) {
+                                                    viewModel.updateWindowDefaults(settings.defaultWindowWidth, num, settings.defaultFullscreen)
+                                                }
+                                            },
+                                            placeholder = "720",
+                                            modifier = Modifier.fillMaxWidth()
                                         )
                                     }
-                                    SettingsSection.DISCORD -> {
-                                        DiscordSection(
-                                            settings = settings,
-                                            viewModel = viewModel
+                                }
+
+                                // Presets Chips
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(text = "Presets:", color = Color(0xFF64748B), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                    presets.forEach { (res, label) ->
+                                        val isSelected = settings.defaultWindowWidth == res.first && settings.defaultWindowHeight == res.second
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(if (isSelected) Color(0xFF1E1730) else Color(0xFF12151D))
+                                                .border(
+                                                    1.dp,
+                                                    if (isSelected) Color(0xFF8B5CF6) else Color(0xFF1F2432),
+                                                    RoundedCornerShape(6.dp)
+                                                )
+                                                .clickable {
+                                                    widthInput = res.first.toString()
+                                                    heightInput = res.second.toString()
+                                                    viewModel.updateWindowDefaults(res.first, res.second, settings.defaultFullscreen)
+                                                }
+                                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                                        ) {
+                                            Text(
+                                                text = label,
+                                                color = if (isSelected) Color.White else Color(0xFF94A3B8),
+                                                fontSize = 11.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        }
+                                    }
+                                }
+
+                                HorizontalDivider(color = Color(0xFF161A24))
+
+                                // Fullscreen Toggle Row
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(text = "Fullscreen", color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
+                                        Text(text = "Launch Minecraft in fullscreen mode.", color = Color(0xFF64748B), fontSize = 11.5.sp)
+                                    }
+                                    EzzToggle(
+                                        checked = settings.defaultFullscreen,
+                                        onCheckedChange = { checked ->
+                                            viewModel.updateWindowDefaults(settings.defaultWindowWidth, settings.defaultWindowHeight, checked)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // =========================================================
+                    // SECTION 3: DISCORD
+                    // =========================================================
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        SettingsSectionHeader("DISCORD")
+
+                        EzzCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            cornerRadius = 10.dp,
+                            backgroundColor = Color(0xFF10131A),
+                            borderColor = Color(0xFF1B1F2C)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(18.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(end = 16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(text = "Discord Rich Presence", color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
+                                        EzzBadge(
+                                            text = if (settings.enableDiscordRpc) "ACTIVE" else "OFF",
+                                            variant = if (settings.enableDiscordRpc) EzzBadgeVariant.SUCCESS else EzzBadgeVariant.NEUTRAL
                                         )
                                     }
-                                    SettingsSection.UPDATES_VERSION -> {
-                                        UpdatesVersionSection(
-                                            currentVer = currentVer,
-                                            latestVer = latestVer,
-                                            hasUpdate = hasUpdate,
-                                            latestRelease = latestRelease,
-                                            isCheckingUpdates = isCheckingUpdates,
-                                            updateError = updateError,
-                                            isVerifiedAdmin = isVerifiedAdmin,
-                                            viewModel = viewModel,
-                                            onOpenReleaseManager = { showAdminReleaseModal = true },
-                                            onShowChangelog = { showChangelogModal = it }
+                                    Text(
+                                        text = "Show your Minecraft activity in Discord.",
+                                        color = Color(0xFF64748B),
+                                        fontSize = 11.5.sp
+                                    )
+                                }
+
+                                EzzToggle(
+                                    checked = settings.enableDiscordRpc,
+                                    onCheckedChange = { viewModel.updateDiscordRpc(it) }
+                                )
+                            }
+                        }
+                    }
+
+                    // =========================================================
+                    // SECTION 4: UPDATES
+                    // =========================================================
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        SettingsSectionHeader("UPDATES")
+
+                        EzzCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            cornerRadius = 10.dp,
+                            backgroundColor = Color(0xFF10131A),
+                            borderColor = Color(0xFF1B1F2C)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(18.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(text = "Ezz Launcher", color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
+                                            EzzBadge(text = "Current Version: $currentVer", variant = EzzBadgeVariant.PRIMARY)
+                                            when {
+                                                hasUpdate -> EzzBadge(text = "Update available: v$latestVer", variant = EzzBadgeVariant.WARNING)
+                                                isCheckingUpdates -> EzzBadge(text = "Checking...", variant = EzzBadgeVariant.NEUTRAL)
+                                                updateError != null -> EzzBadge(text = "Check failed", variant = EzzBadgeVariant.DANGER)
+                                                else -> EzzBadge(text = "You're up to date.", variant = EzzBadgeVariant.SUCCESS)
+                                            }
+                                        }
+                                        Text(
+                                            text = "Official release channel for launcher updates and patches.",
+                                            color = Color(0xFF64748B),
+                                            fontSize = 11.5.sp
                                         )
                                     }
-                                    SettingsSection.ADMIN_IDENTITY -> {
-                                        AdminIdentitySection(
-                                            selectedAccount = selectedAccount,
-                                            isMicrosoft = isMicrosoft,
-                                            isVerifiedAdmin = isVerifiedAdmin,
-                                            isCheckingAdmin = isCheckingAdmin,
-                                            githubStatus = githubStatus,
-                                            viewModel = viewModel,
-                                            onConnectGitHub = { showGitHubConnectModal = true }
+
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        EzzButton(
+                                            text = if (isCheckingUpdates) "Checking..." else "Check for Updates",
+                                            icon = Icons.Default.Refresh,
+                                            size = EzzButtonSize.SMALL,
+                                            variant = EzzButtonVariant.SECONDARY,
+                                            isLoading = isCheckingUpdates,
+                                            onClick = { viewModel.checkForUpdates() }
                                         )
+
+                                        // Admin Release Manager: Exclusively for genuinely verified Microsoft admin
+                                        if (isVerifiedAdmin) {
+                                            EzzButton(
+                                                text = "Admin Release Manager",
+                                                icon = Icons.Default.Publish,
+                                                size = EzzButtonSize.SMALL,
+                                                variant = EzzButtonVariant.PRIMARY,
+                                                onClick = { showAdminReleaseModal = true }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                if (hasUpdate && latestRelease != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color(0xFF1B1426))
+                                            .border(1.dp, Color(0xFF4C2A78), RoundedCornerShape(8.dp))
+                                            .padding(14.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                                Text(text = "Official Release v${latestRelease.version} Ready", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                                Text(text = "An official build is published and available for download.", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                                            }
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                EzzButton(
+                                                    text = "Release Notes",
+                                                    size = EzzButtonSize.SMALL,
+                                                    variant = EzzButtonVariant.SECONDARY,
+                                                    onClick = { showChangelogModal = latestRelease }
+                                                )
+                                                val dlUrl = latestRelease.downloadUrl
+                                                if (dlUrl != null) {
+                                                    EzzButton(
+                                                        text = "Download",
+                                                        icon = Icons.Default.Download,
+                                                        size = EzzButtonSize.SMALL,
+                                                        variant = EzzButtonVariant.PRIMARY,
+                                                        onClick = { viewModel.platformBridge.openUrl(dlUrl) }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else if (updateError != null) {
+                                    Text(text = updateError ?: "Could not check for updates. Try again later.", color = Color(0xFFEF4444), fontSize = 11.5.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    // =========================================================
+                    // SECTION 5: ADMIN IDENTITY
+                    // =========================================================
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        SettingsSectionHeader("ADMIN IDENTITY")
+
+                        EzzCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            cornerRadius = 10.dp,
+                            backgroundColor = Color(0xFF10131A),
+                            borderColor = if (isVerifiedAdmin) Color(0xFF1B3D2B) else Color(0xFF1B1F2C)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(18.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                val accountName = selectedAccount?.username ?: "No Active Account"
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(text = "EZZ Launcher Admin Identity", color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
+                                        Text(text = "Account authorization status for developer and release privileges.", color = Color(0xFF64748B), fontSize = 11.5.sp)
+                                    }
+
+                                    if (isCheckingAdmin) {
+                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color(0xFF8B5CF6))
+                                    } else if (isVerifiedAdmin) {
+                                        EzzBadge(text = "ADMIN VERIFIED", variant = EzzBadgeVariant.SUCCESS)
+                                    } else {
+                                        EzzBadge(text = "NOT AUTHORIZED", variant = EzzBadgeVariant.NEUTRAL)
+                                    }
+                                }
+
+                                HorizontalDivider(color = Color(0xFF161A24))
+
+                                if (isVerifiedAdmin) {
+                                    // Genuine Microsoft Admin
+                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                                Text(text = "Microsoft", color = Color(0xFF64748B), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                Text(text = accountName, color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
+                                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                    Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF10B981)))
+                                                    Text(text = "Connected", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                                }
+                                            }
+                                        }
+
+                                        HorizontalDivider(color = Color(0xFF161A24))
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                                Text(text = "GitHub", color = Color(0xFF64748B), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                when (val gh = githubStatus) {
+                                                    is GitHubConnectionStatus.Connected -> {
+                                                        Text(text = gh.username, color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
+                                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF10B981)))
+                                                            Text(text = "Connected", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                                        }
+                                                    }
+                                                    else -> {
+                                                        Text(text = "Not Connected", color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
+                                                        Text(text = "Ready to connect GitHub token for publishing releases", color = Color(0xFF64748B), fontSize = 11.sp)
+                                                    }
+                                                }
+                                            }
+
+                                            when (githubStatus) {
+                                                is GitHubConnectionStatus.Connected -> {
+                                                    EzzButton(
+                                                        text = "Disconnect GitHub",
+                                                        size = EzzButtonSize.SMALL,
+                                                        variant = EzzButtonVariant.SECONDARY,
+                                                        onClick = { viewModel.disconnectGitHub() }
+                                                    )
+                                                }
+                                                else -> {
+                                                    EzzButton(
+                                                        text = "Connect GitHub",
+                                                        icon = Icons.Default.Link,
+                                                        size = EzzButtonSize.SMALL,
+                                                        variant = EzzButtonVariant.PRIMARY,
+                                                        onClick = { showGitHubConnectModal = true }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // Unauthorized user (Offline KrysolDev or any other account)
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text(text = accountName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                            Text(
+                                                text = if (isMicrosoft) "Microsoft Account (Not Authorized)" else "Offline Account",
+                                                color = Color(0xFF94A3B8),
+                                                fontSize = 11.5.sp
+                                            )
+                                        }
+
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(Color(0xFF141720))
+                                                .border(1.dp, Color(0xFF1E2332), RoundedCornerShape(8.dp))
+                                                .padding(12.dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Info,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF94A3B8),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Text(
+                                                    text = "Admin access requires the authorized Microsoft account.",
+                                                    color = Color(0xFF94A3B8),
+                                                    fontSize = 12.sp
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(20.dp))
                 }
             }
         }
@@ -288,370 +919,31 @@ fun SettingsScreen(
 }
 
 // =============================================================================
-// LEFT NAVIGATION ITEM
+// HELPER COMPONENTS
 // =============================================================================
 
 @Composable
-private fun SettingsNavTabItem(
-    section: SettingsSection,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isHovered by interactionSource.collectIsHoveredAsState()
-
-    val bgColor by animateColorAsState(
-        targetValue = when {
-            isSelected -> Color(0xFF161322)
-            isHovered -> Color(0xFF13151D)
-            else -> Color.Transparent
-        },
-        animationSpec = tween(150)
-    )
-
-    val contentColor by animateColorAsState(
-        targetValue = when {
-            isSelected -> Color.White
-            isHovered -> Color(0xFFF1F5F9)
-            else -> Color(0xFF94A3B8)
-        },
-        animationSpec = tween(150)
-    )
-
-    val indicatorColor by animateColorAsState(
-        targetValue = if (isSelected) Color(0xFF8B5CF6) else Color.Transparent,
-        animationSpec = tween(180)
-    )
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(bgColor)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            )
-            .padding(horizontal = 10.dp, vertical = 9.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            // Left active bar indicator
-            Box(
-                modifier = Modifier
-                    .width(3.dp)
-                    .height(16.dp)
-                    .clip(RoundedCornerShape(1.5.dp))
-                    .background(indicatorColor)
-            )
-
-            Icon(
-                imageVector = section.icon,
-                contentDescription = section.title,
-                tint = if (isSelected) Color(0xFF8B5CF6) else contentColor,
-                modifier = Modifier.size(16.dp)
-            )
-
-            Text(
-                text = section.title,
-                color = contentColor,
-                fontSize = 12.5.sp,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-            )
-        }
+private fun SettingsSectionHeader(title: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = title,
+            color = Color(0xFF8B5CF6),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp
+        )
+        HorizontalDivider(color = Color(0xFF1B1F2C))
     }
 }
 
-// =============================================================================
-// SECTION 1: JAVA & MEMORY CONTENT
-// =============================================================================
-
-private data class JavaRuntimeRowData(
+private data class JavaRuntimeInfo(
     val version: Int,
     val title: String,
     val description: String
 )
 
 @Composable
-private fun JavaMemorySection(
-    settings: LauncherSettings,
-    detectedRuntimes: List<JavaRuntime>,
-    isDetectingJava: Boolean,
-    memoryInfo: SystemMemoryInfo,
-    viewModel: AppViewModel
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        // Section Title Header
-        SectionHeader(
-            title = "JAVA & MEMORY",
-            subtitle = "Configure Java runtimes and memory allocation."
-        )
-
-        // Card 1: Java Runtimes
-        EzzCard(
-            modifier = Modifier.fillMaxWidth(),
-            cornerRadius = 12.dp,
-            backgroundColor = Color(0xFF10131A),
-            borderColor = Color(0xFF1B1F2C)
-        ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(text = "Java Runtimes", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Text(text = "Manage the Java versions available for Minecraft.", color = Color(0xFF64748B), fontSize = 11.5.sp)
-                }
-
-                val runtimes = listOf(
-                    JavaRuntimeRowData(8, "Java 8", "Legacy Minecraft support (<= 1.16.5)"),
-                    JavaRuntimeRowData(17, "Java 17", "Recommended for supported versions (1.17 – 1.20.4)"),
-                    JavaRuntimeRowData(21, "Java 21", "Recommended for modern Minecraft (1.20.5+)"),
-                    JavaRuntimeRowData(25, "Java 25", "Latest runtime (Experimental)")
-                )
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF0C0E14))
-                        .border(1.dp, Color(0xFF161A24), RoundedCornerShape(8.dp))
-                ) {
-                    runtimes.forEachIndexed { index, rt ->
-                        val isInstalled = detectedRuntimes.any { it.majorVersion == rt.version }
-                        JavaRuntimeStatusRow(
-                            title = rt.title,
-                            description = rt.description,
-                            isInstalled = isInstalled
-                        )
-                        if (index < runtimes.lastIndex) {
-                            HorizontalDivider(color = Color(0xFF161A24), thickness = 1.dp)
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    EzzButton(
-                        text = "Manage Java Runtimes",
-                        icon = Icons.Default.OpenInNew,
-                        size = EzzButtonSize.SMALL,
-                        variant = EzzButtonVariant.SECONDARY,
-                        onClick = { viewModel.platformBridge.openUrl("https://adoptium.net/temurin/releases/") }
-                    )
-                }
-            }
-        }
-
-        // Card 2: Memory Allocation
-        val totalRamMb = memoryInfo.totalRamMb.coerceAtLeast(4096)
-        val ramGbFormatted = String.format("%.1f", settings.defaultMaxMemoryMb / 1024.0)
-
-        EzzCard(
-            modifier = Modifier.fillMaxWidth(),
-            cornerRadius = 12.dp,
-            backgroundColor = Color(0xFF10131A),
-            borderColor = Color(0xFF1B1F2C)
-        ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(text = "Default Maximum RAM", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                        Text(
-                            text = "Memory available to Minecraft when no instance-specific value is set ($totalRamMb MB system total).",
-                            color = Color(0xFF64748B),
-                            fontSize = 11.5.sp
-                        )
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.Bottom,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = "${settings.defaultMaxMemoryMb}",
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Black
-                        )
-                        Text(
-                            text = "MB",
-                            color = Color(0xFF8B5CF6),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 2.dp)
-                        )
-                        Text(
-                            text = "($ramGbFormatted GB)",
-                            color = Color(0xFF94A3B8),
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(bottom = 2.dp)
-                        )
-                    }
-                }
-
-                EzzSlider(
-                    value = settings.defaultMaxMemoryMb.toFloat().coerceIn(1024f, totalRamMb.toFloat()),
-                    onValueChange = { newMb ->
-                        val rounded = (newMb / 512).toInt() * 512
-                        viewModel.updateMemorySettings(settings.defaultMinMemoryMb, rounded)
-                    },
-                    valueRange = 1024f..totalRamMb.toFloat(),
-                    steps = ((totalRamMb - 1024) / 512).coerceAtLeast(1)
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(text = "1024 MB (1.0 GB)", color = Color(0xFF475569), fontSize = 10.5.sp)
-                    Text(text = "$totalRamMb MB (${String.format("%.1f", totalRamMb / 1024.0)} GB System)", color = Color(0xFF475569), fontSize = 10.5.sp)
-                }
-            }
-        }
-
-        // Card 3: Java Executable
-        var javaPathInput by remember(settings.defaultJavaPath) {
-            mutableStateOf<String>(settings.defaultJavaPath ?: "")
-        }
-        val pathValidation = remember(javaPathInput) {
-            viewModel.validateCustomJavaPath(javaPathInput)
-        }
-
-        EzzCard(
-            modifier = Modifier.fillMaxWidth(),
-            cornerRadius = 12.dp,
-            backgroundColor = Color(0xFF10131A),
-            borderColor = Color(0xFF1B1F2C)
-        ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(text = "Java Executable", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                        Text(
-                            text = "Path to javaw.exe or java binary (leave blank for automatic selection).",
-                            color = Color(0xFF64748B),
-                            fontSize = 11.5.sp
-                        )
-                    }
-
-                    when (pathValidation) {
-                        JavaValidationResult.Empty -> {
-                            Text(text = "Auto system default", color = Color(0xFF64748B), fontSize = 11.sp)
-                        }
-                        JavaValidationResult.Valid -> {
-                            EzzBadge(text = "Valid Executable", variant = EzzBadgeVariant.SUCCESS)
-                        }
-                        JavaValidationResult.NotFound -> {
-                            EzzBadge(text = "Not Found", variant = EzzBadgeVariant.WARNING)
-                        }
-                        JavaValidationResult.IsDirectory -> {
-                            EzzBadge(text = "Is Directory", variant = EzzBadgeVariant.WARNING)
-                        }
-                        JavaValidationResult.NotJavaExecutable -> {
-                            EzzBadge(text = "Invalid Java Binary", variant = EzzBadgeVariant.DANGER)
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    EzzTextField(
-                        value = javaPathInput,
-                        onValueChange = {
-                            javaPathInput = it
-                            viewModel.updateCustomJavaPath(it)
-                        },
-                        placeholder = "C:\\Program Files\\Java\\...\\bin\\javaw.exe",
-                        modifier = Modifier.weight(1f)
-                    )
-                    EzzButton(
-                        text = "Browse",
-                        icon = Icons.Default.FolderOpen,
-                        size = EzzButtonSize.MEDIUM,
-                        variant = EzzButtonVariant.SECONDARY,
-                        onClick = {
-                            val picked = viewModel.platformBridge.pickJavaExecutable()
-                            if (picked != null) {
-                                javaPathInput = picked.absolutePath
-                                viewModel.updateCustomJavaPath(picked.absolutePath)
-                            }
-                        }
-                    )
-                    EzzButton(
-                        text = if (isDetectingJava) "Scanning..." else "Auto-Detect",
-                        icon = Icons.Default.Search,
-                        size = EzzButtonSize.MEDIUM,
-                        variant = EzzButtonVariant.SECONDARY,
-                        isLoading = isDetectingJava,
-                        onClick = { viewModel.refreshJavaRuntimes() }
-                    )
-                }
-            }
-        }
-
-        // Card 4: JVM Arguments
-        var jvmArgsInput by remember(settings.globalJvmArgs) {
-            mutableStateOf(settings.globalJvmArgs.joinToString(" "))
-        }
-
-        EzzCard(
-            modifier = Modifier.fillMaxWidth(),
-            cornerRadius = 12.dp,
-            backgroundColor = Color(0xFF10131A),
-            borderColor = Color(0xFF1B1F2C)
-        ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(text = "Custom JVM Launch Arguments", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    text = "Optional arguments passed to the Minecraft Java process.",
-                    color = Color(0xFF64748B),
-                    fontSize = 11.5.sp
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                EzzTextField(
-                    value = jvmArgsInput,
-                    onValueChange = {
-                        jvmArgsInput = it
-                        val tokens = it.split(" ").map { t -> t.trim() }.filter { t -> t.isNotEmpty() }
-                        viewModel.updateGlobalJvmArgs(tokens)
-                    },
-                    placeholder = "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200",
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun JavaRuntimeStatusRow(
+private fun CleanJavaRuntimeRow(
     title: String,
     description: String,
     isInstalled: Boolean
@@ -674,541 +966,17 @@ private fun JavaRuntimeStatusRow(
         ) {
             Box(
                 modifier = Modifier
-                    .size(7.dp)
+                    .size(6.dp)
                     .clip(CircleShape)
                     .background(if (isInstalled) Color(0xFF10B981) else Color(0xFFF59E0B))
             )
             Text(
-                text = if (isInstalled) "INSTALLED" else "NOT INSTALLED",
+                text = if (isInstalled) "Installed" else "Not Installed",
                 color = if (isInstalled) Color(0xFF10B981) else Color(0xFFF59E0B),
                 fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.5.sp
+                fontWeight = FontWeight.SemiBold
             )
         }
-    }
-}
-
-// =============================================================================
-// SECTION 2: MINECRAFT WINDOW CONTENT
-// =============================================================================
-
-@Composable
-private fun MinecraftWindowSection(
-    settings: LauncherSettings,
-    viewModel: AppViewModel
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        SectionHeader(
-            title = "MINECRAFT WINDOW",
-            subtitle = "Choose the default window size used when launching Minecraft."
-        )
-
-        var widthInput by remember(settings.defaultWindowWidth) {
-            mutableStateOf<String>(settings.defaultWindowWidth.toString())
-        }
-        var heightInput by remember(settings.defaultWindowHeight) {
-            mutableStateOf<String>(settings.defaultWindowHeight.toString())
-        }
-
-        val presets = listOf(
-            Pair(854, 480) to "854 × 480",
-            Pair(1280, 720) to "1280 × 720",
-            Pair(1920, 1080) to "1920 × 1080",
-            Pair(2560, 1440) to "2560 × 1440"
-        )
-
-        EzzCard(
-            modifier = Modifier.fillMaxWidth(),
-            cornerRadius = 12.dp,
-            backgroundColor = Color(0xFF10131A),
-            borderColor = Color(0xFF1B1F2C)
-        ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(text = "Window Dimensions", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Text(text = "Specify starting resolution for Minecraft windows.", color = Color(0xFF64748B), fontSize = 11.5.sp)
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "WIDTH", color = Color(0xFF64748B), fontSize = 10.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
-                        Spacer(modifier = Modifier.height(6.dp))
-                        EzzTextField(
-                            value = widthInput,
-                            onValueChange = { raw ->
-                                val digits = raw.filter { it.isDigit() }
-                                widthInput = digits
-                                val num = digits.toIntOrNull()
-                                if (num != null && num in 320..7680) {
-                                    viewModel.updateWindowDefaults(num, settings.defaultWindowHeight, settings.defaultFullscreen)
-                                }
-                            },
-                            placeholder = "854",
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-
-                    Text(
-                        text = "×",
-                        color = Color(0xFF475569),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 18.dp)
-                    )
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "HEIGHT", color = Color(0xFF64748B), fontSize = 10.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
-                        Spacer(modifier = Modifier.height(6.dp))
-                        EzzTextField(
-                            value = heightInput,
-                            onValueChange = { raw ->
-                                val digits = raw.filter { it.isDigit() }
-                                heightInput = digits
-                                val num = digits.toIntOrNull()
-                                if (num != null && num in 240..4320) {
-                                    viewModel.updateWindowDefaults(settings.defaultWindowWidth, num, settings.defaultFullscreen)
-                                }
-                            },
-                            placeholder = "480",
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-
-                // Presets Chips
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = "Presets:", color = Color(0xFF64748B), fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                    presets.forEach { (res, label) ->
-                        val isSelected = settings.defaultWindowWidth == res.first && settings.defaultWindowHeight == res.second
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (isSelected) Color(0xFF1E1730) else Color(0xFF12151D))
-                                .border(
-                                    1.dp,
-                                    if (isSelected) Color(0xFF8B5CF6) else Color(0xFF1F2432),
-                                    RoundedCornerShape(6.dp)
-                                )
-                                .clickable {
-                                    widthInput = res.first.toString()
-                                    heightInput = res.second.toString()
-                                    viewModel.updateWindowDefaults(res.first, res.second, settings.defaultFullscreen)
-                                }
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = label,
-                                color = if (isSelected) Color.White else Color(0xFF94A3B8),
-                                fontSize = 11.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
-                    }
-                }
-
-                HorizontalDivider(color = Color(0xFF161A24))
-
-                // Fullscreen Toggle Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(text = "Launch in Fullscreen", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        Text(text = "Start Minecraft in fullscreen mode by default.", color = Color(0xFF64748B), fontSize = 11.5.sp)
-                    }
-                    EzzToggle(
-                        checked = settings.defaultFullscreen,
-                        onCheckedChange = { checked ->
-                            viewModel.updateWindowDefaults(settings.defaultWindowWidth, settings.defaultWindowHeight, checked)
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-
-// =============================================================================
-// SECTION 3: DISCORD CONTENT
-// =============================================================================
-
-@Composable
-private fun DiscordSection(
-    settings: LauncherSettings,
-    viewModel: AppViewModel
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        SectionHeader(
-            title = "DISCORD",
-            subtitle = "Configure Discord Rich Presence integration."
-        )
-
-        EzzCard(
-            modifier = Modifier.fillMaxWidth(),
-            cornerRadius = 12.dp,
-            backgroundColor = Color(0xFF10131A),
-            borderColor = Color(0xFF1B1F2C)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(end = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(text = "Discord Rich Presence", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                        EzzBadge(
-                            text = if (settings.enableDiscordRpc) "ACTIVE" else "OFF",
-                            variant = if (settings.enableDiscordRpc) EzzBadgeVariant.SUCCESS else EzzBadgeVariant.NEUTRAL
-                        )
-                    }
-                    Text(
-                        text = "Show your active Minecraft instance and playtime in Discord.",
-                        color = Color(0xFF64748B),
-                        fontSize = 11.5.sp
-                    )
-                }
-
-                EzzToggle(
-                    checked = settings.enableDiscordRpc,
-                    onCheckedChange = { viewModel.updateDiscordRpc(it) }
-                )
-            }
-        }
-    }
-}
-
-// =============================================================================
-// SECTION 4: UPDATES & VERSION CONTENT
-// =============================================================================
-
-@Composable
-private fun UpdatesVersionSection(
-    currentVer: String,
-    latestVer: String,
-    hasUpdate: Boolean,
-    latestRelease: SupabaseLauncherReleaseDto?,
-    isCheckingUpdates: Boolean,
-    updateError: String?,
-    isVerifiedAdmin: Boolean,
-    viewModel: AppViewModel,
-    onOpenReleaseManager: () -> Unit,
-    onShowChangelog: (SupabaseLauncherReleaseDto) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        SectionHeader(
-            title = "UPDATES & VERSION",
-            subtitle = "Check for launcher updates and manage releases."
-        )
-
-        EzzCard(
-            modifier = Modifier.fillMaxWidth(),
-            cornerRadius = 12.dp,
-            backgroundColor = Color(0xFF10131A),
-            borderColor = Color(0xFF1B1F2C)
-        ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(text = "Current Version", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                            EzzBadge(text = "v$currentVer", variant = EzzBadgeVariant.PRIMARY)
-                            when {
-                                hasUpdate -> EzzBadge(text = "Update Available: v$latestVer", variant = EzzBadgeVariant.WARNING)
-                                isCheckingUpdates -> EzzBadge(text = "Checking...", variant = EzzBadgeVariant.NEUTRAL)
-                                else -> EzzBadge(text = "Up to date", variant = EzzBadgeVariant.SUCCESS)
-                            }
-                        }
-                        Text(text = "Ezz Launcher is maintained through verified releases.", color = Color(0xFF64748B), fontSize = 11.5.sp)
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        EzzButton(
-                            text = if (isCheckingUpdates) "Checking..." else "Check for Updates",
-                            icon = Icons.Default.Refresh,
-                            size = EzzButtonSize.SMALL,
-                            variant = EzzButtonVariant.SECONDARY,
-                            isLoading = isCheckingUpdates,
-                            onClick = { viewModel.checkForUpdates() }
-                        )
-
-                        // Admin Release Manager: Exclusively for genuinely verified Microsoft admin
-                        if (isVerifiedAdmin) {
-                            EzzButton(
-                                text = "Admin Release Manager",
-                                icon = Icons.Default.Publish,
-                                size = EzzButtonSize.SMALL,
-                                variant = EzzButtonVariant.PRIMARY,
-                                onClick = onOpenReleaseManager
-                            )
-                        }
-                    }
-                }
-
-                if (hasUpdate && latestRelease != null) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF1B1426))
-                            .border(1.dp, Color(0xFF4C2A78), RoundedCornerShape(8.dp))
-                            .padding(14.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(text = "Official Release v${latestRelease.version} Ready", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                Text(text = "An official build is published and available for download.", color = Color(0xFF94A3B8), fontSize = 11.sp)
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                EzzButton(
-                                    text = "Release Notes",
-                                    size = EzzButtonSize.SMALL,
-                                    variant = EzzButtonVariant.SECONDARY,
-                                    onClick = { onShowChangelog(latestRelease) }
-                                )
-                                val dlUrl = latestRelease.downloadUrl
-                                if (dlUrl != null) {
-                                    EzzButton(
-                                        text = "Download",
-                                        icon = Icons.Default.Download,
-                                        size = EzzButtonSize.SMALL,
-                                        variant = EzzButtonVariant.PRIMARY,
-                                        onClick = { viewModel.platformBridge.openUrl(dlUrl) }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                } else if (updateError != null) {
-                    Text(text = updateError, color = Color(0xFFEF4444), fontSize = 11.5.sp)
-                }
-            }
-        }
-    }
-}
-
-// =============================================================================
-// SECTION 5: ADMIN IDENTITY CONTENT
-// =============================================================================
-
-@Composable
-private fun AdminIdentitySection(
-    selectedAccount: io.ezz.launcher.core.model.account.Account?,
-    isMicrosoft: Boolean,
-    isVerifiedAdmin: Boolean,
-    isCheckingAdmin: Boolean,
-    githubStatus: GitHubConnectionStatus,
-    viewModel: AppViewModel,
-    onConnectGitHub: () -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        SectionHeader(
-            title = "ADMIN IDENTITY",
-            subtitle = "Account authorization status for developer and release privileges."
-        )
-
-        EzzCard(
-            modifier = Modifier.fillMaxWidth(),
-            cornerRadius = 12.dp,
-            backgroundColor = Color(0xFF10131A),
-            borderColor = if (isVerifiedAdmin) Color(0xFF1B3D2B) else Color(0xFF1B1F2C)
-        ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                val accountName = selectedAccount?.username ?: "No Active Account"
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(text = "EZZ Launcher Admin Identity", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                        Text(text = "Authorization verified via Microsoft ID and cryptographic checks.", color = Color(0xFF64748B), fontSize = 11.5.sp)
-                    }
-
-                    if (isCheckingAdmin) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color(0xFF8B5CF6))
-                    } else if (isVerifiedAdmin) {
-                        EzzBadge(text = "✓ ADMIN VERIFIED", variant = EzzBadgeVariant.SUCCESS)
-                    } else {
-                        EzzBadge(text = "NOT AUTHORIZED", variant = EzzBadgeVariant.NEUTRAL)
-                    }
-                }
-
-                HorizontalDivider(color = Color(0xFF161A24))
-
-                if (isVerifiedAdmin) {
-                    // Authorized Microsoft KrysolDev view
-                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        // Microsoft Account
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(text = "Microsoft Account", color = Color(0xFF64748B), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                Text(text = accountName, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF10B981)))
-                                    Text(text = "Microsoft • Connected", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                                }
-                            }
-                            EzzBadge(text = "KrysolDev Verified", variant = EzzBadgeVariant.SUCCESS)
-                        }
-
-                        HorizontalDivider(color = Color(0xFF161A24))
-
-                        // GitHub Pipeline
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(text = "GitHub Release Pipeline", color = Color(0xFF64748B), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                when (val gh = githubStatus) {
-                                    is GitHubConnectionStatus.Connected -> {
-                                        Text(text = gh.username, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF10B981)))
-                                            Text(text = "Connected • Authorized", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                                        }
-                                    }
-                                    else -> {
-                                        Text(text = "Not Connected", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                        Text(text = "Ready to connect GitHub token for publishing releases", color = Color(0xFF64748B), fontSize = 11.sp)
-                                    }
-                                }
-                            }
-
-                            when (githubStatus) {
-                                is GitHubConnectionStatus.Connected -> {
-                                    EzzButton(
-                                        text = "Disconnect GitHub",
-                                        size = EzzButtonSize.SMALL,
-                                        variant = EzzButtonVariant.SECONDARY,
-                                        onClick = { viewModel.disconnectGitHub() }
-                                    )
-                                }
-                                else -> {
-                                    EzzButton(
-                                        text = "Connect GitHub",
-                                        icon = Icons.Default.Link,
-                                        size = EzzButtonSize.SMALL,
-                                        variant = EzzButtonVariant.PRIMARY,
-                                        onClick = onConnectGitHub
-                                    )
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // Unauthorized / Offline Account view
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(text = accountName, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                            Text(
-                                text = if (isMicrosoft) "Microsoft Account (Unrecognized Admin)" else "Offline Account",
-                                color = Color(0xFF94A3B8),
-                                fontSize = 12.sp
-                            )
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF141720))
-                                .border(1.dp, Color(0xFF1E2332), RoundedCornerShape(8.dp))
-                                .padding(12.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Info,
-                                    contentDescription = null,
-                                    tint = Color(0xFF94A3B8),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Text(
-                                    text = "Admin access requires the authorized Microsoft account. Offline accounts or non-admin profiles cannot access release operations.",
-                                    color = Color(0xFF94A3B8),
-                                    fontSize = 12.sp
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// =============================================================================
-// SECTION HEADER COMPONENT
-// =============================================================================
-
-@Composable
-private fun SectionHeader(
-    title: String,
-    subtitle: String
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(
-            text = title,
-            color = Color(0xFF8B5CF6),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp
-        )
-        Text(
-            text = subtitle,
-            color = Color(0xFF64748B),
-            fontSize = 12.sp
-        )
     }
 }
 
