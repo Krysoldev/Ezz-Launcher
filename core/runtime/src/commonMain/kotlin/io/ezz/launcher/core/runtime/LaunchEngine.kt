@@ -11,6 +11,7 @@ import io.ezz.launcher.core.minecraft.resolver.LibraryResolver
 import io.ezz.launcher.core.minecraft.resolver.NativeExtractor
 import io.ezz.launcher.core.minecraft.resolver.OperatingSystem
 import io.ezz.launcher.core.model.account.Account
+import io.ezz.launcher.core.model.account.AccountType
 import io.ezz.launcher.core.model.account.OfflineAccount
 import io.ezz.launcher.core.model.download.DownloadProgress
 import io.ezz.launcher.core.model.download.DownloadResult
@@ -363,6 +364,7 @@ class LaunchEngine(
             emit(LaunchEvent.StateChanged(ProcessState.Preparing("Starting Minecraft Java Process...", 0.99f)))
 
             val launchStartTime = System.currentTimeMillis()
+            var runningPid: Long = 0L
 
             processLauncher.launch(
                 command = launchCommand,
@@ -372,13 +374,28 @@ class LaunchEngine(
             ).collect { event ->
                 when (event) {
                     is ProcessEvent.Started -> {
+                        runningPid = event.pid
                         val processStartedAt = System.currentTimeMillis()
                         emit(LaunchEvent.StateChanged(ProcessState.Running(processId = event.pid, startedAt = processStartedAt)))
                         emit(LaunchEvent.LogReceived("=== Process Started (PID: ${event.pid}) ===", isError = false))
 
+                        val resolvedAvatarUrl = when (validAccount.type) {
+                            AccountType.MICROSOFT -> {
+                                validAccount.avatarUrl?.takeIf { it.startsWith("http", ignoreCase = true) }
+                                    ?: "https://minotar.net/helm/${validAccount.uuid.replace("-", "")}/128.png"
+                            }
+                            AccountType.OFFLINE -> {
+                                validAccount.avatarUrl?.takeIf { it.startsWith("http", ignoreCase = true) }
+                                    ?: "https://minotar.net/helm/${validAccount.username}/128.png"
+                            }
+                        }
+
                         discordRpcService?.updateActivity(
-                            instanceName = instance.name,
+                            playerUsername = validAccount.username,
                             minecraftVersion = instance.minecraftVersion,
+                            instanceName = instance.name,
+                            playerUuid = validAccount.uuid,
+                            avatarUrl = resolvedAvatarUrl,
                             startedAtMs = processStartedAt,
                             processId = event.pid,
                             enabled = currentSettings.enableDiscordRpc
@@ -395,7 +412,7 @@ class LaunchEngine(
                         emit(LaunchEvent.LogReceived(event.line, event.isError))
                     }
                     is ProcessEvent.Terminated -> {
-                        discordRpcService?.clearActivity()
+                        discordRpcService?.clearActivity(processId = runningPid)
                         val playTimeSeconds = (System.currentTimeMillis() - launchStartTime) / 1000L
 
                         if (event.exitCode == 0) {

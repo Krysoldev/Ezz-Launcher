@@ -26,7 +26,7 @@ enum class DiscordRpcStatus {
 }
 
 class DiscordRpcService(
-    private val clientId: String = "1346000000000000000",
+    private val clientId: String = "1533440955116556339",
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
@@ -37,14 +37,17 @@ class DiscordRpcService(
     private var isHandshakeDone = false
 
     fun updateActivity(
-        instanceName: String,
+        playerUsername: String,
         minecraftVersion: String,
+        instanceName: String? = null,
+        playerUuid: String? = null,
+        avatarUrl: String? = null,
         startedAtMs: Long = System.currentTimeMillis(),
         processId: Long = 0L,
         enabled: Boolean = true
     ) {
         if (!enabled) {
-            clearActivity()
+            clearActivity(processId)
             return
         }
 
@@ -52,29 +55,15 @@ class DiscordRpcService(
             try {
                 if (!ensureConnected()) return@launch
 
-                val startEpochSeconds = startedAtMs / 1000L
-                val nonce = UUID.randomUUID().toString()
-
-                val payload = buildJsonObject {
-                    put("cmd", "SET_ACTIVITY")
-                    putJsonObject("args") {
-                        put("pid", if (processId > 0) processId else ProcessHandle.current().pid())
-                        putJsonObject("activity") {
-                            put("details", "Instance: $instanceName")
-                            put("state", "Playing Minecraft $minecraftVersion")
-                            putJsonObject("timestamps") {
-                                put("start", startEpochSeconds)
-                            }
-                            putJsonObject("assets") {
-                                put("large_image", "ezz_logo")
-                                put("large_text", "Ezz Launcher")
-                                put("small_image", "minecraft")
-                                put("small_text", "MC $minecraftVersion")
-                            }
-                        }
-                    }
-                    put("nonce", nonce)
-                }.toString()
+                val payload = buildActivityPayload(
+                    playerUsername = playerUsername,
+                    minecraftVersion = minecraftVersion,
+                    instanceName = instanceName,
+                    playerUuid = playerUuid,
+                    avatarUrl = avatarUrl,
+                    startedAtMs = startedAtMs,
+                    processId = processId
+                )
 
                 sendFrame(1, payload)
             } catch (e: Throwable) {
@@ -83,7 +72,64 @@ class DiscordRpcService(
         }
     }
 
-    fun clearActivity() {
+    internal fun resolveAvatarUrl(
+        avatarUrl: String?,
+        playerUuid: String?,
+        playerUsername: String
+    ): String {
+        return when {
+            !avatarUrl.isNullOrBlank() && avatarUrl.startsWith("http", ignoreCase = true) -> avatarUrl
+            !playerUuid.isNullOrBlank() -> "https://minotar.net/helm/${playerUuid.replace("-", "")}/128.png"
+            playerUsername.isNotBlank() -> "https://minotar.net/helm/$playerUsername/128.png"
+            else -> "https://minotar.net/helm/Steve/128.png"
+        }
+    }
+
+    @Suppress("UNUSED_PARAMETER")
+    internal fun buildActivityPayload(
+        playerUsername: String,
+        minecraftVersion: String,
+        instanceName: String? = null,
+        playerUuid: String? = null,
+        avatarUrl: String? = null,
+        startedAtMs: Long = System.currentTimeMillis(),
+        processId: Long = 0L,
+        nonce: String = UUID.randomUUID().toString()
+    ): String {
+        val startEpochSeconds = startedAtMs / 1000L
+        val cleanVersion = if (minecraftVersion.startsWith("Minecraft", ignoreCase = true)) {
+            minecraftVersion
+        } else {
+            "Minecraft $minecraftVersion"
+        }
+        val effectiveAvatarUrl = resolveAvatarUrl(avatarUrl, playerUuid, playerUsername)
+        val visibleName = playerUsername.ifBlank { "Player" }
+
+        return buildJsonObject {
+            put("cmd", "SET_ACTIVITY")
+            putJsonObject("args") {
+                put("pid", if (processId > 0) processId else ProcessHandle.current().pid())
+                putJsonObject("activity") {
+                    put("name", visibleName)
+                    put("type", 0)
+                    put("details", "Playing Minecraft")
+                    put("state", cleanVersion)
+                    putJsonObject("timestamps") {
+                        put("start", startEpochSeconds)
+                    }
+                    putJsonObject("assets") {
+                        put("large_image", "ezzlauncher")
+                        put("large_text", "Ezz Launcher")
+                        put("small_image", effectiveAvatarUrl)
+                        put("small_text", visibleName)
+                    }
+                }
+            }
+            put("nonce", nonce)
+        }.toString()
+    }
+
+    fun clearActivity(processId: Long = 0L) {
         scope.launch {
             try {
                 if (isHandshakeDone && activePipe != null) {
@@ -91,7 +137,8 @@ class DiscordRpcService(
                     val payload = buildJsonObject {
                         put("cmd", "SET_ACTIVITY")
                         putJsonObject("args") {
-                            put("pid", ProcessHandle.current().pid())
+                            put("pid", if (processId > 0) processId else ProcessHandle.current().pid())
+                            put("activity", null as String?)
                         }
                         put("nonce", nonce)
                     }.toString()
