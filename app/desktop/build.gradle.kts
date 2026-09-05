@@ -49,7 +49,13 @@ compose.desktop {
                 iconFile.set(project.file("src/jvmMain/resources/icon.ico"))
                 menu = true
                 shortcut = true
+                console = false
+                dirChooser = true
             }
+        }
+
+        buildTypes.release.proguard {
+            isEnabled.set(false)
         }
     }
 }

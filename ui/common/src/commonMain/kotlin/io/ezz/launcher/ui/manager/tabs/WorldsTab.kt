@@ -39,6 +39,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import io.ezz.launcher.ui.components.EzzSearchField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -79,8 +80,15 @@ fun WorldsTab(
     var renameText by remember { mutableStateOf("") }
     var duplicateText by remember { mutableStateOf("") }
 
-    val filteredWorlds = worlds.filter { world ->
-        worldSearch.isBlank() || world.name.contains(worldSearch, ignoreCase = true) || world.folderName.contains(worldSearch, ignoreCase = true)
+    val filteredWorlds = remember(worlds, worldSearch) {
+        val q = worldSearch.trim()
+        worlds.filter { world ->
+            q.isBlank() ||
+                world.name.contains(q, ignoreCase = true) ||
+                world.folderName.contains(q, ignoreCase = true) ||
+                world.gameType.contains(q, ignoreCase = true) ||
+                (world.version?.contains(q, ignoreCase = true) == true)
+        }
     }
 
     Column(
@@ -94,33 +102,12 @@ fun WorldsTab(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextField(
+            EzzSearchField(
                 value = worldSearch,
                 onValueChange = { worldSearch = it },
-                placeholder = { Text("Search worlds...", color = Color(0xFF94A3B8), fontSize = 13.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(16.dp)) },
-                trailingIcon = {
-                    if (worldSearch.isNotBlank()) {
-                        IconButton(onClick = { worldSearch = "" }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF94A3B8), modifier = Modifier.size(16.dp))
-                        }
-                    }
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(42.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF101318))
-                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp)),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFF101318),
-                    unfocusedContainerColor = Color(0xFF101318),
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
-                ),
-                singleLine = true
+                placeholder = "Search worlds...",
+                modifier = Modifier.weight(1f),
+                onClear = { worldSearch = "" }
             )
 
             Spacer(modifier = Modifier.width(12.dp))
@@ -214,6 +201,14 @@ fun WorldsTab(
                                 size = EzzButtonSize.MEDIUM
                             )
                         }
+                    } else {
+                        EzzButton(
+                            text = "Clear Search",
+                            onClick = { worldSearch = "" },
+                            icon = Icons.Default.Clear,
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.MEDIUM
+                        )
                     }
                 }
             }

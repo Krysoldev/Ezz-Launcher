@@ -43,8 +43,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
+import io.ezz.launcher.ui.components.EzzSearchField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -286,11 +285,12 @@ private fun InstalledPacksView(
     onBrowseClick: () -> Unit
 ) {
     val filtered = remember(installedPacks, localSearch, localFilter) {
+        val q = localSearch.trim()
         installedPacks.filter { pack ->
-            val matchesSearch = localSearch.isBlank() ||
-                pack.name.contains(localSearch, ignoreCase = true) ||
-                pack.fileName.contains(localSearch, ignoreCase = true) ||
-                (pack.description?.contains(localSearch, ignoreCase = true) == true)
+            val matchesSearch = q.isBlank() ||
+                pack.name.contains(q, ignoreCase = true) ||
+                pack.fileName.contains(q, ignoreCase = true) ||
+                (pack.description?.contains(q, ignoreCase = true) == true)
             val matchesFilter = when (localFilter) {
                 "ENABLED" -> pack.enabled
                 "DISABLED" -> !pack.enabled
@@ -307,33 +307,12 @@ private fun InstalledPacksView(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextField(
+            EzzSearchField(
                 value = localSearch,
                 onValueChange = onSearchChange,
-                placeholder = { Text("Search installed resource packs...", color = Color(0xFF64748B), fontSize = 13.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF64748B), modifier = Modifier.size(16.dp)) },
-                trailingIcon = {
-                    if (localSearch.isNotBlank()) {
-                        IconButton(onClick = { onSearchChange("") }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF64748B), modifier = Modifier.size(16.dp))
-                        }
-                    }
-                },
-                modifier = Modifier
-                    .width(280.dp)
-                    .height(38.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF101318))
-                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp)),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFF101318),
-                    unfocusedContainerColor = Color(0xFF101318),
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
-                ),
-                singleLine = true
+                placeholder = "Search resource packs...",
+                modifier = Modifier.width(280.dp),
+                onClear = { onSearchChange("") }
             )
 
             // Status Filter Chips
@@ -508,6 +487,17 @@ private fun InstalledPacksView(
                                 size = EzzButtonSize.MEDIUM
                             )
                         }
+                    } else {
+                        EzzButton(
+                            text = "Clear Search & Filters",
+                            onClick = {
+                                onSearchChange("")
+                                onFilterChange("ALL")
+                            },
+                            icon = Icons.Default.Clear,
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.MEDIUM
+                        )
                     }
                 }
             }
@@ -695,7 +685,7 @@ private fun BrowseResourcePacksView(
     onInspect: (ModrinthProjectHit) -> Unit,
     onInstall: (ModrinthProjectHit) -> Unit
 ) {
-    var searchQuery by remember(browseState.searchQuery) { mutableStateOf(browseState.searchQuery) }
+    var searchQuery by remember(instance.id) { mutableStateOf(browseState.searchQuery) }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // Search & Sort Bar
@@ -704,39 +694,18 @@ private fun BrowseResourcePacksView(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextField(
+            EzzSearchField(
                 value = searchQuery,
                 onValueChange = {
                     searchQuery = it
                     viewModel.searchResourcePacks(query = it, debounceMs = 350L)
                 },
-                placeholder = { Text("Search Modrinth resource packs (e.g. Faithful, Bare Bones, Fresh Animations)...", color = Color(0xFF94A3B8), fontSize = 13.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(16.dp)) },
-                trailingIcon = {
-                    if (searchQuery.isNotBlank()) {
-                        IconButton(onClick = {
-                            searchQuery = ""
-                            viewModel.searchResourcePacks(query = "")
-                        }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF94A3B8), modifier = Modifier.size(16.dp))
-                        }
-                    }
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(42.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF101318))
-                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp)),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFF101318),
-                    unfocusedContainerColor = Color(0xFF101318),
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
-                ),
-                singleLine = true
+                placeholder = "Search resource packs...",
+                modifier = Modifier.weight(1f),
+                onClear = {
+                    searchQuery = ""
+                    viewModel.searchResourcePacks(query = "")
+                }
             )
 
             // Sort Options
@@ -828,7 +797,28 @@ private fun BrowseResourcePacksView(
                     .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No resource packs found matching your query.", color = Color(0xFF94A3B8), fontSize = 14.sp)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF64748B), modifier = Modifier.size(36.dp))
+                    Text("No results found", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("Try a different search or clear your active filters.", color = Color(0xFF94A3B8), fontSize = 13.sp)
+                    if (searchQuery.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        EzzButton(
+                            text = "Clear Search",
+                            onClick = {
+                                searchQuery = ""
+                                viewModel.searchResourcePacks(query = "")
+                            },
+                            icon = Icons.Default.Clear,
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.SMALL
+                        )
+                    }
+                }
             }
         } else {
             LazyColumn(

@@ -453,6 +453,7 @@ class AppViewModel(
     val curseForgeDownloadingMod = MutableStateFlow<String?>(null)
     val curseForgeDownloadProgress = MutableStateFlow(0f)
     private var searchCurseForgeModsJob: Job? = null
+    private var curseForgeSearchSeq = 0L
 
     // Safe File Conflict Prompt State
     val fileConflictState = MutableStateFlow<FileConflictState?>(null)
@@ -465,7 +466,9 @@ class AppViewModel(
 
     private var searchModsJob: Job? = null
     private var searchResourcePacksJob: Job? = null
+    private var resourcePacksSearchSeq = 0L
     private var searchShadersJob: Job? = null
+    private var shadersSearchSeq = 0L
     private var loadLogJob: Job? = null
     private var liveLogJob: Job? = null
 
@@ -668,7 +671,16 @@ class AppViewModel(
             manageScreenshots.value = emptyList()
             manageLogs.value = emptyList()
             _installedMods.value = emptyList()
-            curseForgeModsBrowseState.value = CurseForgeBrowseState()
+            curseForgeModsBrowseState.value = CurseForgeBrowseState(
+                selectedGameVersion = instance.minecraftVersion,
+                selectedLoader = CurseForgeModLoaderType.fromLoaderName(instance.loaderType.name)
+            )
+            resourcePacksBrowseState.value = ModrinthBrowseState(
+                selectedGameVersion = instance.minecraftVersion
+            )
+            shadersBrowseState.value = ModrinthBrowseState(
+                selectedGameVersion = instance.minecraftVersion
+            )
             fileConflictState.value = null
         }
         _selectedInstance.value = instance
@@ -2297,7 +2309,8 @@ class AppViewModel(
     ) {
         val instance = _selectedInstance.value ?: return
         val current = curseForgeModsBrowseState.value
-        val newQuery = query ?: current.searchQuery
+        val rawQuery = query ?: current.searchQuery
+        val trimmedQuery = rawQuery.trim()
         val newPage = page ?: (if (query != null || sort != null) 1 else current.page)
         val newSort = sort ?: current.selectedSort
 
@@ -2305,7 +2318,7 @@ class AppViewModel(
         val loaderType = CurseForgeModLoaderType.fromLoaderName(instance.loaderType.name)
 
         curseForgeModsBrowseState.value = current.copy(
-            searchQuery = newQuery,
+            searchQuery = rawQuery,
             page = newPage,
             selectedGameVersion = mcVersion,
             selectedLoader = loaderType,
@@ -2314,19 +2327,22 @@ class AppViewModel(
             error = null
         )
 
+        val reqId = ++curseForgeSearchSeq
         searchCurseForgeModsJob?.cancel()
         searchCurseForgeModsJob = scope.launch {
             if (debounceMs > 0) delay(debounceMs)
+            if (reqId != curseForgeSearchSeq) return@launch
             try {
                 val offset = (newPage - 1) * current.pageSize
                 val res = curseForge.searchMods(
-                    query = newQuery,
+                    query = trimmedQuery,
                     gameVersion = mcVersion,
                     modLoaderType = loaderType,
                     sortField = newSort,
                     index = offset,
                     pageSize = current.pageSize
                 )
+                if (reqId != curseForgeSearchSeq) return@launch
 
                 val totalCount = res.pagination?.totalCount ?: res.data.size.toLong()
                 val totalPages = maxOf(1, kotlin.math.ceil(totalCount.toDouble() / current.pageSize).toInt())
@@ -2340,9 +2356,10 @@ class AppViewModel(
                 )
             } catch (e: Throwable) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
+                if (reqId != curseForgeSearchSeq) return@launch
                 curseForgeModsBrowseState.value = curseForgeModsBrowseState.value.copy(
                     isLoading = false,
-                    error = "Failed to load mods from CurseForge: ${e.message}"
+                    error = "Couldn't search mods."
                 )
             }
         }
@@ -2839,7 +2856,8 @@ class AppViewModel(
     ) {
         val instance = _selectedInstance.value ?: return
         val current = resourcePacksBrowseState.value
-        val newQuery = query ?: current.searchQuery
+        val rawQuery = query ?: current.searchQuery
+        val trimmedQuery = rawQuery.trim()
         val newPage = page ?: (if (query != null || version != null || resolution != null || category != null || sort != null) 1 else current.page)
         val newVersion = version ?: current.selectedGameVersion ?: instance.minecraftVersion
         val newResolution = if (resolution == "ALL") null else (resolution ?: current.selectedResolution)
@@ -2847,7 +2865,7 @@ class AppViewModel(
         val newSort = sort ?: current.selectedSort
 
         resourcePacksBrowseState.value = current.copy(
-            searchQuery = newQuery,
+            searchQuery = rawQuery,
             page = newPage,
             selectedGameVersion = newVersion,
             selectedResolution = newResolution,
@@ -2857,9 +2875,11 @@ class AppViewModel(
             error = null
         )
 
+        val reqId = ++resourcePacksSearchSeq
         searchResourcePacksJob?.cancel()
         searchResourcePacksJob = scope.launch {
             if (debounceMs > 0) delay(debounceMs)
+            if (reqId != resourcePacksSearchSeq) return@launch
             try {
                 val versions = if (!newVersion.isNullOrBlank()) listOf(newVersion) else null
                 val catList = mutableListOf<String>()
@@ -2869,13 +2889,14 @@ class AppViewModel(
                 val offset = (newPage - 1) * current.pageSize
 
                 val res = modrinth.searchResourcePacks(
-                    query = newQuery,
+                    query = trimmedQuery,
                     gameVersions = versions,
                     categories = categories,
                     index = newSort,
                     offset = offset,
                     limit = current.pageSize
                 )
+                if (reqId != resourcePacksSearchSeq) return@launch
 
                 val validHits = res.hits.filter { it.projectType.equals("resourcepack", ignoreCase = true) }
                 val totalPages = maxOf(1, kotlin.math.ceil(res.totalHits.toDouble() / current.pageSize).toInt())
@@ -2889,6 +2910,7 @@ class AppViewModel(
                 )
             } catch (e: Throwable) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
+                if (reqId != resourcePacksSearchSeq) return@launch
                 resourcePacksBrowseState.value = resourcePacksBrowseState.value.copy(
                     isLoading = false,
                     error = "Failed to load resource packs from Modrinth: ${e.message}"
@@ -2912,14 +2934,15 @@ class AppViewModel(
     ) {
         val instance = _selectedInstance.value ?: return
         val current = shadersBrowseState.value
-        val newQuery = query ?: current.searchQuery
+        val rawQuery = query ?: current.searchQuery
+        val trimmedQuery = rawQuery.trim()
         val newPage = page ?: (if (query != null || version != null || category != null || sort != null) 1 else current.page)
         val newVersion = version ?: current.selectedGameVersion ?: instance.minecraftVersion
         val newCategory = if (category == "ALL") null else (category ?: current.selectedCategory)
         val newSort = sort ?: current.selectedSort
 
         shadersBrowseState.value = current.copy(
-            searchQuery = newQuery,
+            searchQuery = rawQuery,
             page = newPage,
             selectedGameVersion = newVersion,
             selectedCategory = newCategory,
@@ -2928,22 +2951,25 @@ class AppViewModel(
             error = null
         )
 
+        val reqId = ++shadersSearchSeq
         searchShadersJob?.cancel()
         searchShadersJob = scope.launch {
             if (debounceMs > 0) delay(debounceMs)
+            if (reqId != shadersSearchSeq) return@launch
             try {
                 val versions = if (!newVersion.isNullOrBlank()) listOf(newVersion) else null
                 val categories = if (!newCategory.isNullOrBlank()) listOf(newCategory) else null
                 val offset = (newPage - 1) * current.pageSize
 
                 val res = modrinth.searchShaders(
-                    query = newQuery,
+                    query = trimmedQuery,
                     gameVersions = versions,
                     categories = categories,
                     index = newSort,
                     offset = offset,
                     limit = current.pageSize
                 )
+                if (reqId != shadersSearchSeq) return@launch
 
                 val validHits = res.hits.filter { it.projectType.equals("shader", ignoreCase = true) }
                 val totalPages = maxOf(1, kotlin.math.ceil(res.totalHits.toDouble() / current.pageSize).toInt())
@@ -2957,6 +2983,7 @@ class AppViewModel(
                 )
             } catch (e: Throwable) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
+                if (reqId != shadersSearchSeq) return@launch
                 shadersBrowseState.value = shadersBrowseState.value.copy(
                     isLoading = false,
                     error = "Failed to load shaders from Modrinth: ${e.message}"

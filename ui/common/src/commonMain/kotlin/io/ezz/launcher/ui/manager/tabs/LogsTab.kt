@@ -45,8 +45,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
+import io.ezz.launcher.ui.components.EzzSearchField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -139,8 +138,9 @@ fun LogsTab(
         if (currentLines.isEmpty()) {
             emptyList()
         } else {
+            val q = searchQuery.trim()
             currentLines.filter { line ->
-                val matchesSearch = searchQuery.isBlank() || line.text.contains(searchQuery, ignoreCase = true)
+                val matchesSearch = q.isBlank() || line.text.contains(q, ignoreCase = true)
                 val matchesLevel = when (levelFilter) {
                     "ERROR" -> line.level == LogSeverityLevel.ERROR
                     "WARN" -> line.level == LogSeverityLevel.WARN
@@ -269,33 +269,12 @@ fun LogsTab(
                 }
 
                 // Search Input Field
-                TextField(
+                EzzSearchField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    placeholder = { Text("Search log lines...", color = Color(0xFF94A3B8), fontSize = 12.sp) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(15.dp)) },
-                    trailingIcon = {
-                        if (searchQuery.isNotBlank()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF94A3B8), modifier = Modifier.size(15.dp))
-                            }
-                        }
-                    },
-                    modifier = Modifier
-                        .width(220.dp)
-                        .height(38.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF101318))
-                        .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp)),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color(0xFF101318),
-                        unfocusedContainerColor = Color(0xFF101318),
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent
-                    ),
-                    singleLine = true
+                    placeholder = "Search log lines...",
+                    modifier = Modifier.width(220.dp),
+                    onClear = { searchQuery = "" }
                 )
             }
 

@@ -44,8 +44,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
+import io.ezz.launcher.ui.components.EzzSearchField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -287,10 +286,12 @@ private fun InstalledShadersView(
     onBrowseClick: () -> Unit
 ) {
     val filtered = remember(installedShaders, localSearch, localFilter) {
+        val q = localSearch.trim()
         installedShaders.filter { shader ->
-            val matchesSearch = localSearch.isBlank() ||
-                shader.name.contains(localSearch, ignoreCase = true) ||
-                shader.fileName.contains(localSearch, ignoreCase = true)
+            val matchesSearch = q.isBlank() ||
+                shader.name.contains(q, ignoreCase = true) ||
+                shader.fileName.contains(q, ignoreCase = true) ||
+                (shader.description?.contains(q, ignoreCase = true) == true)
             val matchesFilter = when (localFilter) {
                 "ENABLED" -> shader.enabled
                 "DISABLED" -> !shader.enabled
@@ -307,33 +308,12 @@ private fun InstalledShadersView(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextField(
+            EzzSearchField(
                 value = localSearch,
                 onValueChange = onSearchChange,
-                placeholder = { Text("Search installed shaderpacks...", color = Color(0xFF64748B), fontSize = 13.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF64748B), modifier = Modifier.size(16.dp)) },
-                trailingIcon = {
-                    if (localSearch.isNotBlank()) {
-                        IconButton(onClick = { onSearchChange("") }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF64748B), modifier = Modifier.size(16.dp))
-                        }
-                    }
-                },
-                modifier = Modifier
-                    .width(280.dp)
-                    .height(38.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF101318))
-                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp)),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFF101318),
-                    unfocusedContainerColor = Color(0xFF101318),
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
-                ),
-                singleLine = true
+                placeholder = "Search shaders...",
+                modifier = Modifier.width(280.dp),
+                onClear = { onSearchChange("") }
             )
 
             // Status Filter Chips
@@ -508,6 +488,17 @@ private fun InstalledShadersView(
                                 size = EzzButtonSize.MEDIUM
                             )
                         }
+                    } else {
+                        EzzButton(
+                            text = "Clear Search & Filters",
+                            onClick = {
+                                onSearchChange("")
+                                onFilterChange("ALL")
+                            },
+                            icon = Icons.Default.Clear,
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.MEDIUM
+                        )
                     }
                 }
             }
@@ -693,7 +684,7 @@ private fun BrowseShadersView(
     onInspect: (ModrinthProjectHit) -> Unit,
     onInstall: (ModrinthProjectHit) -> Unit
 ) {
-    var searchQuery by remember(browseState.searchQuery) { mutableStateOf(browseState.searchQuery) }
+    var searchQuery by remember(instance.id) { mutableStateOf(browseState.searchQuery) }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // Search & Sort Bar
@@ -702,39 +693,18 @@ private fun BrowseShadersView(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextField(
+            EzzSearchField(
                 value = searchQuery,
                 onValueChange = {
                     searchQuery = it
                     viewModel.searchShaders(query = it, debounceMs = 350L)
                 },
-                placeholder = { Text("Search Modrinth shaders (e.g. Complementary, BSL, AstraLex)...", color = Color(0xFF94A3B8), fontSize = 13.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(16.dp)) },
-                trailingIcon = {
-                    if (searchQuery.isNotBlank()) {
-                        IconButton(onClick = {
-                            searchQuery = ""
-                            viewModel.searchShaders(query = "")
-                        }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF94A3B8), modifier = Modifier.size(16.dp))
-                        }
-                    }
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(42.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF101318))
-                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp)),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFF101318),
-                    unfocusedContainerColor = Color(0xFF101318),
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
-                ),
-                singleLine = true
+                placeholder = "Search shaders...",
+                modifier = Modifier.weight(1f),
+                onClear = {
+                    searchQuery = ""
+                    viewModel.searchShaders(query = "")
+                }
             )
 
             // Sort Options
@@ -826,7 +796,28 @@ private fun BrowseShadersView(
                     .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No shaders found matching your query.", color = Color(0xFF94A3B8), fontSize = 14.sp)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF64748B), modifier = Modifier.size(36.dp))
+                    Text("No results found", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("Try a different search or clear your active filters.", color = Color(0xFF94A3B8), fontSize = 13.sp)
+                    if (searchQuery.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        EzzButton(
+                            text = "Clear Search",
+                            onClick = {
+                                searchQuery = ""
+                                viewModel.searchShaders(query = "")
+                            },
+                            icon = Icons.Default.Clear,
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.SMALL
+                        )
+                    }
+                }
             }
         } else {
             LazyColumn(

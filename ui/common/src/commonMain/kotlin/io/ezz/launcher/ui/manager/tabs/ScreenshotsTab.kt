@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Image
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import io.ezz.launcher.ui.components.EzzSearchField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -66,11 +68,22 @@ fun ScreenshotsTab(
     val screenshots by viewModel.manageScreenshots.collectAsState()
     var sortNewestFirst by remember { mutableStateOf(true) }
 
+    var searchQuery by remember(instance.id) { mutableStateOf("") }
+
     val sortedScreenshots = remember(screenshots, sortNewestFirst) {
         if (sortNewestFirst) {
             screenshots.sortedByDescending { it.lastModified }
         } else {
             screenshots.sortedBy { it.lastModified }
+        }
+    }
+
+    val filteredScreenshots = remember(sortedScreenshots, searchQuery) {
+        val q = searchQuery.trim()
+        if (q.isBlank()) {
+            sortedScreenshots
+        } else {
+            sortedScreenshots.filter { it.fileName.contains(q, ignoreCase = true) }
         }
     }
 
@@ -85,38 +98,46 @@ fun ScreenshotsTab(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF101318))
-                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp))
-                    .padding(3.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (sortNewestFirst) Color(0xFF1A1E29) else Color.Transparent)
-                        .border(1.dp, if (sortNewestFirst) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
-                        .clickable { sortNewestFirst = true }
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Text("Newest First", color = if (sortNewestFirst) Color.White else Color(0xFF94A3B8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                }
-
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (!sortNewestFirst) Color(0xFF1A1E29) else Color.Transparent)
-                        .border(1.dp, if (!sortNewestFirst) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
-                        .clickable { sortNewestFirst = false }
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Text("Oldest First", color = if (!sortNewestFirst) Color.White else Color(0xFF94A3B8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                }
-            }
+            EzzSearchField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = "Search screenshots...",
+                modifier = Modifier.width(280.dp),
+                onClear = { searchQuery = "" }
+            )
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF101318))
+                        .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp))
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (sortNewestFirst) Color(0xFF1A1E29) else Color.Transparent)
+                            .border(1.dp, if (sortNewestFirst) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
+                            .clickable { sortNewestFirst = true }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text("Newest First", color = if (sortNewestFirst) Color.White else Color(0xFF94A3B8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (!sortNewestFirst) Color(0xFF1A1E29) else Color.Transparent)
+                            .border(1.dp, if (!sortNewestFirst) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
+                            .clickable { sortNewestFirst = false }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text("Oldest First", color = if (!sortNewestFirst) Color.White else Color(0xFF94A3B8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+
                 EzzButton(
                     text = "Refresh",
                     onClick = { viewModel.refreshManageData() },
@@ -138,7 +159,7 @@ fun ScreenshotsTab(
             }
         }
 
-        if (sortedScreenshots.isEmpty()) {
+        if (filteredScreenshots.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -150,8 +171,27 @@ fun ScreenshotsTab(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Default.Image, contentDescription = null, tint = Color(0xFF64748B), modifier = Modifier.size(40.dp))
-                    Text(text = "No screenshots yet", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    Text(text = "Press F2 in-game to capture high-res Minecraft screenshots", color = Color(0xFF94A3B8), fontSize = 12.sp)
+                    Text(
+                        text = if (screenshots.isEmpty()) "No screenshots yet" else "No matching screenshots found",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = if (screenshots.isEmpty()) "Press F2 in-game to capture high-res Minecraft screenshots" else "Try searching with a different name.",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 12.sp
+                    )
+                    if (screenshots.isNotEmpty() && searchQuery.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        EzzButton(
+                            text = "Clear Search",
+                            onClick = { searchQuery = "" },
+                            icon = Icons.Default.Clear,
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.SMALL
+                        )
+                    }
                 }
             }
         } else {
@@ -161,7 +201,7 @@ fun ScreenshotsTab(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(sortedScreenshots, key = { it.filePath }) { ss ->
+                items(filteredScreenshots, key = { it.filePath }) { ss ->
                     ScreenshotCard(
                         screenshot = ss,
                         onClick = { viewModel.selectedScreenshotForViewer.value = ss },

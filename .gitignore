@@ -41,3 +41,4 @@ MojangTricks*
 *.tmp
 *.bak
 scratch/
+release/

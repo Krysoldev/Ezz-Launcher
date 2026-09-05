@@ -33,8 +33,7 @@ import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
+import io.ezz.launcher.ui.components.EzzSearchField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -85,11 +84,14 @@ fun FilesTab(
         StandardFolderItem(".minecraft", "Root Game Directory", "Isolated game instance root folder", Icons.Default.Folder, mcDir)
     )
 
-    val filteredFolders = standardFolders.filter { folder ->
-        searchQuery.isBlank() ||
-                folder.title.contains(searchQuery, ignoreCase = true) ||
-                folder.description.contains(searchQuery, ignoreCase = true) ||
-                folder.file.name.contains(searchQuery, ignoreCase = true)
+    val filteredFolders = remember(searchQuery) {
+        val q = searchQuery.trim()
+        standardFolders.filter { folder ->
+            q.isBlank() ||
+                folder.title.contains(q, ignoreCase = true) ||
+                folder.description.contains(q, ignoreCase = true) ||
+                folder.file.name.contains(q, ignoreCase = true)
+        }
     }
 
     Column(
@@ -103,33 +105,12 @@ fun FilesTab(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextField(
+            EzzSearchField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Filter instance folders...", color = Color(0xFF94A3B8), fontSize = 13.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(16.dp)) },
-                trailingIcon = {
-                    if (searchQuery.isNotBlank()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF94A3B8), modifier = Modifier.size(16.dp))
-                        }
-                    }
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(42.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF101318))
-                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp)),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFF101318),
-                    unfocusedContainerColor = Color(0xFF101318),
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
-                ),
-                singleLine = true
+                placeholder = "Search files...",
+                modifier = Modifier.weight(1f),
+                onClear = { searchQuery = "" }
             )
 
             Spacer(modifier = Modifier.width(12.dp))
@@ -145,10 +126,41 @@ fun FilesTab(
             )
         }
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        if (filteredFolders.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(260.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF64748B), modifier = Modifier.size(36.dp))
+                    Text("No results found", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("Try searching with a different folder or file name.", color = Color(0xFF94A3B8), fontSize = 13.sp)
+                    if (searchQuery.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        EzzButton(
+                            text = "Clear Search",
+                            onClick = { searchQuery = "" },
+                            icon = Icons.Default.Clear,
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.SMALL
+                        )
+                    }
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
             items(filteredFolders, key = { it.id }) { folder ->
                 val targetDir = folder.file
                 val exists = targetDir.exists()
@@ -243,4 +255,5 @@ fun FilesTab(
             }
         }
     }
+}
 }

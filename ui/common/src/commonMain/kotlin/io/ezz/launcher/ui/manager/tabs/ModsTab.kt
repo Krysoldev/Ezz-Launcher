@@ -57,8 +57,7 @@ import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
+import io.ezz.launcher.ui.components.EzzSearchField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -354,11 +353,16 @@ private fun InstalledModsView(
     onBrowseClick: () -> Unit
 ) {
     val filtered = remember(installedMods, localSearch, localFilter) {
+        val q = localSearch.trim()
         installedMods.filter { mod ->
-            val matchesSearch = localSearch.isBlank() ||
-                mod.name.contains(localSearch, ignoreCase = true) ||
-                mod.fileName.contains(localSearch, ignoreCase = true) ||
-                mod.id.contains(localSearch, ignoreCase = true)
+            val matchesSearch = q.isBlank() ||
+                mod.name.contains(q, ignoreCase = true) ||
+                mod.id.contains(q, ignoreCase = true) ||
+                mod.fileName.contains(q, ignoreCase = true) ||
+                (mod.author?.contains(q, ignoreCase = true) == true) ||
+                (mod.description?.contains(q, ignoreCase = true) == true) ||
+                mod.loader.contains(q, ignoreCase = true) ||
+                mod.version.contains(q, ignoreCase = true)
             val matchesFilter = when (localFilter) {
                 "ENABLED" -> mod.enabled
                 "DISABLED" -> !mod.enabled
@@ -376,33 +380,12 @@ private fun InstalledModsView(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Search field
-            TextField(
+            EzzSearchField(
                 value = localSearch,
                 onValueChange = onSearchChange,
-                placeholder = { Text("Search installed mods...", color = Color(0xFF64748B), fontSize = 13.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF64748B), modifier = Modifier.size(16.dp)) },
-                trailingIcon = {
-                    if (localSearch.isNotBlank()) {
-                        IconButton(onClick = { onSearchChange("") }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF64748B), modifier = Modifier.size(16.dp))
-                        }
-                    }
-                },
-                modifier = Modifier
-                    .width(280.dp)
-                    .height(38.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF101318))
-                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp)),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFF101318),
-                    unfocusedContainerColor = Color(0xFF101318),
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent
-                ),
-                singleLine = true
+                placeholder = "Search installed mods...",
+                modifier = Modifier.width(280.dp),
+                onClear = { onSearchChange("") }
             )
 
             // Enabled/Disabled Filter Chips
@@ -578,6 +561,17 @@ private fun InstalledModsView(
                                 size = EzzButtonSize.MEDIUM
                             )
                         }
+                    } else {
+                        EzzButton(
+                            text = "Clear Search & Filters",
+                            onClick = {
+                                onSearchChange("")
+                                onFilterChange("ALL")
+                            },
+                            icon = Icons.Default.Clear,
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.MEDIUM
+                        )
                     }
                 }
             }
@@ -847,7 +841,7 @@ private fun BrowseModsView(
     browseState: CurseForgeBrowseState,
     onInstall: (CurseForgeMod) -> Unit
 ) {
-    var searchQuery by remember(browseState.searchQuery) { mutableStateOf(browseState.searchQuery) }
+    var searchQuery by remember(instance.id) { mutableStateOf(browseState.searchQuery) }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // Search & Filter Bar
@@ -856,39 +850,18 @@ private fun BrowseModsView(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextField(
+            EzzSearchField(
                 value = searchQuery,
                 onValueChange = {
                     searchQuery = it
                     viewModel.searchCurseForgeMods(query = it, debounceMs = 350L)
                 },
-                placeholder = { Text("Search CurseForge mods (e.g. JEI, Sodium, AppleSkin)...", color = Color(0xFF94A3B8), fontSize = 13.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(16.dp)) },
-                trailingIcon = {
-                    if (searchQuery.isNotBlank()) {
-                        IconButton(onClick = {
-                            searchQuery = ""
-                            viewModel.searchCurseForgeMods(query = "")
-                        }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = Color(0xFF94A3B8), modifier = Modifier.size(16.dp))
-                        }
-                    }
-                },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(42.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF101318))
-                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp)),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFF101318),
-                    unfocusedContainerColor = Color(0xFF101318),
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
-                ),
-                singleLine = true
+                placeholder = "Search CurseForge mods...",
+                modifier = Modifier.weight(1f),
+                onClear = {
+                    searchQuery = ""
+                    viewModel.searchCurseForgeMods(query = "")
+                }
             )
 
             // Sort Options
@@ -981,7 +954,28 @@ private fun BrowseModsView(
                     .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Text("No mods found on CurseForge matching your query.", color = Color(0xFF94A3B8), fontSize = 14.sp)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF64748B), modifier = Modifier.size(36.dp))
+                    Text("No results found", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("Try a different search or clear your active filters.", color = Color(0xFF94A3B8), fontSize = 13.sp)
+                    if (searchQuery.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        EzzButton(
+                            text = "Clear Search",
+                            onClick = {
+                                searchQuery = ""
+                                viewModel.searchCurseForgeMods(query = "")
+                            },
+                            icon = Icons.Default.Clear,
+                            variant = EzzButtonVariant.SECONDARY,
+                            size = EzzButtonSize.SMALL
+                        )
+                    }
+                }
             }
         } else {
             LazyColumn(

@@ -1,6 +1,17 @@
 package io.ezz.launcher.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -157,22 +168,102 @@ fun EzzTextField(
     }
 }
 
+
+
 @Composable
 fun EzzSearchField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "Search instances, versions, mods...",
-    onClear: () -> Unit = { onValueChange("") }
+    placeholder: String = "Search...",
+    onClear: () -> Unit = { onValueChange("") },
+    leadingIcon: ImageVector = Icons.Default.Search,
+    cornerRadius: Dp = 8.dp,
+    focusRequester: FocusRequester? = null
 ) {
-    EzzTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier,
-        placeholder = placeholder,
-        leadingIcon = Icons.Default.Search,
-        trailingIcon = if (value.isNotEmpty()) Icons.Default.Close else null,
-        onTrailingIconClick = onClear,
-        cornerRadius = 6.dp
-    )
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
+    val borderColor = if (isFocused) Color(0xFF8B5CF6) else Color(0xFF1A1D26)
+    val containerColor = Color(0xFF101318)
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(containerColor)
+            .border(1.dp, borderColor, RoundedCornerShape(cornerRadius))
+            .padding(horizontal = 10.dp, vertical = 7.dp)
+            .onPreviewKeyEvent { keyEvent ->
+                if (keyEvent.key == Key.Escape && keyEvent.type == KeyEventType.KeyUp) {
+                    if (value.isNotEmpty()) {
+                        onClear()
+                        true
+                    } else false
+                } else false
+            }
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(
+                imageVector = leadingIcon,
+                contentDescription = null,
+                tint = if (isFocused) Color(0xFF8B5CF6) else Color(0xFF64748B),
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                if (value.isEmpty()) {
+                    Text(
+                        text = placeholder,
+                        color = Color(0xFF64748B),
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
+                    textStyle = TextStyle(
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Normal
+                    ),
+                    cursorBrush = SolidColor(Color(0xFF8B5CF6)),
+                    interactionSource = interactionSource,
+                    singleLine = true
+                )
+            }
+
+            if (value.isNotEmpty()) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(if (isFocused) Color(0xFF1E1B4B) else Color(0xFF1A1E29))
+                        .clickable {
+                            onClear()
+                            focusRequester?.requestFocus()
+                        }
+                        .pointerHoverIcon(PointerIcon.Hand),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Clear search",
+                        tint = if (isFocused) Color(0xFFA78BFA) else Color(0xFF94A3B8),
+                        modifier = Modifier.size(11.dp)
+                    )
+                }
+            }
+        }
+    }
 }
