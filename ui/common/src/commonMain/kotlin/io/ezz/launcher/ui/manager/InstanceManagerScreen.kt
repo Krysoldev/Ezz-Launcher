@@ -832,6 +832,72 @@ fun InstanceManagerScreen(
                 onDismiss = { viewModel.showWorldBackupRestoreDialog.value = null }
             )
         }
+
+        // Safe File Conflict Prompt Dialog
+        val fileConflict by viewModel.fileConflictState.collectAsState()
+        if (fileConflict != null) {
+            val conflict = fileConflict!!
+            Dialog(
+                onDismissRequest = { conflict.onCancel() },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(440.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF10131A))
+                        .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(12.dp))
+                        .padding(22.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = Color(0xFFF59E0B),
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Text(
+                                text = conflict.title,
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Text(
+                            text = conflict.message,
+                            color = Color(0xFFCBD5E1),
+                            fontSize = 13.sp,
+                            lineHeight = 19.sp
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            EzzButton(
+                                text = "Cancel",
+                                onClick = { conflict.onCancel() },
+                                variant = EzzButtonVariant.SECONDARY,
+                                size = EzzButtonSize.SMALL
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            EzzButton(
+                                text = "Replace",
+                                onClick = { conflict.onConfirmReplace() },
+                                variant = EzzButtonVariant.PRIMARY,
+                                size = EzzButtonSize.SMALL
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -114,4 +114,40 @@ class WindowsModernFilePickerTest {
         assertTrue(specs[0].first.startsWith("Release Artifacts"))
         assertEquals("All Files (*.*)", specs.last().first)
     }
+
+    @Test
+    fun testExtensionsToFilterSpecsMod() {
+        val specs = WindowsModernFilePicker.extensionsToFilterSpecs("Import Mod", setOf("jar"))
+        assertEquals(2, specs.size)
+        assertEquals("Minecraft Mod (*.jar)", specs[0].first)
+        assertEquals("*.jar", specs[0].second)
+        assertEquals("All Files (*.*)", specs[1].first)
+    }
+
+    @Test
+    fun testExtensionsToFilterSpecsResourcePack() {
+        val specs = WindowsModernFilePicker.extensionsToFilterSpecs("Import Resource Pack", setOf("zip"))
+        assertEquals(2, specs.size)
+        assertEquals("Resource Pack (*.zip)", specs[0].first)
+        assertEquals("*.zip", specs[0].second)
+        assertEquals("All Files (*.*)", specs[1].first)
+    }
+
+    @Test
+    fun testExtensionsToFilterSpecsShader() {
+        val specs = WindowsModernFilePicker.extensionsToFilterSpecs("Import Shader", setOf("zip"))
+        assertEquals(2, specs.size)
+        assertEquals("Shader Pack (*.zip)", specs[0].first)
+        assertEquals("*.zip", specs[0].second)
+        assertEquals("All Files (*.*)", specs[1].first)
+    }
+
+    @Test
+    fun testExtensionsToFilterSpecsWorld() {
+        val specs = WindowsModernFilePicker.extensionsToFilterSpecs("Import World", setOf("zip"))
+        assertEquals(2, specs.size)
+        assertEquals("Minecraft World (*.zip)", specs[0].first)
+        assertEquals("*.zip", specs[0].second)
+        assertEquals("All Files (*.*)", specs[1].first)
+    }
 }

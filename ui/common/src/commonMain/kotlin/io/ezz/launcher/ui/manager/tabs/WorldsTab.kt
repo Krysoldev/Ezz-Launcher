@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.History
@@ -126,6 +127,14 @@ fun WorldsTab(
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 EzzButton(
+                    text = "Import World",
+                    onClick = { viewModel.importLocalWorld(instance) },
+                    icon = Icons.Default.Download,
+                    variant = EzzButtonVariant.PRIMARY,
+                    size = EzzButtonSize.SMALL
+                )
+
+                EzzButton(
                     text = "Refresh",
                     onClick = { viewModel.refreshManageData() },
                     icon = Icons.Default.Refresh,
@@ -135,10 +144,7 @@ fun WorldsTab(
 
                 EzzButton(
                     text = "Open Saves Folder",
-                    onClick = {
-                        val path = viewModel.pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("saves")
-                        viewModel.platformBridge.openFolder(path)
-                    },
+                    onClick = { viewModel.openSavesFolder(instance.id) },
                     icon = Icons.Default.FolderOpen,
                     variant = EzzButtonVariant.SECONDARY,
                     size = EzzButtonSize.SMALL
@@ -184,7 +190,7 @@ fun WorldsTab(
                     )
                     Text(
                         text = if (worlds.isEmpty())
-                            "Launch Minecraft to create a singleplayer world or place save folders into saves/."
+                            "Import a world archive (.zip) or launch Minecraft to create a singleplayer world."
                         else
                             "Try searching with a different name.",
                         color = Color(0xFF94A3B8),
@@ -192,16 +198,22 @@ fun WorldsTab(
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                     if (worlds.isEmpty()) {
-                        EzzButton(
-                            text = "Open Saves Folder",
-                            onClick = {
-                                val path = viewModel.pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("saves")
-                                viewModel.platformBridge.openFolder(path)
-                            },
-                            icon = Icons.Default.FolderOpen,
-                            variant = EzzButtonVariant.SECONDARY,
-                            size = EzzButtonSize.MEDIUM
-                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            EzzButton(
+                                text = "Import World",
+                                onClick = { viewModel.importLocalWorld(instance) },
+                                icon = Icons.Default.Download,
+                                variant = EzzButtonVariant.PRIMARY,
+                                size = EzzButtonSize.MEDIUM
+                            )
+                            EzzButton(
+                                text = "Open Saves Folder",
+                                onClick = { viewModel.openSavesFolder(instance.id) },
+                                icon = Icons.Default.FolderOpen,
+                                variant = EzzButtonVariant.SECONDARY,
+                                size = EzzButtonSize.MEDIUM
+                            )
+                        }
                     }
                 }
             }

@@ -88,6 +88,19 @@ import io.ezz.launcher.ui.platform.FileSelectionMode
 import io.ezz.launcher.ui.components.ToastType
 import io.ktor.client.request.get
 import io.ktor.client.call.body
+import io.ezz.launcher.core.model.curseforge.CurseForgeBrowseState
+import io.ezz.launcher.core.model.curseforge.CurseForgeMod
+import io.ezz.launcher.core.model.curseforge.CurseForgeFile
+import io.ezz.launcher.core.model.curseforge.CurseForgeSortField
+import io.ezz.launcher.core.model.curseforge.CurseForgeModLoaderType
+import io.ezz.launcher.core.minecraft.mods.CurseForgeDependencyResolver
+
+data class FileConflictState(
+    val title: String,
+    val message: String,
+    val onConfirmReplace: () -> Unit,
+    val onCancel: () -> Unit
+)
 
 data class VaultScreenState(
     val currentAccount: Account? = null,
@@ -435,6 +448,15 @@ class AppViewModel(
     val resourcePacksBrowseState = MutableStateFlow(ModrinthBrowseState(contentType = ModrinthContentType.RESOURCE_PACK))
     val shadersBrowseState = MutableStateFlow(ModrinthBrowseState(contentType = ModrinthContentType.SHADER))
 
+    // CurseForge Mod Browsing & Installation (CurseForge-only mod source)
+    val curseForgeModsBrowseState = MutableStateFlow(CurseForgeBrowseState())
+    val curseForgeDownloadingMod = MutableStateFlow<String?>(null)
+    val curseForgeDownloadProgress = MutableStateFlow(0f)
+    private var searchCurseForgeModsJob: Job? = null
+
+    // Safe File Conflict Prompt State
+    val fileConflictState = MutableStateFlow<FileConflictState?>(null)
+
     // Modrinth Global Actions
     val modrinthDownloadingProject = MutableStateFlow<String?>(null)
     val modrinthDownloadProgress = MutableStateFlow(0f)
@@ -646,6 +668,8 @@ class AppViewModel(
             manageScreenshots.value = emptyList()
             manageLogs.value = emptyList()
             _installedMods.value = emptyList()
+            curseForgeModsBrowseState.value = CurseForgeBrowseState()
+            fileConflictState.value = null
         }
         _selectedInstance.value = instance
         val session = _runningSessions.value[instance.id]
@@ -707,6 +731,24 @@ class AppViewModel(
     fun openModsFolder(instanceId: String? = _selectedInstance.value?.id) {
         val targetId = instanceId ?: return
         val path = pathProvider.getInstanceDirectory(targetId).resolve(".minecraft").resolve("mods")
+        platformBridge.openFolder(path)
+    }
+
+    fun openResourcePacksFolder(instanceId: String? = _selectedInstance.value?.id) {
+        val targetId = instanceId ?: return
+        val path = pathProvider.getInstanceDirectory(targetId).resolve(".minecraft").resolve("resourcepacks")
+        platformBridge.openFolder(path)
+    }
+
+    fun openShadersFolder(instanceId: String? = _selectedInstance.value?.id) {
+        val targetId = instanceId ?: return
+        val path = pathProvider.getInstanceDirectory(targetId).resolve(".minecraft").resolve("shaderpacks")
+        platformBridge.openFolder(path)
+    }
+
+    fun openSavesFolder(instanceId: String? = _selectedInstance.value?.id) {
+        val targetId = instanceId ?: return
+        val path = pathProvider.getInstanceDirectory(targetId).resolve(".minecraft").resolve("saves")
         platformBridge.openFolder(path)
     }
 
@@ -1755,8 +1797,8 @@ class AppViewModel(
         if (prevTab == InstanceManagerTab.LOGS && tab != InstanceManagerTab.LOGS) {
             stopLiveLogWatching()
         }
-        if (tab == InstanceManagerTab.MODS && modsBrowseState.value.items.isEmpty()) {
-            searchMods()
+        if (tab == InstanceManagerTab.MODS && curseForgeModsBrowseState.value.items.isEmpty()) {
+            searchCurseForgeMods()
         } else if (tab == InstanceManagerTab.RESOURCE_PACKS && resourcePacksBrowseState.value.items.isEmpty()) {
             searchResourcePacks()
         } else if (tab == InstanceManagerTab.SHADERS && shadersBrowseState.value.items.isEmpty()) {
@@ -2241,6 +2283,549 @@ class AppViewModel(
     fun setModsPage(page: Int) {
         if (page < 1 || page > modsBrowseState.value.totalPages) return
         searchMods(page = page)
+    }
+
+    // ==========================================================
+    // CURSEFORGE MOD BROWSING & INSTALLATION
+    // ==========================================================
+
+    fun searchCurseForgeMods(
+        query: String? = null,
+        page: Int? = null,
+        sort: CurseForgeSortField? = null,
+        debounceMs: Long = 0L
+    ) {
+        val instance = _selectedInstance.value ?: return
+        val current = curseForgeModsBrowseState.value
+        val newQuery = query ?: current.searchQuery
+        val newPage = page ?: (if (query != null || sort != null) 1 else current.page)
+        val newSort = sort ?: current.selectedSort
+
+        val mcVersion = instance.minecraftVersion
+        val loaderType = CurseForgeModLoaderType.fromLoaderName(instance.loaderType.name)
+
+        curseForgeModsBrowseState.value = current.copy(
+            searchQuery = newQuery,
+            page = newPage,
+            selectedGameVersion = mcVersion,
+            selectedLoader = loaderType,
+            selectedSort = newSort,
+            isLoading = true,
+            error = null
+        )
+
+        searchCurseForgeModsJob?.cancel()
+        searchCurseForgeModsJob = scope.launch {
+            if (debounceMs > 0) delay(debounceMs)
+            try {
+                val offset = (newPage - 1) * current.pageSize
+                val res = curseForge.searchMods(
+                    query = newQuery,
+                    gameVersion = mcVersion,
+                    modLoaderType = loaderType,
+                    sortField = newSort,
+                    index = offset,
+                    pageSize = current.pageSize
+                )
+
+                val totalCount = res.pagination?.totalCount ?: res.data.size.toLong()
+                val totalPages = maxOf(1, kotlin.math.ceil(totalCount.toDouble() / current.pageSize).toInt())
+
+                curseForgeModsBrowseState.value = curseForgeModsBrowseState.value.copy(
+                    items = res.data,
+                    totalHits = totalCount,
+                    totalPages = totalPages,
+                    isLoading = false,
+                    error = null
+                )
+            } catch (e: Throwable) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                curseForgeModsBrowseState.value = curseForgeModsBrowseState.value.copy(
+                    isLoading = false,
+                    error = "Failed to load mods from CurseForge: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun setCurseForgeModsPage(page: Int) {
+        if (page < 1 || page > curseForgeModsBrowseState.value.totalPages) return
+        searchCurseForgeMods(page = page)
+    }
+
+    fun isCurseForgeModInstalled(mod: CurseForgeMod): Boolean {
+        val querySlug = mod.slug.lowercase()
+        val queryName = mod.name.lowercase()
+        val queryId = mod.id.toString()
+        return manageMods.value.any { local ->
+            val fileName = local.fileName.lowercase()
+            val name = local.name.lowercase()
+            val id = local.id.lowercase()
+            fileName.contains(querySlug) ||
+            name.equals(queryName, ignoreCase = true) ||
+            id.equals(querySlug, ignoreCase = true) ||
+            id == queryId
+        }
+    }
+
+    fun installCurseForgeMod(mod: CurseForgeMod, targetInstance: Instance? = null) {
+        val instance = targetInstance ?: _selectedInstance.value ?: return
+        scope.launch(Dispatchers.IO) {
+            try {
+                curseForgeDownloadingMod.value = mod.name
+                curseForgeDownloadProgress.value = 0.05f
+
+                val loaderName = instance.loaderType.name
+                val loaderType = CurseForgeModLoaderType.fromLoaderName(loaderName)
+                val mcVer = instance.minecraftVersion
+
+                // Fetch files for this mod
+                val files = curseForge.getModFiles(
+                    modId = mod.id,
+                    gameVersion = mcVer,
+                    modLoaderType = loaderType,
+                    pageSize = 30
+                )
+
+                val resolution = CurseForgeDependencyResolver.resolveCompatibility(
+                    minecraftVersion = mcVer,
+                    loader = loaderName,
+                    installedMods = manageMods.value,
+                    mod = mod,
+                    candidateFiles = files
+                )
+
+                val chosenFile = resolution.recommendedFile ?: resolution.latestFile
+                if (chosenFile == null) {
+                    withContext(Dispatchers.Main) {
+                        ToastManager.show(
+                            "Incompatible Mod",
+                            "No compatible version found for Minecraft $mcVer ($loaderName).",
+                            ToastType.WARNING
+                        )
+                        curseForgeDownloadingMod.value = null
+                        curseForgeDownloadProgress.value = 0f
+                    }
+                    return@launch
+                }
+
+                curseForgeDownloadProgress.value = 0.15f
+                val resolvedDeps = CurseForgeDependencyResolver.resolveDependencies(
+                    curseForgeService = curseForge,
+                    file = chosenFile,
+                    targetMc = mcVer,
+                    targetLoader = loaderName,
+                    installedMods = manageMods.value
+                )
+
+                val modsDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("mods").toFile()
+                modsDir.mkdirs()
+
+                val downloadUrl = chosenFile.downloadUrl ?: curseForge.getModFileDownloadUrl(mod.id, chosenFile.id)
+                if (downloadUrl.isNullOrBlank()) {
+                    withContext(Dispatchers.Main) {
+                        ToastManager.show("Download Unavailable", "Direct download URL is blocked or unavailable for this mod.", ToastType.ERROR)
+                        curseForgeDownloadingMod.value = null
+                        curseForgeDownloadProgress.value = 0f
+                    }
+                    return@launch
+                }
+
+                val mainDest = java.io.File(modsDir, chosenFile.fileName)
+                val success = curseForge.downloadContent(downloadUrl, mainDest) { downloaded, total ->
+                    if (total > 0) {
+                        curseForgeDownloadProgress.value = 0.2f + (downloaded.toFloat() / total) * 0.6f
+                    }
+                }
+
+                if (!success) {
+                    withContext(Dispatchers.Main) {
+                        ToastManager.show("Download Failed", "Could not download ${chosenFile.fileName}", ToastType.ERROR)
+                        curseForgeDownloadingMod.value = null
+                        curseForgeDownloadProgress.value = 0f
+                    }
+                    return@launch
+                }
+
+                // Download required dependencies
+                val depsToDownload = resolvedDeps.filter { it.selectedToInstall && it.candidateFile != null && !it.isAlreadyInstalled }
+                for (dep in depsToDownload) {
+                    val depFile = dep.candidateFile!!
+                    val depUrl = depFile.downloadUrl ?: curseForge.getModFileDownloadUrl(dep.depModId, depFile.id)
+                    if (!depUrl.isNullOrBlank()) {
+                        val depDest = java.io.File(modsDir, depFile.fileName)
+                        curseForge.downloadContent(depUrl, depDest) { _, _ -> }
+                    }
+                }
+
+                curseForgeDownloadProgress.value = 1.0f
+                delay(250)
+
+                withContext(Dispatchers.Main) {
+                    curseForgeDownloadingMod.value = null
+                    curseForgeDownloadProgress.value = 0f
+                    refreshManageData()
+                    ToastManager.show("Mod Installed", "Mod '${mod.name}' installed successfully.", ToastType.SUCCESS)
+                }
+            } catch (e: Throwable) {
+                withContext(Dispatchers.Main) {
+                    curseForgeDownloadingMod.value = null
+                    curseForgeDownloadProgress.value = 0f
+                    ToastManager.show("Install Error", e.message ?: "Failed to install mod", ToastType.ERROR)
+                }
+            }
+        }
+    }
+
+    // ==========================================================
+    // CONTEXT-SPECIFIC LOCAL IMPORTS
+    // ==========================================================
+
+    fun importLocalMod(instance: Instance) {
+        openFilePicker(
+            title = "Import Mod",
+            description = "Select a .jar mod file",
+            allowedExtensions = setOf("jar"),
+            onFileSelected = { file ->
+                if (file == null) return@openFilePicker
+                scope.launch(Dispatchers.IO) {
+                    if (!file.name.endsWith(".jar", ignoreCase = true) || !file.exists() || !file.isFile || file.length() <= 0) {
+                        withContext(Dispatchers.Main) {
+                            ToastManager.show("Invalid Mod File", "The selected file is not a valid .jar file.", ToastType.ERROR)
+                        }
+                        return@launch
+                    }
+
+                    try {
+                        java.util.zip.ZipFile(file).use {}
+                    } catch (e: Throwable) {
+                        withContext(Dispatchers.Main) {
+                            ToastManager.show("Invalid Mod File", "The selected .jar file is corrupted or unreadable.", ToastType.ERROR)
+                        }
+                        return@launch
+                    }
+
+                    val modsDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("mods").toFile()
+                    modsDir.mkdirs()
+                    val targetFile = java.io.File(modsDir, file.name)
+
+                    if (targetFile.exists()) {
+                        withContext(Dispatchers.Main) {
+                            fileConflictState.value = FileConflictState(
+                                title = "Mod Already Exists",
+                                message = "Mod '${file.name}' already exists in this instance. Do you want to replace it?",
+                                onConfirmReplace = {
+                                    fileConflictState.value = null
+                                    scope.launch(Dispatchers.IO) {
+                                        try {
+                                            file.copyTo(targetFile, overwrite = true)
+                                            withContext(Dispatchers.Main) {
+                                                refreshManageData()
+                                                ToastManager.show("Mod Imported", "Mod imported successfully.", ToastType.SUCCESS)
+                                            }
+                                        } catch (e: Throwable) {
+                                            withContext(Dispatchers.Main) {
+                                                ToastManager.show("Import Failed", e.message ?: "Failed to replace file", ToastType.ERROR)
+                                            }
+                                        }
+                                    }
+                                },
+                                onCancel = {
+                                    fileConflictState.value = null
+                                }
+                            )
+                        }
+                        return@launch
+                    }
+
+                    try {
+                        file.copyTo(targetFile, overwrite = false)
+                        withContext(Dispatchers.Main) {
+                            refreshManageData()
+                            ToastManager.show("Mod Imported", "Mod imported successfully.", ToastType.SUCCESS)
+                        }
+                    } catch (e: Throwable) {
+                        withContext(Dispatchers.Main) {
+                            ToastManager.show("Import Failed", e.message ?: "Failed to copy mod file", ToastType.ERROR)
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    fun importLocalResourcePack(instance: Instance) {
+        openFilePicker(
+            title = "Import Resource Pack",
+            description = "Select a .zip resource pack",
+            allowedExtensions = setOf("zip"),
+            onFileSelected = { file ->
+                if (file == null) return@openFilePicker
+                scope.launch(Dispatchers.IO) {
+                    if (!file.name.endsWith(".zip", ignoreCase = true) || !file.exists() || !file.isFile || file.length() <= 0) {
+                        withContext(Dispatchers.Main) {
+                            ToastManager.show("Invalid Resource Pack", "The selected file is not a valid .zip file.", ToastType.ERROR)
+                        }
+                        return@launch
+                    }
+
+                    try {
+                        java.util.zip.ZipFile(file).use {}
+                    } catch (e: Throwable) {
+                        withContext(Dispatchers.Main) {
+                            ToastManager.show("Invalid Resource Pack", "The selected .zip file is corrupted or unreadable.", ToastType.ERROR)
+                        }
+                        return@launch
+                    }
+
+                    val packsDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("resourcepacks").toFile()
+                    packsDir.mkdirs()
+                    val targetFile = java.io.File(packsDir, file.name)
+
+                    if (targetFile.exists()) {
+                        withContext(Dispatchers.Main) {
+                            fileConflictState.value = FileConflictState(
+                                title = "Resource Pack Already Exists",
+                                message = "Resource pack '${file.name}' already exists in this instance. Do you want to replace it?",
+                                onConfirmReplace = {
+                                    fileConflictState.value = null
+                                    scope.launch(Dispatchers.IO) {
+                                        try {
+                                            file.copyTo(targetFile, overwrite = true)
+                                            withContext(Dispatchers.Main) {
+                                                refreshManageData()
+                                                ToastManager.show("Resource Pack Imported", "Resource pack imported successfully.", ToastType.SUCCESS)
+                                            }
+                                        } catch (e: Throwable) {
+                                            withContext(Dispatchers.Main) {
+                                                ToastManager.show("Import Failed", e.message ?: "Failed to replace file", ToastType.ERROR)
+                                            }
+                                        }
+                                    }
+                                },
+                                onCancel = {
+                                    fileConflictState.value = null
+                                }
+                            )
+                        }
+                        return@launch
+                    }
+
+                    try {
+                        file.copyTo(targetFile, overwrite = false)
+                        withContext(Dispatchers.Main) {
+                            refreshManageData()
+                            ToastManager.show("Resource Pack Imported", "Resource pack imported successfully.", ToastType.SUCCESS)
+                        }
+                    } catch (e: Throwable) {
+                        withContext(Dispatchers.Main) {
+                            ToastManager.show("Import Failed", e.message ?: "Failed to copy resource pack", ToastType.ERROR)
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    fun importLocalShader(instance: Instance) {
+        openFilePicker(
+            title = "Import Shader",
+            description = "Select a .zip shader pack",
+            allowedExtensions = setOf("zip"),
+            onFileSelected = { file ->
+                if (file == null) return@openFilePicker
+                scope.launch(Dispatchers.IO) {
+                    if (!file.name.endsWith(".zip", ignoreCase = true) || !file.exists() || !file.isFile || file.length() <= 0) {
+                        withContext(Dispatchers.Main) {
+                            ToastManager.show("Invalid Shader Pack", "The selected file is not a valid .zip file.", ToastType.ERROR)
+                        }
+                        return@launch
+                    }
+
+                    try {
+                        java.util.zip.ZipFile(file).use {}
+                    } catch (e: Throwable) {
+                        withContext(Dispatchers.Main) {
+                            ToastManager.show("Invalid Shader Pack", "The selected .zip file is corrupted or unreadable.", ToastType.ERROR)
+                        }
+                        return@launch
+                    }
+
+                    val shadersDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("shaderpacks").toFile()
+                    shadersDir.mkdirs()
+                    val targetFile = java.io.File(shadersDir, file.name)
+
+                    if (targetFile.exists()) {
+                        withContext(Dispatchers.Main) {
+                            fileConflictState.value = FileConflictState(
+                                title = "Shader Pack Already Exists",
+                                message = "Shader pack '${file.name}' already exists in this instance. Do you want to replace it?",
+                                onConfirmReplace = {
+                                    fileConflictState.value = null
+                                    scope.launch(Dispatchers.IO) {
+                                        try {
+                                            file.copyTo(targetFile, overwrite = true)
+                                            withContext(Dispatchers.Main) {
+                                                refreshManageData()
+                                                ToastManager.show("Shader Imported", "Shader imported successfully.", ToastType.SUCCESS)
+                                            }
+                                        } catch (e: Throwable) {
+                                            withContext(Dispatchers.Main) {
+                                                ToastManager.show("Import Failed", e.message ?: "Failed to replace file", ToastType.ERROR)
+                                            }
+                                        }
+                                    }
+                                },
+                                onCancel = {
+                                    fileConflictState.value = null
+                                }
+                            )
+                        }
+                        return@launch
+                    }
+
+                    try {
+                        file.copyTo(targetFile, overwrite = false)
+                        withContext(Dispatchers.Main) {
+                            refreshManageData()
+                            ToastManager.show("Shader Imported", "Shader imported successfully.", ToastType.SUCCESS)
+                        }
+                    } catch (e: Throwable) {
+                        withContext(Dispatchers.Main) {
+                            ToastManager.show("Import Failed", e.message ?: "Failed to copy shader pack", ToastType.ERROR)
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    fun importLocalWorld(instance: Instance) {
+        openFilePicker(
+            title = "Import World",
+            description = "Select a Minecraft world archive (.zip)",
+            allowedExtensions = setOf("zip"),
+            onFileSelected = { file ->
+                if (file == null) return@openFilePicker
+                scope.launch(Dispatchers.IO) {
+                    if (!file.name.endsWith(".zip", ignoreCase = true) || !file.exists() || !file.isFile || file.length() <= 0) {
+                        withContext(Dispatchers.Main) {
+                            ToastManager.show("Invalid World File", "The selected file is not a valid .zip archive.", ToastType.ERROR)
+                        }
+                        return@launch
+                    }
+
+                    var levelDatEntryPath: String? = null
+                    try {
+                        java.util.zip.ZipFile(file).use { zip ->
+                            val entries = zip.entries()
+                            while (entries.hasMoreElements()) {
+                                val entry = entries.nextElement()
+                                val norm = entry.name.replace('\\', '/')
+                                if (norm.equals("level.dat", ignoreCase = true) || norm.endsWith("/level.dat", ignoreCase = true)) {
+                                    levelDatEntryPath = norm
+                                    break
+                                }
+                            }
+                        }
+                    } catch (e: Throwable) {
+                        withContext(Dispatchers.Main) {
+                            ToastManager.show("Invalid World File", "The archive is corrupted or cannot be read.", ToastType.ERROR)
+                        }
+                        return@launch
+                    }
+
+                    if (levelDatEntryPath == null) {
+                        withContext(Dispatchers.Main) {
+                            ToastManager.show("Invalid World Archive", "Archive does not contain a valid Minecraft world (missing level.dat).", ToastType.ERROR)
+                        }
+                        return@launch
+                    }
+
+                    val savesDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("saves").toFile()
+                    savesDir.mkdirs()
+
+                    val parts = levelDatEntryPath!!.split('/')
+                    val (prefixToStrip, worldFolderName) = if (parts.size > 1) {
+                        val folderPrefix = parts.dropLast(1).joinToString("/") + "/"
+                        folderPrefix to parts[parts.size - 2]
+                    } else {
+                        "" to file.nameWithoutExtension
+                    }
+
+                    val targetWorldDir = java.io.File(savesDir, worldFolderName)
+
+                    fun extractWorld() {
+                        scope.launch(Dispatchers.IO) {
+                            try {
+                                if (targetWorldDir.exists()) {
+                                    targetWorldDir.deleteRecursively()
+                                }
+                                targetWorldDir.mkdirs()
+
+                                java.util.zip.ZipFile(file).use { zip ->
+                                    val entries = zip.entries()
+                                    while (entries.hasMoreElements()) {
+                                        val entry = entries.nextElement()
+                                        val entryName = entry.name.replace('\\', '/')
+                                        if (entryName.contains("..")) continue // Prevent zip slip
+
+                                        val relativePath = if (prefixToStrip.isNotEmpty() && entryName.startsWith(prefixToStrip)) {
+                                            entryName.removePrefix(prefixToStrip)
+                                        } else if (prefixToStrip.isEmpty()) {
+                                            entryName
+                                        } else {
+                                            continue
+                                        }
+
+                                        if (relativePath.isBlank()) continue
+                                        val destFile = java.io.File(targetWorldDir, relativePath)
+
+                                        if (entry.isDirectory) {
+                                            destFile.mkdirs()
+                                        } else {
+                                            destFile.parentFile?.mkdirs()
+                                            zip.getInputStream(entry).use { input ->
+                                                java.io.FileOutputStream(destFile).use { output ->
+                                                    input.copyTo(output)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                withContext(Dispatchers.Main) {
+                                    refreshManageData()
+                                    ToastManager.show("World Imported", "World '$worldFolderName' imported successfully.", ToastType.SUCCESS)
+                                }
+                            } catch (e: Throwable) {
+                                withContext(Dispatchers.Main) {
+                                    ToastManager.show("Import Failed", e.message ?: "Failed to extract world archive", ToastType.ERROR)
+                                }
+                            }
+                        }
+                    }
+
+                    if (targetWorldDir.exists()) {
+                        withContext(Dispatchers.Main) {
+                            fileConflictState.value = FileConflictState(
+                                title = "World Already Exists",
+                                message = "World '$worldFolderName' already exists in this instance. Do you want to replace it?",
+                                onConfirmReplace = {
+                                    fileConflictState.value = null
+                                    extractWorld()
+                                },
+                                onCancel = {
+                                    fileConflictState.value = null
+                                }
+                            )
+                        }
+                    } else {
+                        extractWorld()
+                    }
+                }
+            }
+        )
     }
 
     fun searchResourcePacks(

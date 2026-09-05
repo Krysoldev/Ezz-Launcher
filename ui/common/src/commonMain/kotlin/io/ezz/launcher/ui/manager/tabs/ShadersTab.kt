@@ -160,11 +160,19 @@ fun ShadersTab(
                 }
             }
 
-            // Quick Actions
-            if (subTab == ShadersSubTab.INSTALLED) {
+            // Quick Actions: Primary Import Shader & Secondary Open Folder
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 EzzButton(
-                    text = "Open Shaderpacks Folder",
-                    onClick = { viewModel.openInstanceFolder(instance.id) },
+                    text = "Import Shader",
+                    onClick = { viewModel.importLocalShader(instance) },
+                    icon = Icons.Default.Download,
+                    variant = EzzButtonVariant.PRIMARY,
+                    size = EzzButtonSize.SMALL
+                )
+
+                EzzButton(
+                    text = "Open Folder",
+                    onClick = { viewModel.openShadersFolder(instance.id) },
                     icon = Icons.Default.FolderOpen,
                     variant = EzzButtonVariant.SECONDARY,
                     size = EzzButtonSize.SMALL
@@ -469,7 +477,7 @@ private fun InstalledShadersView(
                     )
                     Text(
                         text = if (installedShaders.isEmpty())
-                            "Install shaderpacks from Modrinth or drop .zip files into your shaderpacks folder."
+                            "Install shaderpacks from Modrinth or import .zip files into this instance."
                         else
                             "Try searching with a different name or clearing your active filters.",
                         color = Color(0xFF94A3B8),
@@ -479,19 +487,22 @@ private fun InstalledShadersView(
                     if (installedShaders.isEmpty()) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             EzzButton(
-                                text = "Browse Shaderpacks",
-                                onClick = onBrowseClick,
+                                text = "Import Shader",
+                                onClick = { viewModel.importLocalShader(instance) },
                                 icon = Icons.Default.Download,
                                 variant = EzzButtonVariant.PRIMARY,
                                 size = EzzButtonSize.MEDIUM
                             )
                             EzzButton(
-                                text = "Open Shaders Folder",
-                                onClick = {
-                                    val spDir = viewModel.pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("shaderpacks").toFile()
-                                    if (!spDir.exists()) spDir.mkdirs()
-                                    viewModel.platformBridge.openFolder(spDir.absolutePath.toPath())
-                                },
+                                text = "Browse Shaderpacks",
+                                onClick = onBrowseClick,
+                                icon = Icons.Default.Search,
+                                variant = EzzButtonVariant.SECONDARY,
+                                size = EzzButtonSize.MEDIUM
+                            )
+                            EzzButton(
+                                text = "Open Folder",
+                                onClick = { viewModel.openShadersFolder(instance.id) },
                                 icon = Icons.Default.FolderOpen,
                                 variant = EzzButtonVariant.SECONDARY,
                                 size = EzzButtonSize.MEDIUM

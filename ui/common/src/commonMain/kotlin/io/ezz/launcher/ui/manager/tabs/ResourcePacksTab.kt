@@ -159,11 +159,19 @@ fun ResourcePacksTab(
                 }
             }
 
-            // Quick Actions
-            if (subTab == PacksSubTab.INSTALLED) {
+            // Quick Actions: Primary Import Resource Pack & Secondary Open Folder
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 EzzButton(
-                    text = "Open Resourcepacks Folder",
-                    onClick = { viewModel.openInstanceFolder(instance.id) },
+                    text = "Import Resource Pack",
+                    onClick = { viewModel.importLocalResourcePack(instance) },
+                    icon = Icons.Default.Download,
+                    variant = EzzButtonVariant.PRIMARY,
+                    size = EzzButtonSize.SMALL
+                )
+
+                EzzButton(
+                    text = "Open Folder",
+                    onClick = { viewModel.openResourcePacksFolder(instance.id) },
                     icon = Icons.Default.FolderOpen,
                     variant = EzzButtonVariant.SECONDARY,
                     size = EzzButtonSize.SMALL
@@ -469,7 +477,7 @@ private fun InstalledPacksView(
                     )
                     Text(
                         text = if (installedPacks.isEmpty())
-                            "Install resource packs from Modrinth or drop .zip files into your resourcepacks folder."
+                            "Install resource packs from Modrinth or import .zip files into this instance."
                         else
                             "Try searching with a different name or clearing your active filters.",
                         color = Color(0xFF94A3B8),
@@ -479,19 +487,22 @@ private fun InstalledPacksView(
                     if (installedPacks.isEmpty()) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             EzzButton(
-                                text = "Browse Resource Packs",
-                                onClick = onBrowseClick,
+                                text = "Import Resource Pack",
+                                onClick = { viewModel.importLocalResourcePack(instance) },
                                 icon = Icons.Default.Download,
                                 variant = EzzButtonVariant.PRIMARY,
                                 size = EzzButtonSize.MEDIUM
                             )
                             EzzButton(
-                                text = "Open Packs Folder",
-                                onClick = {
-                                    val rpDir = viewModel.pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("resourcepacks").toFile()
-                                    if (!rpDir.exists()) rpDir.mkdirs()
-                                    viewModel.platformBridge.openFolder(rpDir.absolutePath.toPath())
-                                },
+                                text = "Browse Resource Packs",
+                                onClick = onBrowseClick,
+                                icon = Icons.Default.Search,
+                                variant = EzzButtonVariant.SECONDARY,
+                                size = EzzButtonSize.MEDIUM
+                            )
+                            EzzButton(
+                                text = "Open Folder",
+                                onClick = { viewModel.openResourcePacksFolder(instance.id) },
                                 icon = Icons.Default.FolderOpen,
                                 variant = EzzButtonVariant.SECONDARY,
                                 size = EzzButtonSize.MEDIUM

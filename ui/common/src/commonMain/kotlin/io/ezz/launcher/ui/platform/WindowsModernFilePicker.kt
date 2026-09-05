@@ -164,6 +164,9 @@ object WindowsModernFilePicker {
             cleanExts == setOf("mrpack") -> {
                 specs.add("Modrinth Modpack (*.mrpack)" to "*.mrpack")
             }
+            cleanExts == setOf("jar") || (cleanExts.contains("jar") && title.contains("Mod", ignoreCase = true)) -> {
+                specs.add("Minecraft Mod (*.jar)" to "*.jar")
+            }
             cleanExts == setOf("png") -> {
                 specs.add("PNG Images (*.png)" to "*.png")
             }
@@ -177,6 +180,18 @@ object WindowsModernFilePicker {
             cleanExts.contains("exe") && title.contains("Java", ignoreCase = true) -> {
                 specs.add("Java Executable (java.exe)" to "java.exe;javaw.exe;*.exe")
                 specs.add("All Executables (*.exe)" to "*.exe")
+            }
+            cleanExts == setOf("zip") && title.contains("Resource", ignoreCase = true) -> {
+                specs.add("Resource Pack (*.zip)" to "*.zip")
+            }
+            cleanExts == setOf("zip") && title.contains("Shader", ignoreCase = true) -> {
+                specs.add("Shader Pack (*.zip)" to "*.zip")
+            }
+            cleanExts == setOf("zip") && title.contains("World", ignoreCase = true) -> {
+                specs.add("Minecraft World (*.zip)" to "*.zip")
+            }
+            cleanExts == setOf("zip") && !title.contains("Release", ignoreCase = true) -> {
+                specs.add("ZIP Archive (*.zip)" to "*.zip")
             }
             cleanExts.contains("zip") || title.contains("Release", ignoreCase = true) -> {
                 val patterns = cleanExts.joinToString(";") { "*.$it" }

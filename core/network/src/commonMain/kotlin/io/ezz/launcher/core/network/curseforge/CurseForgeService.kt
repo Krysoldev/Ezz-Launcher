@@ -552,7 +552,7 @@ class CurseForgeService(
             val propKey = System.getProperty("CURSEFORGE_API_KEY")
             if (!propKey.isNullOrBlank()) return propKey.trim()
 
-            return ""
+            return "\$2a\$10\$bL4bIL5pUWqfcO7KQtnMReakwtfHbNKh6v1uTpKlzhwoueEJQnPnm"
         }
     }
 }
