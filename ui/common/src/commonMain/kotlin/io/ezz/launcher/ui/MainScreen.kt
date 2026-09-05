@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -88,6 +89,23 @@ fun MainScreen(
                 .fillMaxSize()
                 .background(colors.background)
         ) {
+            // Subtle ambient purple lighting depth at top-right (zero-cost static hardware gradient)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        androidx.compose.ui.graphics.Brush.radialGradient(
+                            colors = listOf(
+                                Color(0x1A8B5CF6),
+                                Color(0x0A8B5CF6),
+                                Color.Transparent
+                            ),
+                            center = androidx.compose.ui.geometry.Offset(x = 1050f, y = 100f),
+                            radius = 800f
+                        )
+                    )
+            )
+
             // Main App Shell: Left Sidebar + Screen Content Area
             Row(modifier = Modifier.fillMaxSize()) {
                 Sidebar(

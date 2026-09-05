@@ -231,17 +231,23 @@ fun EditInstanceDialog(
                                                 EzzButton(
                                                     text = "Choose Custom Icon",
                                                     onClick = {
-                                                        val file = viewModel.platformBridge.pickImageFile("Select Instance Icon (PNG, JPG, WEBP)")
-                                                        if (file != null && file.exists()) {
-                                                            val instDirStr = viewModel.pathProvider.getInstanceDirectory(instance.id).toString()
-                                                            val targetIcon = java.io.File(instDirStr, "icon.png")
-                                                            try {
-                                                                file.copyTo(targetIcon, overwrite = true)
-                                                                customIconPath = targetIcon.absolutePath
-                                                            } catch (e: Exception) {
-                                                                customIconPath = file.absolutePath
+                                                        viewModel.openFilePicker(
+                                                            title = "Select Instance Icon",
+                                                            description = "Select a PNG, JPG, or WEBP image",
+                                                            allowedExtensions = setOf("png", "jpg", "jpeg", "webp"),
+                                                            onFileSelected = { file ->
+                                                                if (file != null && file.exists()) {
+                                                                    val instDirStr = viewModel.pathProvider.getInstanceDirectory(instance.id).toString()
+                                                                    val targetIcon = java.io.File(instDirStr, "icon.png")
+                                                                    try {
+                                                                        file.copyTo(targetIcon, overwrite = true)
+                                                                        customIconPath = targetIcon.absolutePath
+                                                                    } catch (e: Exception) {
+                                                                        customIconPath = file.absolutePath
+                                                                    }
+                                                                }
                                                             }
-                                                        }
+                                                        )
                                                     },
                                                     variant = EzzButtonVariant.SECONDARY,
                                                     size = EzzButtonSize.SMALL

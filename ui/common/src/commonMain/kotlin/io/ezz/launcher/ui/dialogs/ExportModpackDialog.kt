@@ -190,36 +190,45 @@ fun ExportModpackDialog(
                                 onCancel = onDismiss,
                                 onExport = {
                                     val defaultFileName = "${packName.replace(Regex("[^a-zA-Z0-9._-]"), "_")}_$versionId.mrpack"
-                                    val target = viewModel.platformBridge.pickExportInstanceFile(defaultFileName)
-                                    if (target != null) {
-                                        stage = ExportDialogStage.EXPORTING
-                                        exportedFile = target
-                                        val options = MrpackExportOptions(
-                                            customName = packName,
-                                            customSummary = packSummary,
-                                            versionId = versionId,
-                                            includeConfigs = includeConfigs,
-                                            includeMods = includeMods,
-                                            includeResourcePacks = includeResourcePacks,
-                                            includeShaderPacks = includeShaderPacks
-                                        )
-                                        viewModel.executeExportMrpack(
-                                            instance = instance,
-                                            targetFile = target,
-                                            options = options,
-                                            onProgress = { step, pct ->
-                                                progressText = step
-                                                progressPercent = pct
-                                            },
-                                            onComplete = { success ->
-                                                if (success) {
-                                                    stage = ExportDialogStage.SUCCESS
-                                                } else {
-                                                    stage = ExportDialogStage.CONFIGURE
-                                                }
+                                    viewModel.openFilePicker(
+                                        title = "Export Modrinth Modpack",
+                                        description = "Choose location to save .mrpack file",
+                                        allowedExtensions = setOf("mrpack"),
+                                        isSaveMode = true,
+                                        defaultSaveName = defaultFileName,
+                                        onFileSelected = { target ->
+                                            if (target != null) {
+                                                val finalTarget = if (target.name.endsWith(".mrpack", ignoreCase = true)) target else java.io.File(target.parentFile, "${target.name}.mrpack")
+                                                stage = ExportDialogStage.EXPORTING
+                                                exportedFile = finalTarget
+                                                val options = MrpackExportOptions(
+                                                    customName = packName,
+                                                    customSummary = packSummary,
+                                                    versionId = versionId,
+                                                    includeConfigs = includeConfigs,
+                                                    includeMods = includeMods,
+                                                    includeResourcePacks = includeResourcePacks,
+                                                    includeShaderPacks = includeShaderPacks
+                                                )
+                                                viewModel.executeExportMrpack(
+                                                    instance = instance,
+                                                    targetFile = finalTarget,
+                                                    options = options,
+                                                    onProgress = { step, pct ->
+                                                        progressText = step
+                                                        progressPercent = pct
+                                                    },
+                                                    onComplete = { success ->
+                                                        if (success) {
+                                                            stage = ExportDialogStage.SUCCESS
+                                                        } else {
+                                                            stage = ExportDialogStage.CONFIGURE
+                                                        }
+                                                    }
+                                                )
                                             }
-                                        )
-                                    }
+                                        }
+                                    )
                                 }
                             )
                         }

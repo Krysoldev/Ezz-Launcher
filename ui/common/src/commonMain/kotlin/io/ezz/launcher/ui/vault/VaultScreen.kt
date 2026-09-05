@@ -64,16 +64,12 @@ import io.ezz.launcher.ui.components.EzzButtonVariant
 import io.ezz.launcher.ui.components.EzzTextField
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 import io.ezz.launcher.ui.viewmodel.NavigationScreen
-import java.awt.FileDialog
-import java.awt.Frame
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import javax.imageio.ImageIO
-import javax.swing.JFileChooser
-import javax.swing.filechooser.FileNameExtensionFilter
 
 data class PendingSkinImport(
     val bytes: ByteArray,
@@ -121,43 +117,49 @@ fun VaultScreen(
 
     // Function to trigger file import with validation
     val launchSkinImportFlow = {
-        openNativeSkinPicker { file ->
-            if (file != null && file.exists()) {
-                try {
-                    val bytes = file.readBytes()
-                    if (bytes.isEmpty()) {
-                        errorMessage = "The selected skin file is empty."
-                        return@openNativeSkinPicker
+        viewModel.openFilePicker(
+            title = "Import Minecraft Skin",
+            description = "Select a .png skin file",
+            allowedExtensions = setOf("png"),
+            onFileSelected = { file ->
+                if (file != null && file.exists()) {
+                    if (!file.name.endsWith(".png", ignoreCase = true)) {
+                        errorMessage = "Invalid Minecraft skin: Please select a valid .png image."
+                    } else {
+                        try {
+                            val bytes = file.readBytes()
+                            if (bytes.isEmpty()) {
+                                errorMessage = "The selected skin file is empty."
+                            } else {
+                                val img = ImageIO.read(ByteArrayInputStream(bytes))
+                                if (img == null) {
+                                    errorMessage = "Invalid Minecraft skin: The selected file could not be decoded as a valid image."
+                                } else {
+                                    val width = img.width
+                                    val height = img.height
+
+                                    if (!((width == 64 && height == 64) || (width == 64 && height == 32) || (width == 128 && height == 128))) {
+                                        errorMessage = "Invalid Minecraft skin: Skin dimensions must be 64x64 (or 64x32 legacy). Got ${width}x${height}."
+                                    } else {
+                                        val detectedModel = viewModel.vaultRepository.detectModelType(bytes)
+                                        val rawName = file.nameWithoutExtension.replace("_", " ").replace("-", " ").trim()
+                                        val defaultName = if (rawName.isNotBlank()) rawName else "My Skin"
+
+                                        pendingImport = PendingSkinImport(
+                                            bytes = bytes,
+                                            name = defaultName,
+                                            modelType = detectedModel
+                                        )
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            errorMessage = "Invalid Minecraft skin: ${e.message ?: "Failed to read file."}"
+                        }
                     }
-
-                    val img = ImageIO.read(ByteArrayInputStream(bytes))
-                    if (img == null) {
-                        errorMessage = "Invalid Minecraft skin: The selected file could not be decoded as a valid image."
-                        return@openNativeSkinPicker
-                    }
-
-                    val width = img.width
-                    val height = img.height
-
-                    if (!((width == 64 && height == 64) || (width == 64 && height == 32) || (width == 128 && height == 128))) {
-                        errorMessage = "Invalid Minecraft skin: Skin dimensions must be 64x64 (or 64x32 legacy). Got ${width}x${height}."
-                        return@openNativeSkinPicker
-                    }
-
-                    val detectedModel = viewModel.vaultRepository.detectModelType(bytes)
-                    val rawName = file.nameWithoutExtension.replace("_", " ").replace("-", " ").trim()
-                    val defaultName = if (rawName.isNotBlank()) rawName else "My Skin"
-
-                    pendingImport = PendingSkinImport(
-                        bytes = bytes,
-                        name = defaultName,
-                        modelType = detectedModel
-                    )
-                } catch (e: Exception) {
-                    errorMessage = "Invalid Minecraft skin: ${e.message ?: "Failed to read file."}"
                 }
             }
-        }
+        )
     }
 
     Box(
@@ -1229,32 +1231,4 @@ private fun formatDate(timestamp: Long): String {
     if (timestamp <= 0L) return "Recently"
     val sdf = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
     return sdf.format(Date(timestamp))
-}
-
-private fun openNativeSkinPicker(onFileSelected: (File?) -> Unit) {
-    try {
-        val os = System.getProperty("os.name")?.lowercase() ?: ""
-        if (os.contains("mac")) {
-            val dialog = FileDialog(null as Frame?, "Import Minecraft Skin", FileDialog.LOAD)
-            dialog.setFilenameFilter { _, name ->
-                name.endsWith(".png", true)
-            }
-            dialog.isVisible = true
-            val selected = dialog.file?.let { File(dialog.directory, it) }
-            onFileSelected(selected)
-        } else {
-            val chooser = JFileChooser()
-            chooser.dialogTitle = "Import Minecraft Skin (PNG)"
-            chooser.fileFilter = FileNameExtensionFilter("Minecraft Skin (*.png)", "png")
-            val res = chooser.showOpenDialog(null)
-            if (res == JFileChooser.APPROVE_OPTION) {
-                onFileSelected(chooser.selectedFile)
-            } else {
-                onFileSelected(null)
-            }
-        }
-    } catch (e: Exception) {
-        println("File picker error: ${e.message}")
-        onFileSelected(null)
-    }
 }

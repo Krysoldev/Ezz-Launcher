@@ -71,9 +71,15 @@ fun EzzButton(
     val isPressed by interactionSource.collectIsPressedAsState()
 
     val scale by animateFloatAsState(
-        targetValue = if (state.enableAnimations && isPressed) 0.98f else if (state.enableAnimations && isHovered) 1.01f else 1.0f,
-        animationSpec = tween(durationMillis = 120)
+        targetValue = if (state.enableAnimations && isPressed) 0.97f else if (state.enableAnimations && isHovered) 1.02f else 1.0f,
+        animationSpec = tween(durationMillis = 110)
     )
+
+    androidx.compose.runtime.LaunchedEffect(isHovered) {
+        if (isHovered && enabled && !isLoading) {
+            io.ezz.launcher.ui.audio.EzzAudioService.playHover()
+        }
+    }
 
     val (containerColor, contentColor, borderStroke) = when (variant) {
         EzzButtonVariant.PRIMARY -> Triple(
@@ -84,12 +90,12 @@ fun EzzButton(
         EzzButtonVariant.SECONDARY -> Triple(
             if (isHovered) Color(0xFF181D2A) else Color(0xFF12151E),
             if (isHovered) Color.White else Color(0xFFE2E8F0),
-            BorderStroke(1.dp, if (isHovered) Color(0xFF2F374E) else Color(0xFF1E2332))
+            BorderStroke(1.dp, if (isHovered) Color(0xFF333B54) else Color(0xFF1E2332))
         )
         EzzButtonVariant.OUTLINE -> Triple(
             if (isHovered) Color(0xFF141722) else Color.Transparent,
             if (isHovered) Color.White else Color(0xFFCBD5E1),
-            BorderStroke(1.dp, if (isHovered) Color(0xFF2F374E) else Color(0xFF1E2332))
+            BorderStroke(1.dp, if (isHovered) Color(0xFF333B54) else Color(0xFF1E2332))
         )
         EzzButtonVariant.DANGER -> Triple(
             if (isHovered) Color(0xFF381419) else Color(0xFF261215),
@@ -123,7 +129,10 @@ fun EzzButton(
                 interactionSource = interactionSource,
                 indication = null,
                 enabled = enabled && !isLoading,
-                onClick = onClick
+                onClick = {
+                    io.ezz.launcher.ui.audio.EzzAudioService.playClick()
+                    onClick()
+                }
             ),
         shape = RoundedCornerShape(cornerRadius),
         color = if (enabled) containerColor else containerColor.copy(alpha = 0.35f),

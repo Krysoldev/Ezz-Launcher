@@ -18,6 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -48,6 +50,7 @@ fun SettingsScreen(
 
     val detectedRuntimes by viewModel.detectedJavaRuntimes.collectAsState()
     val isDetectingJava by viewModel.isDetectingJava.collectAsState()
+    val javaDetectionError by viewModel.javaDetectionError.collectAsState()
     val memoryInfo by viewModel.systemMemoryInfo.collectAsState()
 
     val updateResult by viewModel.updateCheckResult.collectAsState()
@@ -119,7 +122,7 @@ fun SettingsScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         SettingsSectionHeader("JAVA & MEMORY")
 
-                        // Java Runtimes Group
+                        // 1. Java Runtimes Compact Grid Card
                         EzzCard(
                             modifier = Modifier.fillMaxWidth(),
                             cornerRadius = 10.dp,
@@ -150,7 +153,7 @@ fun SettingsScreen(
                                     }
 
                                     EzzButton(
-                                        text = "Manage Java Runtimes",
+                                        text = "Manage",
                                         icon = Icons.Default.OpenInNew,
                                         size = EzzButtonSize.SMALL,
                                         variant = EzzButtonVariant.SECONDARY,
@@ -158,38 +161,136 @@ fun SettingsScreen(
                                     )
                                 }
 
-                                val runtimes = listOf(
-                                    JavaRuntimeInfo(8, "Java 8", "Legacy Minecraft support (<= 1.16.5)"),
-                                    JavaRuntimeInfo(17, "Java 17", "Recommended for supported versions (1.17 – 1.20.4)"),
-                                    JavaRuntimeInfo(21, "Java 21", "Recommended for modern Minecraft (1.20.5+)"),
-                                    JavaRuntimeInfo(25, "Java 25", "Latest runtime (Experimental)")
+                                if (isDetectingJava) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(12.dp),
+                                            strokeWidth = 1.5.dp,
+                                            color = Color(0xFF8B5CF6)
+                                        )
+                                        Text(
+                                            text = "Detecting Java runtimes...",
+                                            color = Color(0xFF94A3B8),
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                } else if (javaDetectionError != null) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Text(
+                                            text = "Could not detect Java runtimes.",
+                                            color = Color(0xFFEF4444),
+                                            fontSize = 11.5.sp
+                                        )
+                                        EzzButton(
+                                            text = "Retry",
+                                            size = EzzButtonSize.SMALL,
+                                            variant = EzzButtonVariant.SECONDARY,
+                                            onClick = { viewModel.refreshJavaRuntimes() }
+                                        )
+                                    }
+                                }
+
+                                val runtimeCards = listOf(
+                                    JavaRuntimeCardInfo(8, "Java 8", "Legacy Minecraft (<= 1.16.5)"),
+                                    JavaRuntimeCardInfo(17, "Java 17", "Standard (1.17 – 1.20.4)"),
+                                    JavaRuntimeCardInfo(21, "Java 21", "Recommended modern (1.20.5+)"),
+                                    JavaRuntimeCardInfo(25, "Java 25", "Latest / Experimental")
                                 )
 
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color(0xFF0A0C12))
-                                        .border(1.dp, Color(0xFF161A24), RoundedCornerShape(8.dp))
-                                ) {
-                                    runtimes.forEachIndexed { index, rt ->
-                                        val isInstalled = detectedRuntimes.any { it.majorVersion == rt.version }
-                                        CleanJavaRuntimeRow(
-                                            title = rt.title,
-                                            description = rt.description,
-                                            isInstalled = isInstalled
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    // Row 1: Java 8 & Java 17
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        val card8 = runtimeCards[0]
+                                        val rt8 = detectedRuntimes.firstOrNull { it.majorVersion == 8 }
+                                        val isSelected8 = rt8 != null && settings.defaultJavaPath?.equals(rt8.path, ignoreCase = true) == true
+                                        CompactJavaRuntimeCard(
+                                            info = card8,
+                                            runtime = rt8,
+                                            isSelected = isSelected8,
+                                            onSelect = {
+                                                if (rt8 != null) {
+                                                    if (isSelected8) viewModel.updateCustomJavaPath("") else viewModel.updateCustomJavaPath(rt8.path)
+                                                } else {
+                                                    viewModel.platformBridge.openUrl("https://adoptium.net/temurin/releases/")
+                                                }
+                                            },
+                                            modifier = Modifier.weight(1f)
                                         )
-                                        if (index < runtimes.lastIndex) {
-                                            HorizontalDivider(color = Color(0xFF141722), thickness = 1.dp)
-                                        }
+
+                                        val card17 = runtimeCards[1]
+                                        val rt17 = detectedRuntimes.firstOrNull { it.majorVersion == 17 }
+                                        val isSelected17 = rt17 != null && settings.defaultJavaPath?.equals(rt17.path, ignoreCase = true) == true
+                                        CompactJavaRuntimeCard(
+                                            info = card17,
+                                            runtime = rt17,
+                                            isSelected = isSelected17,
+                                            onSelect = {
+                                                if (rt17 != null) {
+                                                    if (isSelected17) viewModel.updateCustomJavaPath("") else viewModel.updateCustomJavaPath(rt17.path)
+                                                } else {
+                                                    viewModel.platformBridge.openUrl("https://adoptium.net/temurin/releases/")
+                                                }
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+
+                                    // Row 2: Java 21 & Java 25
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        val card21 = runtimeCards[2]
+                                        val rt21 = detectedRuntimes.firstOrNull { it.majorVersion == 21 }
+                                        val isSelected21 = rt21 != null && settings.defaultJavaPath?.equals(rt21.path, ignoreCase = true) == true
+                                        CompactJavaRuntimeCard(
+                                            info = card21,
+                                            runtime = rt21,
+                                            isSelected = isSelected21,
+                                            onSelect = {
+                                                if (rt21 != null) {
+                                                    if (isSelected21) viewModel.updateCustomJavaPath("") else viewModel.updateCustomJavaPath(rt21.path)
+                                                } else {
+                                                    viewModel.platformBridge.openUrl("https://adoptium.net/temurin/releases/")
+                                                }
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        )
+
+                                        val card25 = runtimeCards[3]
+                                        val rt25 = detectedRuntimes.firstOrNull { it.majorVersion == 25 }
+                                        val isSelected25 = rt25 != null && settings.defaultJavaPath?.equals(rt25.path, ignoreCase = true) == true
+                                        CompactJavaRuntimeCard(
+                                            info = card25,
+                                            runtime = rt25,
+                                            isSelected = isSelected25,
+                                            onSelect = {
+                                                if (rt25 != null) {
+                                                    if (isSelected25) viewModel.updateCustomJavaPath("") else viewModel.updateCustomJavaPath(rt25.path)
+                                                } else {
+                                                    viewModel.platformBridge.openUrl("https://adoptium.net/temurin/releases/")
+                                                }
+                                            },
+                                            modifier = Modifier.weight(1f)
+                                        )
                                     }
                                 }
                             }
                         }
 
-                        // Maximum RAM Group
+                        // 2. Maximum RAM Group
                         val totalRamMb = memoryInfo.totalRamMb.coerceAtLeast(4096)
-                        val ramGbFormatted = String.format("%.1f", settings.defaultMaxMemoryMb / 1024.0)
+                        val currentRamMb = settings.defaultMaxMemoryMb
+                        val ramGbFormatted = if (currentRamMb % 1024 == 0) "${currentRamMb / 1024} GB" else String.format("%.1f GB", currentRamMb / 1024.0)
 
                         EzzCard(
                             modifier = Modifier.fillMaxWidth(),
@@ -225,29 +326,23 @@ fun SettingsScreen(
                                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
                                         Text(
-                                            text = "${settings.defaultMaxMemoryMb}",
+                                            text = ramGbFormatted,
                                             color = Color.White,
                                             fontSize = 18.sp,
                                             fontWeight = FontWeight.Black
                                         )
                                         Text(
-                                            text = "MB",
+                                            text = "(${currentRamMb} MB)",
                                             color = Color(0xFF8B5CF6),
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(bottom = 2.dp)
-                                        )
-                                        Text(
-                                            text = "($ramGbFormatted GB)",
-                                            color = Color(0xFF94A3B8),
-                                            fontSize = 11.5.sp,
                                             modifier = Modifier.padding(bottom = 2.dp)
                                         )
                                     }
                                 }
 
                                 EzzSlider(
-                                    value = settings.defaultMaxMemoryMb.toFloat().coerceIn(1024f, totalRamMb.toFloat()),
+                                    value = currentRamMb.toFloat().coerceIn(1024f, totalRamMb.toFloat()),
                                     onValueChange = { newMb ->
                                         val rounded = (newMb / 512).toInt() * 512
                                         viewModel.updateMemorySettings(settings.defaultMinMemoryMb, rounded)
@@ -270,12 +365,15 @@ fun SettingsScreen(
                             }
                         }
 
-                        // Java Executable Group
+                        // 3. Java Executable Group
                         var javaPathInput by remember(settings.defaultJavaPath) {
-                            mutableStateOf<String>(settings.defaultJavaPath ?: "")
+                            mutableStateOf(settings.defaultJavaPath ?: "")
                         }
                         val pathValidation = remember(javaPathInput) {
                             viewModel.validateCustomJavaPath(javaPathInput)
+                        }
+                        val customRuntime = remember(javaPathInput) {
+                            viewModel.inspectCustomJava(javaPathInput)
                         }
 
                         EzzCard(
@@ -312,10 +410,13 @@ fun SettingsScreen(
                                             Text(text = "Auto system default", color = Color(0xFF64748B), fontSize = 11.sp)
                                         }
                                         JavaValidationResult.Valid -> {
-                                            EzzBadge(text = "Valid Executable", variant = EzzBadgeVariant.SUCCESS)
+                                            EzzBadge(
+                                                text = if (customRuntime != null) "Valid Java ${customRuntime.majorVersion}" else "Valid Executable",
+                                                variant = EzzBadgeVariant.SUCCESS
+                                            )
                                         }
                                         JavaValidationResult.NotFound -> {
-                                            EzzBadge(text = "Not Found", variant = EzzBadgeVariant.WARNING)
+                                            EzzBadge(text = "Not Found", variant = EzzBadgeVariant.DANGER)
                                         }
                                         JavaValidationResult.IsDirectory -> {
                                             EzzBadge(text = "Is Directory", variant = EzzBadgeVariant.WARNING)
@@ -346,11 +447,20 @@ fun SettingsScreen(
                                         size = EzzButtonSize.MEDIUM,
                                         variant = EzzButtonVariant.SECONDARY,
                                         onClick = {
-                                            val picked = viewModel.platformBridge.pickJavaExecutable()
-                                            if (picked != null) {
-                                                javaPathInput = picked.absolutePath
-                                                viewModel.updateCustomJavaPath(picked.absolutePath)
-                                            }
+                                            val isWin = System.getProperty("os.name")?.lowercase()?.contains("win") == true
+                                            val currentJavaDir = javaPathInput.takeIf { it.isNotBlank() }?.let { java.io.File(it).let { f -> if (f.isDirectory) f else f.parentFile } }
+                                            viewModel.openFilePicker(
+                                                title = "Select Java Executable",
+                                                description = if (isWin) "Select java.exe or javaw.exe" else "Select java executable",
+                                                allowedExtensions = if (isWin) setOf("exe") else emptySet(),
+                                                initialDirectory = currentJavaDir,
+                                                onFileSelected = { picked ->
+                                                    if (picked != null) {
+                                                        javaPathInput = picked.absolutePath
+                                                        viewModel.updateCustomJavaPath(picked.absolutePath)
+                                                    }
+                                                }
+                                            )
                                         }
                                     )
                                     EzzButton(
@@ -359,13 +469,25 @@ fun SettingsScreen(
                                         size = EzzButtonSize.MEDIUM,
                                         variant = EzzButtonVariant.SECONDARY,
                                         isLoading = isDetectingJava,
-                                        onClick = { viewModel.refreshJavaRuntimes() }
+                                        onClick = {
+                                            javaPathInput = ""
+                                            viewModel.updateCustomJavaPath("")
+                                            viewModel.refreshJavaRuntimes()
+                                        }
+                                    )
+                                }
+
+                                if (pathValidation is JavaValidationResult.NotFound || pathValidation is JavaValidationResult.NotJavaExecutable) {
+                                    Text(
+                                        text = "Please select a valid java.exe or javaw.exe executable that can be launched.",
+                                        color = Color(0xFFEF4444),
+                                        fontSize = 11.sp
                                     )
                                 }
                             }
                         }
 
-                        // JVM Launch Arguments Group
+                        // 4. JVM Launch Arguments Group
                         var jvmArgsInput by remember(settings.globalJvmArgs) {
                             mutableStateOf(settings.globalJvmArgs.joinToString(" "))
                         }
@@ -609,7 +731,88 @@ fun SettingsScreen(
                     }
 
                     // =========================================================
-                    // SECTION 4: UPDATES
+                    // SECTION 4: SOUND EFFECTS
+                    // =========================================================
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        SettingsSectionHeader("SOUND EFFECTS")
+
+                        EzzCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            cornerRadius = 10.dp,
+                            backgroundColor = Color(0xFF10131A),
+                            borderColor = Color(0xFF1B1F2C)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(18.dp),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(end = 20.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "UI Sound Effects",
+                                            color = Color.White,
+                                            fontSize = 13.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "Subtle acoustic feedback on clicks, tabs, cards, and Minecraft launch triggers.",
+                                            color = Color(0xFF64748B),
+                                            fontSize = 11.5.sp
+                                        )
+                                    }
+
+                                    EzzToggle(
+                                        checked = settings.soundEffectsEnabled,
+                                        onCheckedChange = { enabled ->
+                                            viewModel.updateSoundSettings(enabled, settings.soundVolume)
+                                        }
+                                    )
+                                }
+
+                                if (settings.soundEffectsEnabled) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "UI Volume",
+                                                color = Color(0xFF94A3B8),
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                            Text(
+                                                text = "${(settings.soundVolume * 100).toInt()}%",
+                                                color = Color(0xFFA78BFA),
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        EzzSlider(
+                                            value = settings.soundVolume,
+                                            onValueChange = { vol ->
+                                                viewModel.updateSoundSettings(settings.soundEffectsEnabled, vol)
+                                            },
+                                            valueRange = 0.05f..1.0f
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // =========================================================
+                    // SECTION 5: UPDATES
                     // =========================================================
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         SettingsSectionHeader("UPDATES")
@@ -719,7 +922,7 @@ fun SettingsScreen(
                     }
 
                     // =========================================================
-                    // SECTION 5: ADMIN IDENTITY
+                    // SECTION 6: ADMIN IDENTITY
                     // =========================================================
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         SettingsSectionHeader("ADMIN IDENTITY")
@@ -937,46 +1140,131 @@ private fun SettingsSectionHeader(title: String) {
     }
 }
 
-private data class JavaRuntimeInfo(
+private data class JavaRuntimeCardInfo(
     val version: Int,
     val title: String,
     val description: String
 )
 
 @Composable
-private fun CleanJavaRuntimeRow(
-    title: String,
-    description: String,
-    isInstalled: Boolean
+private fun CompactJavaRuntimeCard(
+    info: JavaRuntimeCardInfo,
+    runtime: JavaRuntime?,
+    isSelected: Boolean,
+    onSelect: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(text = title, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            Text(text = description, color = Color(0xFF64748B), fontSize = 11.sp)
-        }
+    var isHovered by remember { mutableStateOf(false) }
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+    val isInstalled = runtime != null
+    val targetBorderColor = when {
+        isSelected -> Color(0xFF8B5CF6)
+        isHovered -> Color(0xFF2C3246)
+        else -> Color(0xFF171A24)
+    }
+    val targetBgColor = when {
+        isSelected -> Color(0xFF171328)
+        isHovered -> Color(0xFF12151F)
+        else -> Color(0xFF0C0E15)
+    }
+
+    val borderColor by animateColorAsState(targetBorderColor, animationSpec = tween(160))
+    val bgColor by animateColorAsState(targetBgColor, animationSpec = tween(160))
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(bgColor)
+            .border(if (isSelected) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(8.dp))
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        when (event.type) {
+                            PointerEventType.Enter -> isHovered = true
+                            PointerEventType.Exit -> isHovered = false
+                        }
+                    }
+                }
+            }
+            .clickable { onSelect() }
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(if (isInstalled) Color(0xFF10B981) else Color(0xFFF59E0B))
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = info.title.uppercase(),
+                    color = Color.White,
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 0.5.sp
+                )
+
+                if (isSelected) {
+                    EzzBadge(text = "SELECTED", variant = EzzBadgeVariant.PRIMARY)
+                }
+            }
+
             Text(
-                text = if (isInstalled) "Installed" else "Not Installed",
-                color = if (isInstalled) Color(0xFF10B981) else Color(0xFFF59E0B),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold
+                text = info.description,
+                color = Color(0xFF64748B),
+                fontSize = 10.5.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
+
+            Spacer(modifier = Modifier.height(2.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(if (isInstalled) Color(0xFF10B981) else Color(0xFFF59E0B))
+                    )
+                    Text(
+                        text = if (isInstalled) "Installed" else "Not Found",
+                        color = if (isInstalled) Color(0xFF10B981) else Color(0xFFF59E0B),
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                if (isInstalled && runtime != null) {
+                    val vendorText = when {
+                        runtime.vendor.contains("Adoptium", ignoreCase = true) -> "Adoptium"
+                        runtime.vendor.contains("Microsoft", ignoreCase = true) -> "Microsoft"
+                        runtime.vendor.contains("Red Hat", ignoreCase = true) -> "Red Hat"
+                        runtime.vendor.contains("Oracle", ignoreCase = true) -> "Oracle"
+                        runtime.vendor.contains("Zulu", ignoreCase = true) -> "Zulu"
+                        runtime.vendor.contains("Corretto", ignoreCase = true) -> "Corretto"
+                        runtime.vendor.contains("Liberica", ignoreCase = true) -> "Liberica"
+                        else -> runtime.vendor
+                    }
+                    Text(
+                        text = vendorText,
+                        color = Color(0xFF475569),
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
     }
 }
@@ -1103,8 +1391,14 @@ private fun AdminReleaseManagerModal(
                         variant = EzzButtonVariant.SECONDARY,
                         modifier = Modifier.padding(top = 18.dp),
                         onClick = {
-                            val picked = viewModel.platformBridge.pickReleaseArtifact()
-                            if (picked != null) selectedArtifact = picked
+                            viewModel.openFilePicker(
+                                title = "Select Release Artifact",
+                                description = "Select a build archive or installer",
+                                allowedExtensions = setOf("zip", "exe", "msi", "jar", "tar.gz"),
+                                onFileSelected = { picked ->
+                                    if (picked != null) selectedArtifact = picked
+                                }
+                            )
                         }
                     )
                 }

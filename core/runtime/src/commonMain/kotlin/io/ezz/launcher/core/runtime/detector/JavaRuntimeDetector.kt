@@ -66,7 +66,14 @@ object JavaRuntimeDetector {
             "$programFiles\\Zulu",
             "$programFiles\\Amazon Corretto",
             "$programFiles\\Semeru",
+            "$programFiles\\RedHat",
+            "$programFiles\\Common Files\\Oracle\\Java\\javapath",
             "$programFilesX86\\Java",
+            "$programFilesX86\\Common Files\\Oracle\\Java\\javapath",
+            "$localAppData\\Programs",
+            "$localAppData\\Programs\\Eclipse Adoptium",
+            "$localAppData\\Programs\\Java",
+            "$localAppData\\Programs\\Microsoft",
             "$userHome\\.jdks",
             "$userHome\\.sdkman\\candidates\\java",
             "$appData\\.minecraft\\runtime",
@@ -79,6 +86,8 @@ object JavaRuntimeDetector {
         for (rootPath in standardRoots) {
             val rootDir = File(rootPath)
             if (rootDir.exists() && rootDir.isDirectory) {
+                // If the root directory itself contains bin/java.exe or java.exe directly (e.g. Oracle javapath)
+                candidates.add(rootDir.absolutePath)
                 rootDir.listFiles()?.forEach { subDir ->
                     if (subDir.isDirectory) {
                         candidates.add(subDir.absolutePath)
@@ -93,8 +102,18 @@ object JavaRuntimeDetector {
 
         for (candidate in candidates) {
             val runtime = inspectJavaHome(candidate)
-            if (runtime != null && found.none { it.path.equals(runtime.path, ignoreCase = true) }) {
-                found.add(runtime)
+            if (runtime != null) {
+                val candidateFile = File(runtime.path)
+                val parentDir = candidateFile.parentFile?.canonicalPath?.lowercase()
+                val isDuplicate = found.any { existing ->
+                    val existingFile = File(existing.path)
+                    val existingParent = existingFile.parentFile?.canonicalPath?.lowercase()
+                    existingFile.canonicalPath.equals(candidateFile.canonicalPath, ignoreCase = true) ||
+                            (parentDir != null && parentDir == existingParent && existing.majorVersion == runtime.majorVersion)
+                }
+                if (!isDuplicate) {
+                    found.add(runtime)
+                }
             }
         }
 
@@ -109,17 +128,42 @@ object JavaRuntimeDetector {
         val file = File(dirOrBinaryPath)
         if (!file.exists()) return null
 
+        var reportedPath = dirOrBinaryPath
         val javaBinary = when {
             file.isFile && (file.name.equals("java.exe", ignoreCase = true) || file.name.equals("java", ignoreCase = true)) -> {
+                reportedPath = file.absolutePath
                 file
+            }
+            file.isFile && file.name.equals("javaw.exe", ignoreCase = true) -> {
+                reportedPath = file.absolutePath
+                val companionJava = File(file.parentFile, "java.exe")
+                if (companionJava.exists() && companionJava.canExecute()) companionJava else file
             }
             isWindows() -> {
                 val binJava = File(file, "bin\\java.exe")
-                if (binJava.exists()) binJava else File(file, "java.exe")
+                val binJavaw = File(file, "bin\\javaw.exe")
+                val rootJava = File(file, "java.exe")
+                when {
+                    binJava.exists() -> {
+                        reportedPath = if (binJavaw.exists()) binJavaw.absolutePath else binJava.absolutePath
+                        binJava
+                    }
+                    rootJava.exists() -> {
+                        reportedPath = rootJava.absolutePath
+                        rootJava
+                    }
+                    else -> binJava
+                }
             }
             else -> {
                 val binJava = File(file, "bin/java")
-                if (binJava.exists()) binJava else File(file, "java")
+                if (binJava.exists()) {
+                    reportedPath = binJava.absolutePath
+                    binJava
+                } else {
+                    reportedPath = File(file, "java").absolutePath
+                    File(file, "java")
+                }
             }
         }
 
@@ -132,25 +176,24 @@ object JavaRuntimeDetector {
             val output = process.inputStream.bufferedReader().readText()
             process.waitFor()
 
-            parseJavaVersionOutput(javaBinary.absolutePath, output)
+            parseJavaVersionOutput(reportedPath, output)
         } catch (e: Exception) {
             null
         }
     }
 
     fun parseJavaVersionOutput(binaryPath: String, output: String): JavaRuntime {
+        val is64 = !output.contains("32-Bit", ignoreCase = true) &&
+                !output.contains("i386", ignoreCase = true) &&
+                !output.contains("i686", ignoreCase = true) &&
+                (output.contains("64-Bit", ignoreCase = true) ||
+                        output.contains("x86_64", ignoreCase = true) ||
+                        output.contains("amd64", ignoreCase = true) ||
+                        output.contains("aarch64", ignoreCase = true) ||
+                        output.contains("arm64", ignoreCase = true))
+
         var major = 8
         var full = "Unknown"
-        var is64 = output.contains("64-Bit", ignoreCase = true) ||
-                output.contains("x86_64", ignoreCase = true) ||
-                output.contains("amd64", ignoreCase = true) ||
-                output.contains("aarch64", ignoreCase = true) ||
-                output.contains("arm64", ignoreCase = true)
-
-        if (output.contains("32-Bit", ignoreCase = true) || output.contains("i386", ignoreCase = true) || output.contains("i686", ignoreCase = true)) {
-            is64 = false
-        }
-
         val versionRegex = Regex("""(?:java|openjdk) version "([^"]+)"""")
         val match = versionRegex.find(output)
         if (match != null) {
@@ -170,6 +213,7 @@ object JavaRuntimeDetector {
             output.contains("Corretto", ignoreCase = true) -> vendor = "Amazon Corretto"
             output.contains("Liberica", ignoreCase = true) || output.contains("BellSoft", ignoreCase = true) -> vendor = "BellSoft Liberica"
             output.contains("GraalVM", ignoreCase = true) -> vendor = "GraalVM"
+            output.contains("Red Hat", ignoreCase = true) || output.contains("redhat", ignoreCase = true) || binaryPath.contains("RedHat", ignoreCase = true) -> vendor = "Red Hat OpenJDK"
             output.contains("HotSpot", ignoreCase = true) -> vendor = "Oracle / OpenJDK"
             output.contains("Semeru", ignoreCase = true) || output.contains("IBM", ignoreCase = true) -> vendor = "IBM Semeru"
         }

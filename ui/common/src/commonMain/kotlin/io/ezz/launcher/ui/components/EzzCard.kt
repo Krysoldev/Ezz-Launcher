@@ -8,6 +8,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -47,15 +48,20 @@ fun EzzCard(
         animationSpec = tween(durationMillis = 150)
     )
 
+    val offsetY by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (state.enableAnimations && onClick != null && isHovered) (-2).dp else 0.dp,
+        animationSpec = tween(durationMillis = 140)
+    )
+
     val baseBg = backgroundColor ?: when (variant) {
         EzzCardVariant.SURFACE -> Color(0xFF10131A)
-        EzzCardVariant.ELEVATED -> Color(0xFF161A24)
-        EzzCardVariant.OUTLINED -> Color(0xFF07080A)
+        EzzCardVariant.ELEVATED -> Color(0xFF141822)
+        EzzCardVariant.OUTLINED -> Color(0xFF0A0C12)
         EzzCardVariant.GLASS -> Color(0xFF10131A)
     }
 
     val baseBorder = borderColor ?: when {
-        isHovered && onClick != null -> Color(0xFF2D3448)
+        isHovered && onClick != null -> Color(0xFF333B50)
         variant == EzzCardVariant.OUTLINED -> Color(0xFF242A3B)
         else -> Color(0xFF1B1F2C)
     }
@@ -64,7 +70,10 @@ fun EzzCard(
         Modifier.clickable(
             interactionSource = interactionSource,
             indication = null,
-            onClick = onClick
+            onClick = {
+                io.ezz.launcher.ui.audio.EzzAudioService.playSelect()
+                onClick()
+            }
         )
     } else {
         Modifier
@@ -72,11 +81,12 @@ fun EzzCard(
 
     Surface(
         modifier = modifier
+            .offset(y = offsetY)
             .scale(scale)
             .clip(RoundedCornerShape(cornerRadius))
             .then(clickableModifier),
         shape = RoundedCornerShape(cornerRadius),
-        color = if (isHovered && onClick != null) Color(0xFF161A24) else baseBg,
+        color = if (isHovered && onClick != null) Color(0xFF151923) else baseBg,
         border = BorderStroke(1.dp, baseBorder)
     ) {
         Box {

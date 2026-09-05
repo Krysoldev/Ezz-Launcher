@@ -127,6 +127,11 @@ fun ImportModpackDialog(
 
     // Validate and load preview whenever a file is selected
     fun validateAndLoadPreview(file: File) {
+        if (!file.name.endsWith(".mrpack", ignoreCase = true)) {
+            validationError = "Invalid file. Please select a valid .mrpack file."
+            currentStep = ImportDialogStep.DROPZONE
+            return
+        }
         selectedFile = file
         isValidating = true
         validationError = null
@@ -139,7 +144,7 @@ fun ImportModpackDialog(
                 instanceNameInput = preview.name
                 currentStep = ImportDialogStep.PREVIEW
             } else {
-                validationError = result.exceptionOrNull()?.message ?: "Invalid Modrinth modpack."
+                validationError = "Invalid file. Please select a valid .mrpack file."
                 currentStep = ImportDialogStep.DROPZONE
             }
         }
@@ -280,10 +285,16 @@ fun ImportModpackDialog(
                             DropzoneView(
                                 isValidating = isValidating,
                                 onChooseFile = {
-                                    val file = viewModel.platformBridge.pickImportInstanceFile()
-                                    if (file != null) {
-                                        validateAndLoadPreview(file)
-                                    }
+                                    viewModel.openFilePicker(
+                                        title = "Select Modrinth Modpack",
+                                        description = "Select a .mrpack file",
+                                        allowedExtensions = setOf("mrpack"),
+                                        onFileSelected = { file ->
+                                            if (file != null) {
+                                                validateAndLoadPreview(file)
+                                            }
+                                        }
+                                    )
                                 }
                             )
                         }
@@ -369,7 +380,7 @@ fun ImportModpackDialog(
                                 },
                                 onOpenInstance = {
                                     importedInstance?.let { inst ->
-                                        viewModel.selectInstance(inst)
+                                        viewModel.openInstanceManager(inst)
                                     }
                                     handleDismiss()
                                 },

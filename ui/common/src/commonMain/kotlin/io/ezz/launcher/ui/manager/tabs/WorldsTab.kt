@@ -70,7 +70,7 @@ fun WorldsTab(
 ) {
     val worlds by viewModel.manageWorlds.collectAsState()
 
-    var worldSearch by remember { mutableStateOf("") }
+    var worldSearch by remember(instance.id) { mutableStateOf("") }
     var worldToRename by remember { mutableStateOf<LocalWorld?>(null) }
     var worldToDuplicate by remember { mutableStateOf<LocalWorld?>(null) }
     var worldToDelete by remember { mutableStateOf<LocalWorld?>(null) }

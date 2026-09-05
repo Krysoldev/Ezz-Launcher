@@ -32,9 +32,9 @@ class DiscordRpcPayloadTest {
 
         val activity = args["activity"]?.jsonObject
         assertNotNull(activity)
-        assertEquals("KrysolDev", activity["name"]?.jsonPrimitive?.content)
+        assertEquals("Ezz Launcher", activity["name"]?.jsonPrimitive?.content)
         assertEquals(0, activity["type"]?.jsonPrimitive?.long?.toInt())
-        assertEquals("Ezz Launcher", activity["details"]?.jsonPrimitive?.content)
+        assertEquals("KrysolDev", activity["details"]?.jsonPrimitive?.content)
         assertEquals("Ready to play", activity["state"]?.jsonPrimitive?.content)
 
         // No session timestamps for launcher presence
@@ -65,8 +65,8 @@ class DiscordRpcPayloadTest {
         val activity = json["args"]?.jsonObject?.get("activity")?.jsonObject
         assertNotNull(activity)
         assertEquals("Ezz Launcher", activity["name"]?.jsonPrimitive?.content)
-        assertEquals("Ezz Launcher", activity["details"]?.jsonPrimitive?.content)
-        assertEquals("Ready to play", activity["state"]?.jsonPrimitive?.content)
+        assertEquals("Ready to play", activity["details"]?.jsonPrimitive?.content)
+        assertNull(activity["state"])
         assertNull(activity["timestamps"])
 
         val assets = activity["assets"]?.jsonObject
@@ -97,7 +97,7 @@ class DiscordRpcPayloadTest {
 
         val activity = args["activity"]?.jsonObject
         assertNotNull(activity)
-        assertEquals("KrysolDev", activity["name"]?.jsonPrimitive?.content)
+        assertEquals("Ezz Launcher", activity["name"]?.jsonPrimitive?.content)
         assertEquals(0, activity["type"]?.jsonPrimitive?.long?.toInt())
         assertEquals("Playing Minecraft", activity["details"]?.jsonPrimitive?.content)
         assertEquals("Minecraft 1.21.11", activity["state"]?.jsonPrimitive?.content)
@@ -131,11 +131,16 @@ class DiscordRpcPayloadTest {
         val jsonAlice = Json.parseToJsonElement(payloadAlice).jsonObject
         val actAlice = jsonAlice["args"]?.jsonObject?.get("activity")?.jsonObject
         assertNotNull(actAlice)
-        assertEquals("AlicePlayer", actAlice["name"]?.jsonPrimitive?.content)
+        assertEquals("Ezz Launcher", actAlice["name"]?.jsonPrimitive?.content)
+        assertEquals("Playing Minecraft", actAlice["details"]?.jsonPrimitive?.content)
         assertEquals("Minecraft 1.20.4", actAlice["state"]?.jsonPrimitive?.content)
         assertEquals(
             "https://minotar.net/helm/AlicePlayer/128.png",
             actAlice["assets"]?.jsonObject?.get("small_image")?.jsonPrimitive?.content
+        )
+        assertEquals(
+            "AlicePlayer",
+            actAlice["assets"]?.jsonObject?.get("small_text")?.jsonPrimitive?.content
         )
 
         // Switch to Bob
@@ -151,12 +156,67 @@ class DiscordRpcPayloadTest {
         val jsonBob = Json.parseToJsonElement(payloadBob).jsonObject
         val actBob = jsonBob["args"]?.jsonObject?.get("activity")?.jsonObject
         assertNotNull(actBob)
-        assertEquals("BobBuilder", actBob["name"]?.jsonPrimitive?.content)
+        assertEquals("Ezz Launcher", actBob["name"]?.jsonPrimitive?.content)
+        assertEquals("Playing Minecraft", actBob["details"]?.jsonPrimitive?.content)
         assertEquals("Minecraft 1.16.5", actBob["state"]?.jsonPrimitive?.content)
         assertEquals(
             "https://minotar.net/helm/BobBuilder/128.png",
             actBob["assets"]?.jsonObject?.get("small_image")?.jsonPrimitive?.content
         )
+        assertEquals(
+            "BobBuilder",
+            actBob["assets"]?.jsonObject?.get("small_text")?.jsonPrimitive?.content
+        )
+    }
+
+    @Test
+    fun testAccountSwitchingRetainsEzzLauncherIdentity() {
+        // KrysolDev -> Steve in Launcher Mode
+        val krysolLauncherJson = service.buildLauncherPayload(username = "KrysolDev", avatarUrl = null)
+        val krysolLauncherAct = Json.parseToJsonElement(krysolLauncherJson).jsonObject["args"]?.jsonObject?.get("activity")?.jsonObject
+        assertNotNull(krysolLauncherAct)
+        assertEquals("Ezz Launcher", krysolLauncherAct["name"]?.jsonPrimitive?.content)
+        assertEquals("KrysolDev", krysolLauncherAct["details"]?.jsonPrimitive?.content)
+        assertEquals("Ready to play", krysolLauncherAct["state"]?.jsonPrimitive?.content)
+
+        val steveLauncherJson = service.buildLauncherPayload(username = "Steve", avatarUrl = null)
+        val steveLauncherAct = Json.parseToJsonElement(steveLauncherJson).jsonObject["args"]?.jsonObject?.get("activity")?.jsonObject
+        assertNotNull(steveLauncherAct)
+        assertEquals("Ezz Launcher", steveLauncherAct["name"]?.jsonPrimitive?.content)
+        assertEquals("Steve", steveLauncherAct["details"]?.jsonPrimitive?.content)
+        assertEquals("Ready to play", steveLauncherAct["state"]?.jsonPrimitive?.content)
+
+        // KrysolDev -> Steve in Minecraft Mode
+        val krysolMcJson = service.buildActivityPayload(playerUsername = "KrysolDev", minecraftVersion = "1.21.11")
+        val krysolMcAct = Json.parseToJsonElement(krysolMcJson).jsonObject["args"]?.jsonObject?.get("activity")?.jsonObject
+        assertNotNull(krysolMcAct)
+        assertEquals("Ezz Launcher", krysolMcAct["name"]?.jsonPrimitive?.content)
+        assertEquals("Playing Minecraft", krysolMcAct["details"]?.jsonPrimitive?.content)
+        assertEquals("Minecraft 1.21.11", krysolMcAct["state"]?.jsonPrimitive?.content)
+        assertEquals("KrysolDev", krysolMcAct["assets"]?.jsonObject?.get("small_text")?.jsonPrimitive?.content)
+
+        val steveMcJson = service.buildActivityPayload(playerUsername = "Steve", minecraftVersion = "1.21.11")
+        val steveMcAct = Json.parseToJsonElement(steveMcJson).jsonObject["args"]?.jsonObject?.get("activity")?.jsonObject
+        assertNotNull(steveMcAct)
+        assertEquals("Ezz Launcher", steveMcAct["name"]?.jsonPrimitive?.content)
+        assertEquals("Playing Minecraft", steveMcAct["details"]?.jsonPrimitive?.content)
+        assertEquals("Minecraft 1.21.11", steveMcAct["state"]?.jsonPrimitive?.content)
+        assertEquals("Steve", steveMcAct["assets"]?.jsonObject?.get("small_text")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun testInstanceNameCustomState() {
+        val payload = service.buildMinecraftPayload(
+            playerUsername = "KrysolDev",
+            minecraftVersion = "1.21.11",
+            instanceName = "Fabric Speedrun"
+        )
+        val json = Json.parseToJsonElement(payload).jsonObject
+        val act = json["args"]?.jsonObject?.get("activity")?.jsonObject
+        assertNotNull(act)
+        assertEquals("Ezz Launcher", act["name"]?.jsonPrimitive?.content)
+        assertEquals("Playing Minecraft", act["details"]?.jsonPrimitive?.content)
+        assertEquals("Fabric Speedrun (Minecraft 1.21.11)", act["state"]?.jsonPrimitive?.content)
     }
 
     @Test

@@ -28,6 +28,8 @@ kotlin {
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
             implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
             implementation("ca.weblite:webview:1.3.1")
+            implementation("net.java.dev.jna:jna:5.13.0")
+            implementation("net.java.dev.jna:jna-platform:5.13.0")
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

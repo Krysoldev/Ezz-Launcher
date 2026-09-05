@@ -72,7 +72,7 @@ fun FilesTab(
     modifier: Modifier = Modifier
 ) {
     val mcDir = viewModel.pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").toFile()
-    var searchQuery by remember { mutableStateOf("") }
+    var searchQuery by remember(instance.id) { mutableStateOf("") }
 
     val standardFolders = listOf(
         StandardFolderItem("mods", "Mods Directory", "Local Fabric / Forge / NeoForge mods (.jar)", Icons.Default.Extension, File(mcDir, "mods")),

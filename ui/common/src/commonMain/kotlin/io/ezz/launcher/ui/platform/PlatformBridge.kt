@@ -3,25 +3,30 @@ package io.ezz.launcher.ui.platform
 import okio.Path
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
+import java.io.File
 
 interface PlatformBridge {
     fun openFolder(path: Path)
     fun openUrl(url: String)
     fun copyToClipboard(text: String)
-    fun pickImageFile(title: String = "Select Instance Icon"): java.io.File?
-    fun pickImportInstanceFile(title: String = "Select Modrinth Modpack (*.mrpack)"): java.io.File?
-    fun pickExportInstanceFile(defaultName: String, title: String = "Export Modrinth Modpack (*.mrpack)"): java.io.File?
-    fun pickJavaExecutable(title: String = "Select Java Executable (java.exe)"): java.io.File?
-    fun pickReleaseArtifact(title: String = "Select Release Artifact (*.zip, *.exe, *.msi)"): java.io.File?
+    fun pickImageFile(title: String = "Select Instance Icon (PNG, JPG, WEBP)"): File?
+    fun pickSkinFile(title: String = "Import Minecraft Skin (*.png)"): File?
+    fun pickImportInstanceFile(title: String = "Select Modrinth Modpack (*.mrpack)"): File?
+    fun pickExportInstanceFile(defaultName: String, title: String = "Export Modrinth Modpack (*.mrpack)"): File?
+    fun pickJavaExecutable(title: String = "Select Java Executable (java.exe)"): File?
+    fun pickReleaseArtifact(title: String = "Select Release Artifact (*.zip, *.exe, *.msi)"): File?
 }
 
 class DefaultPlatformBridge(
     private val onOpenFolder: ((Path) -> Unit)? = null,
     private val onOpenUrl: ((String) -> Unit)? = null,
     private val onCopyToClipboard: ((String) -> Unit)? = null,
-    private val onPickImageFile: ((String) -> java.io.File?)? = null,
-    private val onPickImportFile: ((String) -> java.io.File?)? = null,
-    private val onPickExportFile: ((String, String) -> java.io.File?)? = null
+    private val onPickImageFile: ((String) -> File?)? = null,
+    private val onPickSkinFile: ((String) -> File?)? = null,
+    private val onPickImportFile: ((String) -> File?)? = null,
+    private val onPickExportFile: ((String, String) -> File?)? = null,
+    private val onPickJavaExecutable: ((String) -> File?)? = null,
+    private val onPickReleaseArtifact: ((String) -> File?)? = null
 ) : PlatformBridge {
     override fun openFolder(path: Path) {
         onOpenFolder?.invoke(path)
@@ -44,171 +49,83 @@ class DefaultPlatformBridge(
         }
     }
 
-    override fun pickImageFile(title: String): java.io.File? {
-        if (onPickImageFile != null) {
-            return onPickImageFile.invoke(title)
-        }
-        return try {
-            val dialog = java.awt.FileDialog(null as java.awt.Frame?, title, java.awt.FileDialog.LOAD)
-            dialog.setFilenameFilter { _, name ->
-                val lower = name.lowercase()
-                lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".webp")
-            }
-            dialog.isVisible = true
-            val dir = dialog.directory
-            val file = dialog.file
-            if (dir != null && file != null) {
-                java.io.File(dir, file)
-            } else {
-                null
-            }
-        } catch (e: Throwable) {
-            try {
-                val chooser = javax.swing.JFileChooser()
-                chooser.dialogTitle = title
-                chooser.fileFilter = javax.swing.filechooser.FileNameExtensionFilter(
-                    "Image files (PNG, JPG, WEBP)", "png", "jpg", "jpeg", "webp"
-                )
-                val res = chooser.showOpenDialog(null)
-                if (res == javax.swing.JFileChooser.APPROVE_OPTION) {
-                    chooser.selectedFile
-                } else null
-            } catch (e2: Throwable) {
-                null
-            }
-        }
+    override fun pickImageFile(title: String): File? {
+        if (onPickImageFile != null) return onPickImageFile.invoke(title)
+        return WindowsModernFilePicker.openFileDialog(
+            title = title,
+            filterSpecs = listOf(
+                "Supported Images (*.png;*.jpg;*.jpeg;*.webp)" to "*.png;*.jpg;*.jpeg;*.webp",
+                "PNG Images (*.png)" to "*.png",
+                "JPEG Images (*.jpg;*.jpeg)" to "*.jpg;*.jpeg",
+                "WEBP Images (*.webp)" to "*.webp",
+                "All Files (*.*)" to "*.*"
+            )
+        )
     }
 
-    override fun pickImportInstanceFile(title: String): java.io.File? {
-        if (onPickImportFile != null) {
-            return onPickImportFile.invoke(title)
-        }
-        return try {
-            val dialog = java.awt.FileDialog(null as java.awt.Frame?, title, java.awt.FileDialog.LOAD)
-            dialog.setFilenameFilter { _, name ->
-                val lower = name.lowercase()
-                lower.endsWith(".mrpack") || lower.endsWith(".zip")
-            }
-            dialog.isVisible = true
-            val dir = dialog.directory
-            val file = dialog.file
-            if (dir != null && file != null) {
-                java.io.File(dir, file)
-            } else {
-                null
-            }
-        } catch (e: Throwable) {
-            try {
-                val chooser = javax.swing.JFileChooser()
-                chooser.dialogTitle = title
-                chooser.fileFilter = javax.swing.filechooser.FileNameExtensionFilter(
-                    "Modrinth Modpack (*.mrpack)", "mrpack", "zip"
-                )
-                val res = chooser.showOpenDialog(null)
-                if (res == javax.swing.JFileChooser.APPROVE_OPTION) {
-                    chooser.selectedFile
-                } else null
-            } catch (e2: Throwable) {
-                null
-            }
-        }
+    override fun pickSkinFile(title: String): File? {
+        if (onPickSkinFile != null) return onPickSkinFile.invoke(title)
+        return WindowsModernFilePicker.openFileDialog(
+            title = title,
+            filterSpecs = listOf(
+                "PNG Images (*.png)" to "*.png",
+                "All Files (*.*)" to "*.*"
+            ),
+            defaultExtension = "png"
+        )
     }
 
-    override fun pickExportInstanceFile(defaultName: String, title: String): java.io.File? {
-        if (onPickExportFile != null) {
-            return onPickExportFile.invoke(defaultName, title)
-        }
+    override fun pickImportInstanceFile(title: String): File? {
+        if (onPickImportFile != null) return onPickImportFile.invoke(title)
+        val userHome = System.getProperty("user.home", ".")
+        val downloads = File(userHome, "Downloads")
+        val initDir = if (downloads.exists() && downloads.isDirectory) downloads else File(userHome)
+        return WindowsModernFilePicker.openFileDialog(
+            title = title,
+            filterSpecs = listOf(
+                "Modrinth Modpack (*.mrpack)" to "*.mrpack",
+                "All Files (*.*)" to "*.*"
+            ),
+            initialDir = initDir,
+            defaultExtension = "mrpack"
+        )
+    }
+
+    override fun pickExportInstanceFile(defaultName: String, title: String): File? {
         val fileNameWithExt = if (defaultName.endsWith(".mrpack", ignoreCase = true)) defaultName else "$defaultName.mrpack"
-        return try {
-            val dialog = java.awt.FileDialog(null as java.awt.Frame?, title, java.awt.FileDialog.SAVE)
-            dialog.file = fileNameWithExt
-            dialog.isVisible = true
-            val dir = dialog.directory
-            val file = dialog.file
-            if (dir != null && file != null) {
-                val chosen = java.io.File(dir, file)
-                if (chosen.name.endsWith(".mrpack", ignoreCase = true)) chosen else java.io.File(dir, "${chosen.name}.mrpack")
-            } else {
-                null
-            }
-        } catch (e: Throwable) {
-            try {
-                val chooser = javax.swing.JFileChooser()
-                chooser.dialogTitle = title
-                chooser.selectedFile = java.io.File(fileNameWithExt)
-                chooser.fileFilter = javax.swing.filechooser.FileNameExtensionFilter(
-                    "Modrinth Modpack (*.mrpack)", "mrpack"
-                )
-                val res = chooser.showSaveDialog(null)
-                if (res == javax.swing.JFileChooser.APPROVE_OPTION) {
-                    val chosen = chooser.selectedFile
-                    if (chosen != null && !chosen.name.endsWith(".mrpack", ignoreCase = true)) {
-                        java.io.File(chosen.parentFile, "${chosen.name}.mrpack")
-                    } else {
-                        chosen
-                    }
-                } else null
-            } catch (e2: Throwable) {
-                null
-            }
-        }
+        if (onPickExportFile != null) return onPickExportFile.invoke(fileNameWithExt, title)
+        return WindowsModernFilePicker.saveFileDialog(
+            title = title,
+            filterSpecs = listOf(
+                "Modrinth Modpack (*.mrpack)" to "*.mrpack",
+                "All Files (*.*)" to "*.*"
+            ),
+            defaultName = fileNameWithExt,
+            defaultExtension = "mrpack"
+        )
     }
 
-    override fun pickJavaExecutable(title: String): java.io.File? {
-        return try {
-            val dialog = java.awt.FileDialog(null as java.awt.Frame?, title, java.awt.FileDialog.LOAD)
-            dialog.setFilenameFilter { _, name ->
-                val lower = name.lowercase()
-                lower == "java.exe" || lower == "javaw.exe" || lower == "java" || lower.endsWith(".exe")
-            }
-            dialog.isVisible = true
-            val dir = dialog.directory
-            val file = dialog.file
-            if (dir != null && file != null) {
-                java.io.File(dir, file)
-            } else {
-                null
-            }
-        } catch (e: Throwable) {
-            try {
-                val chooser = javax.swing.JFileChooser()
-                chooser.dialogTitle = title
-                val res = chooser.showOpenDialog(null)
-                if (res == javax.swing.JFileChooser.APPROVE_OPTION) {
-                    chooser.selectedFile
-                } else null
-            } catch (e2: Throwable) {
-                null
-            }
-        }
+    override fun pickJavaExecutable(title: String): File? {
+        if (onPickJavaExecutable != null) return onPickJavaExecutable.invoke(title)
+        return WindowsModernFilePicker.openFileDialog(
+            title = title,
+            filterSpecs = listOf(
+                "Java Executable (java.exe)" to "java.exe;javaw.exe;*.exe",
+                "All Executables (*.exe)" to "*.exe",
+                "All Files (*.*)" to "*.*"
+            ),
+            defaultExtension = "exe"
+        )
     }
 
-    override fun pickReleaseArtifact(title: String): java.io.File? {
-        return try {
-            val dialog = java.awt.FileDialog(null as java.awt.Frame?, title, java.awt.FileDialog.LOAD)
-            dialog.setFilenameFilter { _, name ->
-                val lower = name.lowercase()
-                lower.endsWith(".zip") || lower.endsWith(".exe") || lower.endsWith(".msi") || lower.endsWith(".jar") || lower.endsWith(".tar.gz")
-            }
-            dialog.isVisible = true
-            val dir = dialog.directory
-            val file = dialog.file
-            if (dir != null && file != null) {
-                java.io.File(dir, file)
-            } else {
-                null
-            }
-        } catch (e: Throwable) {
-            try {
-                val chooser = javax.swing.JFileChooser()
-                chooser.dialogTitle = title
-                val res = chooser.showOpenDialog(null)
-                if (res == javax.swing.JFileChooser.APPROVE_OPTION) {
-                    chooser.selectedFile
-                } else null
-            } catch (e2: Throwable) {
-                null
-            }
-        }
+    override fun pickReleaseArtifact(title: String): File? {
+        if (onPickReleaseArtifact != null) return onPickReleaseArtifact.invoke(title)
+        return WindowsModernFilePicker.openFileDialog(
+            title = title,
+            filterSpecs = listOf(
+                "Release Artifacts (*.zip;*.exe;*.msi;*.jar;*.tar.gz)" to "*.zip;*.exe;*.msi;*.jar;*.tar.gz",
+                "All Files (*.*)" to "*.*"
+            )
+        )
     }
 }

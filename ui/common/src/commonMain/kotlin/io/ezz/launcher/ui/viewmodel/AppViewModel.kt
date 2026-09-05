@@ -77,12 +77,14 @@ import io.ezz.launcher.core.network.modrinth.ModrinthService
 import io.ezz.launcher.ui.image.ModrinthImageLoader
 import io.ezz.launcher.ui.platform.PlatformBridge
 import io.ezz.launcher.ui.platform.DefaultPlatformBridge
+import io.ezz.launcher.ui.platform.WindowsModernFilePicker
 import io.ezz.launcher.core.model.skin.SkinModelType
 import io.ezz.launcher.core.model.skin.VaultManifest
 import io.ezz.launcher.core.model.skin.VaultSkin
 import io.ezz.launcher.core.storage.repository.VaultSkinRepository
 import io.ezz.launcher.core.storage.repository.LocalVaultSkinRepository
 import io.ezz.launcher.ui.components.ToastManager
+import io.ezz.launcher.ui.platform.FileSelectionMode
 import io.ezz.launcher.ui.components.ToastType
 import io.ktor.client.request.get
 import io.ktor.client.call.body
@@ -264,6 +266,7 @@ class AppViewModel(
     private val _detectedJavaRuntimes = MutableStateFlow<List<JavaRuntime>>(emptyList())
     val detectedJavaRuntimes: StateFlow<List<JavaRuntime>> = _detectedJavaRuntimes.asStateFlow()
     val isDetectingJava = MutableStateFlow(false)
+    val javaDetectionError = MutableStateFlow<String?>(null)
 
     private val _detectedGpus = MutableStateFlow<List<io.ezz.launcher.core.runtime.detector.DetectedGpu>>(emptyList())
     val detectedGpus: StateFlow<List<io.ezz.launcher.core.runtime.detector.DetectedGpu>> = _detectedGpus.asStateFlow()
@@ -546,6 +549,16 @@ class AppViewModel(
 
         scope.launch {
             try {
+                settingsRepository.settings.collect { s ->
+                    io.ezz.launcher.ui.audio.EzzAudioService.updateSettings(s.soundEffectsEnabled, s.soundVolume)
+                }
+            } catch (e: Throwable) {
+                println("Error syncing audio settings: ${e.message}")
+            }
+        }
+
+        scope.launch {
+            try {
                 accountRepository.selectedAccount.collect { selAcc ->
                     // Reset ephemeral preview selection when switching accounts
                     _selectedVaultSkin.value = null
@@ -623,6 +636,16 @@ class AppViewModel(
             manageSelectedLogContent.value = null
             manageLogResult.value = null
             logLoadError.value = null
+            manageStatistics.value = null
+            manageMods.value = emptyList()
+            missingDependencies.value = emptyList()
+            compatibilityConflicts.value = emptyList()
+            manageResourcePacks.value = emptyList()
+            manageShaders.value = emptyList()
+            manageWorlds.value = emptyList()
+            manageScreenshots.value = emptyList()
+            manageLogs.value = emptyList()
+            _installedMods.value = emptyList()
         }
         _selectedInstance.value = instance
         val session = _runningSessions.value[instance.id]
@@ -886,7 +909,17 @@ class AppViewModel(
             name == "java" || file.canExecute()
         }
         if (!isExecutable) return JavaValidationResult.NotJavaExecutable
+
+        val inspected = JavaRuntimeDetector.inspectJavaHome(file.absolutePath)
+        if (inspected == null) {
+            return JavaValidationResult.NotJavaExecutable
+        }
         return JavaValidationResult.Valid
+    }
+
+    fun inspectCustomJava(path: String): JavaRuntime? {
+        if (path.isBlank()) return null
+        return JavaRuntimeDetector.inspectJavaHome(path.trim())
     }
 
     fun updateCustomJavaPath(path: String) {
@@ -922,6 +955,17 @@ class AppViewModel(
                 discordRpcService?.setEnabled(enabled)
             } catch (e: Exception) {
                 println("Failed to update Discord RPC setting: ${e.message}")
+            }
+        }
+    }
+
+    fun updateSoundSettings(enabled: Boolean, volume: Float) {
+        scope.launch {
+            try {
+                settingsRepository.updateSettings { it.copy(soundEffectsEnabled = enabled, soundVolume = volume) }
+                io.ezz.launcher.ui.audio.EzzAudioService.updateSettings(enabled, volume)
+            } catch (e: Exception) {
+                println("Failed to update sound settings: ${e.message}")
             }
         }
     }
@@ -1055,10 +1099,12 @@ class AppViewModel(
     fun refreshJavaRuntimes() {
         scope.launch(Dispatchers.IO) {
             isDetectingJava.value = true
+            javaDetectionError.value = null
             try {
                 val detected = JavaRuntimeDetector.detectInstalledRuntimes()
                 _detectedJavaRuntimes.value = detected
             } catch (e: Exception) {
+                javaDetectionError.value = e.message ?: "Could not detect Java runtimes."
                 println("Warning: failed to detect Java runtimes: ${e.message}")
             } finally {
                 isDetectingJava.value = false
@@ -1321,6 +1367,66 @@ class AppViewModel(
         ToastManager.show("Import Cancelled", "Modpack import was aborted.", ToastType.INFO)
     }
 
+    private var lastUsedPickerDirectory: java.io.File? = null
+
+    fun openFilePicker(
+        title: String,
+        description: String = "",
+        allowedExtensions: Set<String> = emptySet(),
+        initialDirectory: java.io.File? = null,
+        selectionMode: FileSelectionMode = FileSelectionMode.FILES_ONLY,
+        isMultiSelect: Boolean = false,
+        isSaveMode: Boolean = false,
+        defaultSaveName: String? = null,
+        onFileSelected: (java.io.File?) -> Unit
+    ) {
+        val resolvedInitial = initialDirectory ?: lastUsedPickerDirectory ?: run {
+            val userHome = System.getProperty("user.home", ".")
+            if (title.contains("Modpack", ignoreCase = true)) {
+                val downloads = java.io.File(userHome, "Downloads")
+                if (downloads.exists() && downloads.isDirectory) downloads else java.io.File(userHome)
+            } else {
+                java.io.File(userHome)
+            }
+        }
+
+        scope.launch(Dispatchers.IO) {
+            val filterSpecs = WindowsModernFilePicker.extensionsToFilterSpecs(title, allowedExtensions)
+            val selected = if (isSaveMode) {
+                val cleanExt = allowedExtensions.firstOrNull()?.removePrefix(".")
+                WindowsModernFilePicker.saveFileDialog(
+                    title = title,
+                    filterSpecs = filterSpecs,
+                    initialDir = resolvedInitial,
+                    defaultName = defaultSaveName,
+                    defaultExtension = cleanExt
+                )
+            } else {
+                val isFolder = selectionMode == FileSelectionMode.DIRECTORIES_ONLY
+                val cleanExt = allowedExtensions.firstOrNull()?.removePrefix(".")
+                WindowsModernFilePicker.openFileDialog(
+                    title = title,
+                    filterSpecs = filterSpecs,
+                    initialDir = resolvedInitial,
+                    defaultExtension = cleanExt,
+                    isFolderPicker = isFolder
+                )
+            }
+
+            if (selected != null) {
+                lastUsedPickerDirectory = if (selected.isDirectory) selected else selected.parentFile
+            }
+
+            withContext(Dispatchers.Main) {
+                onFileSelected(selected)
+            }
+        }
+    }
+
+    fun closeFilePicker() {
+        // No-op with modern native picker
+    }
+
     fun executeImportMrpack(
         file: java.io.File,
         instanceName: String? = null,
@@ -1355,20 +1461,25 @@ class AppViewModel(
                     }
                     instanceRepository.loadAll()
                     ToastManager.show(
-                        title = "Modpack Imported",
-                        description = "'${imported?.name ?: "Instance"}' is ready to play!",
+                        title = "Instance Imported",
+                        description = "'${imported?.name ?: "Instance"}' imported successfully.",
                         type = ToastType.SUCCESS
                     )
                 } else {
-                    val error = result.exceptionOrNull()?.message ?: "Failed to import modpack"
-                    ToastManager.show("Import Failed", error, ToastType.ERROR)
+                    val rawError = result.exceptionOrNull()?.message ?: "Could not import modpack."
+                    val cleanError = if (rawError.contains("manifest", ignoreCase = true) || rawError.contains("zip", ignoreCase = true) || rawError.contains("corrupt", ignoreCase = true)) {
+                        "Invalid Modrinth modpack."
+                    } else {
+                        rawError
+                    }
+                    ToastManager.show("Could not import modpack.", cleanError, ToastType.ERROR)
                 }
                 onComplete?.invoke(result)
             } catch (e: Exception) {
                 if (session != importSessionId) return@launch
                 isImportingMrpack.value = false
                 mrpackImportProgress.value = null
-                ToastManager.show("Import Error", e.message ?: "Unknown error", ToastType.ERROR)
+                ToastManager.show("Could not import modpack.", "Invalid Modrinth modpack.", ToastType.ERROR)
                 onComplete?.invoke(Result.failure(e))
             }
         }

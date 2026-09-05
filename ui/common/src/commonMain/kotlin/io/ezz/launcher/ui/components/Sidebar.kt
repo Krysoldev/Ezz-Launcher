@@ -1,5 +1,6 @@
 package io.ezz.launcher.ui.components
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -7,6 +8,8 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -163,11 +166,20 @@ fun Sidebar(
                         .clickable(
                             interactionSource = interactionSource,
                             indication = null,
-                            onClick = { onNavigate(item.screen) }
+                            onClick = {
+                                io.ezz.launcher.ui.audio.EzzAudioService.playSelect()
+                                onNavigate(item.screen)
+                            }
                         )
                         .padding(horizontal = 10.dp, vertical = 8.5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    androidx.compose.runtime.LaunchedEffect(isHovered) {
+                        if (isHovered && !isSelected) {
+                            io.ezz.launcher.ui.audio.EzzAudioService.playHover()
+                        }
+                    }
+
                     if (isSelected) {
                         Box(
                             modifier = Modifier
@@ -414,47 +426,67 @@ fun Sidebar(
                         )
                         .padding(horizontal = 10.dp, vertical = 8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (skinManager != null) {
-                            MinecraftSkinHead(
-                                account = account,
-                                skinManager = skinManager,
-                                size = 32.dp
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.AccountCircle,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = account.username,
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1
-                            )
-                            Text(
-                                text = if (account.type == AccountType.MICROSOFT) "Microsoft Account" else "Offline Account",
-                                color = Color(0xFF8B949E),
-                                fontSize = 9.5.sp
-                            )
-                        }
+                    AnimatedContent(
+                        targetState = account,
+                        transitionSpec = {
+                            (fadeIn(tween(160)) + slideInVertically(tween(160)) { 6 }) togetherWith fadeOut(tween(120))
+                        },
+                        label = "SidebarAccountTransition"
+                    ) { currentAcc ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (skinManager != null) {
+                                MinecraftSkinHead(
+                                    account = currentAcc,
+                                    skinManager = skinManager,
+                                    size = 34.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.AccountCircle,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(34.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = currentAcc.username,
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    text = if (currentAcc.type == AccountType.MICROSOFT) "Microsoft Account" else "Offline Account",
+                                    color = Color(0xFF8B949E),
+                                    fontSize = 9.5.sp
+                                )
+                            }
 
-                        // Green Active Status Dot
-                        Box(
-                            modifier = Modifier
-                                .size(7.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF10B981))
-                        )
+                            // Live Active Indicator Dot + Label
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                val isMs = currentAcc.type == AccountType.MICROSOFT
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isMs) Color(0xFF10B981) else Color(0xFFF59E0B))
+                                )
+                                Text(
+                                    text = if (isMs) "Active" else "Offline",
+                                    color = if (isMs) Color(0xFF10B981) else Color(0xFFF59E0B),
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
                 }
             }

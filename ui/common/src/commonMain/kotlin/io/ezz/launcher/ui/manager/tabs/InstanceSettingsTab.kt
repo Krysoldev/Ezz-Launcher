@@ -903,10 +903,16 @@ fun InstanceSettingsTab(
                                 EzzButton(
                                     text = "Upload Custom Icon",
                                     onClick = {
-                                        val picked = viewModel.platformBridge.pickImageFile("Select Instance Icon (PNG, JPG, WEBP)")
-                                        if (picked != null && picked.exists()) {
-                                            viewModel.changeInstanceCustomIcon(instance.id, picked)
-                                        }
+                                        viewModel.openFilePicker(
+                                            title = "Select Instance Icon",
+                                            description = "Select a PNG, JPG, or WEBP image",
+                                            allowedExtensions = setOf("png", "jpg", "jpeg", "webp"),
+                                            onFileSelected = { picked ->
+                                                if (picked != null && picked.exists()) {
+                                                    viewModel.changeInstanceCustomIcon(instance.id, picked)
+                                                }
+                                            }
+                                        )
                                     },
                                     variant = EzzButtonVariant.SECONDARY,
                                     size = EzzButtonSize.SMALL

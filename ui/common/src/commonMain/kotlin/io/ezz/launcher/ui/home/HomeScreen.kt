@@ -179,7 +179,10 @@ fun HomeScreen(
                 processState = processState,
                 startedAt = selectedStartedAt,
                 onSelectInstance = { viewModel.selectInstance(it) },
-                onLaunch = { viewModel.launchInstance(selectedInstance) },
+                onLaunch = {
+                    io.ezz.launcher.ui.audio.EzzAudioService.playLaunch()
+                    viewModel.launchInstance(selectedInstance)
+                },
                 onManage = {
                     selectedInstance?.let { viewModel.openInstanceManager(it) }
                         ?: run { viewModel.navigateTo(NavigationScreen.INSTANCES) }
@@ -193,11 +196,136 @@ fun HomeScreen(
                 onCreateInstance = { viewModel.showCreateInstanceDialog.value = true }
             )
 
-            // 3. Latest News & Announcements (if any)
+            // 3. Quick Action Navigation Tiles
+            HomeQuickActionsRow(
+                instanceCount = instances.size,
+                activeAccountName = selectedAccount?.username ?: "Guest Player",
+                onNavigate = { screen ->
+                    io.ezz.launcher.ui.audio.EzzAudioService.playSelect()
+                    viewModel.navigateTo(screen)
+                }
+            )
+
+            // 4. Latest News & Announcements (if any)
             if (announcements.isNotEmpty()) {
                 AnnouncementsSection(
                     announcements = announcements,
                     onOpenUrl = { url -> viewModel.platformBridge.openUrl(url) }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 3. Home Quick Actions Row
+ */
+@Composable
+private fun HomeQuickActionsRow(
+    instanceCount: Int,
+    activeAccountName: String,
+    onNavigate: (NavigationScreen) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        HomeQuickActionCard(
+            title = "Instances",
+            subtitle = if (instanceCount == 1) "1 active installation" else "$instanceCount installations",
+            icon = Icons.Default.GridView,
+            modifier = Modifier.weight(1f),
+            onClick = { onNavigate(NavigationScreen.INSTANCES) }
+        )
+        HomeQuickActionCard(
+            title = "Vault Studio",
+            subtitle = "3D preview & skin collection",
+            icon = Icons.Default.Person,
+            modifier = Modifier.weight(1f),
+            onClick = { onNavigate(NavigationScreen.VAULT) }
+        )
+        HomeQuickActionCard(
+            title = "Accounts",
+            subtitle = activeAccountName,
+            icon = Icons.Default.Person,
+            modifier = Modifier.weight(1f),
+            onClick = { onNavigate(NavigationScreen.ACCOUNTS) }
+        )
+    }
+}
+
+@Composable
+private fun HomeQuickActionCard(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.98f else if (isHovered) 1.015f else 1.0f,
+        animationSpec = tween(120)
+    )
+
+    androidx.compose.runtime.LaunchedEffect(isHovered) {
+        if (isHovered) {
+            io.ezz.launcher.ui.audio.EzzAudioService.playHover()
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .scale(scale)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (isHovered) Color(0xFF141824) else Color(0xFF10131A))
+            .border(
+                1.dp,
+                if (isHovered) Color(0xFF8B5CF6).copy(alpha = 0.65f) else Color(0xFF1B1F2C),
+                RoundedCornerShape(10.dp)
+            )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 16.dp, vertical = 13.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (isHovered) Color(0x338B5CF6) else Color(0x1F8B5CF6)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = if (isHovered) Color.White else Color(0xFFA78BFA),
+                    modifier = Modifier.size(17.dp)
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    color = Color(0xFF94A3B8),
+                    fontSize = 11.sp,
+                    maxLines = 1
                 )
             }
         }
@@ -319,34 +447,93 @@ private fun ActiveLaunchTargetCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF101318))
-            .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(12.dp))
+            .background(Color(0xFF10131A))
+            .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(12.dp))
             .padding(horizontal = 22.dp, vertical = 20.dp)
     ) {
         if (instance != null) {
             val javaReq = io.ezz.launcher.core.minecraft.version.JavaCompatibility.getRequiredJavaMajorVersion(instance.minecraftVersion)
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                // Top Row: Title + Dropdown Switcher
+            val isRunning = processState is ProcessState.Running || startedAt != null
+            val isPreparing = processState is ProcessState.Preparing
+
+            Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                // Top Row: Large Instance Artwork + Title & Metadata + Switcher Dropdown
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Top
                 ) {
-                    Column {
-                        Text(
-                            text = "CURRENT INSTANCE",
-                            color = Color(0xFF64748B),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.8.sp
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(18.dp),
+                        modifier = Modifier.weight(1f, fill = false)
+                    ) {
+                        // Large Artwork Icon with hover micro-zoom
+                        val artInteraction = remember { MutableInteractionSource() }
+                        val isArtHovered by artInteraction.collectIsHoveredAsState()
+                        val artScale by animateFloatAsState(
+                            targetValue = if (isArtHovered) 1.025f else 1.0f,
+                            animationSpec = tween(160)
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = instance.name,
-                            color = Color.White,
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+
+                        Box(
+                            modifier = Modifier
+                                .scale(artScale)
+                                .clickable(
+                                    interactionSource = artInteraction,
+                                    indication = null,
+                                    onClick = onManage
+                                )
+                        ) {
+                            InstanceArtworkIcon(
+                                instance = instance,
+                                size = 74.dp
+                            )
+                        }
+
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "ACTIVE INSTANCE",
+                                color = Color(0xFFA78BFA),
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.8.sp
+                            )
+                            Text(
+                                text = instance.name,
+                                color = Color.White,
+                                fontSize = 23.sp,
+                                fontWeight = FontWeight.Black
+                            )
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "Minecraft ${instance.minecraftVersion} • ${instance.loaderType.name}",
+                                    color = Color(0xFFCBD5E1),
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+
+                                val lastPlayed = instance.lastPlayedAt
+                                val lastPlayedStr = if (lastPlayed != null && lastPlayed > 0) {
+                                    val diffMs = System.currentTimeMillis() - lastPlayed
+                                    val hours = diffMs / (1000 * 60 * 60)
+                                    if (hours < 1) "Played recently" else if (hours < 24) "Last played ${hours}h ago" else "Last played ${hours / 24}d ago"
+                                } else {
+                                    "Never played yet"
+                                }
+
+                                Text(
+                                    text = "•  $lastPlayedStr",
+                                    color = Color(0xFF64748B),
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
                     }
 
                     // Instance Switcher Dropdown
@@ -414,6 +601,7 @@ private fun ActiveLaunchTargetCard(
                                         }
                                     },
                                     onClick = {
+                                        io.ezz.launcher.ui.audio.EzzAudioService.playSelect()
                                         onSelectInstance(inst)
                                         isDropdownOpen = false
                                     }
@@ -423,28 +611,45 @@ private fun ActiveLaunchTargetCard(
                     }
                 }
 
-                // Middle Row: Metadata Badges + Status Indicator
+                // Middle Row: Technical Spec Badges + Live Status
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TargetPillBadge(text = "Minecraft ${instance.minecraftVersion}")
-                    TargetPillBadge(text = instance.loaderType.name)
-                    TargetPillBadge(text = "Java $javaReq")
-                    TargetPillBadge(text = "${(instance.maxMemoryMb / 1024).coerceAtLeast(1)} GB RAM")
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TargetPillBadge(text = "Java $javaReq")
+                        TargetPillBadge(text = "${(instance.maxMemoryMb / 1024).coerceAtLeast(1)} GB RAM")
+                        TargetPillBadge(text = instance.loaderType.name)
+                    }
 
-                    Spacer(modifier = Modifier.width(4.dp))
-
-                    val isRunning = processState is ProcessState.Running || startedAt != null
                     if (isRunning && startedAt != null) {
                         RuntimeDisplay(
                             startedAt = startedAt,
                             showPrefix = true,
-                            prefixText = "RUNNING",
+                            prefixText = "MINECRAFT RUNNING",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             dotColor = Color(0xFF10B981)
                         )
+                    } else if (isPreparing) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(12.dp),
+                                color = Color(0xFFA78BFA),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "LAUNCHING...",
+                                color = Color(0xFFA78BFA),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     } else {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
@@ -464,31 +669,34 @@ private fun ActiveLaunchTargetCard(
                     }
                 }
 
-                // Bottom Row: High-Contrast Solid White Play Button + Secondary Actions
+                // Bottom Row: The Next-Gen Tactile Play Button + Secondary Actions
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val isRunning = processState is ProcessState.Running || startedAt != null
-                    val isPreparing = processState is ProcessState.Preparing
-
                     val interactionSource = remember { MutableInteractionSource() }
                     val isHovered by interactionSource.collectIsHoveredAsState()
                     val isPressed by interactionSource.collectIsPressedAsState()
 
+                    androidx.compose.runtime.LaunchedEffect(isHovered) {
+                        if (isHovered && !isRunning && !isPreparing) {
+                            io.ezz.launcher.ui.audio.EzzAudioService.playHover()
+                        }
+                    }
+
                     val scale by animateFloatAsState(
-                        targetValue = if (isPressed) 0.97f else if (isHovered && !isRunning && !isPreparing) 1.02f else 1.0f,
+                        targetValue = if (isPressed) 0.97f else if (isHovered && !isRunning && !isPreparing) 1.025f else 1.0f,
                         animationSpec = tween(120)
                     )
 
                     Box(
                         modifier = Modifier
                             .scale(scale)
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(RoundedCornerShape(9.dp))
                             .background(
                                 when {
-                                    isRunning -> Color(0xFF10131A)
+                                    isRunning -> Color(0xFF131122)
                                     isPreparing -> Color(0xFF261838)
                                     isHovered -> Color(0xFF7C3AED)
                                     else -> Color(0xFF8B5CF6)
@@ -499,10 +707,10 @@ private fun ActiveLaunchTargetCard(
                                 when {
                                     isRunning -> Color(0xFF10B981)
                                     isPreparing -> Color(0xFF6D28D9)
-                                    isHovered -> Color(0xFF9333EA)
+                                    isHovered -> Color(0xFFA78BFA)
                                     else -> Color(0xFF8B5CF6)
                                 },
-                                RoundedCornerShape(8.dp)
+                                RoundedCornerShape(9.dp)
                             )
                             .clickable(
                                 interactionSource = interactionSource,
@@ -510,42 +718,53 @@ private fun ActiveLaunchTargetCard(
                                 enabled = !isRunning && !isPreparing,
                                 onClick = onLaunch
                             )
-                            .padding(horizontal = 42.dp, vertical = 14.dp),
+                            .padding(horizontal = 46.dp, vertical = 14.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (isPreparing) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    color = Color.White,
-                                    strokeWidth = 2.dp
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "PREPARING...",
-                                    color = Color.White,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                        when {
+                            isPreparing -> {
+                                val prepStage = (processState as? ProcessState.Preparing)?.stage
+                                val prepText = if (prepStage?.contains("starting", ignoreCase = true) == true) {
+                                    "STARTING MINECRAFT..."
+                                } else {
+                                    "LAUNCHING..."
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        text = prepText,
+                                        color = Color.White,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.6.sp
+                                    )
+                                }
                             }
-                        } else if (isRunning && startedAt != null) {
-                            HeroRuntimeActionDisplay(startedAt = startedAt)
-                        } else {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = "Play",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "PLAY MINECRAFT",
-                                    color = Color.White,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 0.8.sp
-                                )
+                            isRunning && startedAt != null -> {
+                                HeroRuntimeActionDisplay(startedAt = startedAt)
+                            }
+                            else -> {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = "Play",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "PLAY",
+                                        color = Color.White,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Black,
+                                        letterSpacing = 0.8.sp
+                                    )
+                                }
                             }
                         }
                     }
@@ -584,9 +803,9 @@ private fun ActiveLaunchTargetCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 16.dp),
+                    .padding(vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
                     text = "No Minecraft instance selected",

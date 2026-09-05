@@ -3,6 +3,8 @@ package io.ezz.launcher.ui.manager.tabs
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -48,6 +50,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -91,12 +94,26 @@ fun LogsTab(
 
     val isRunning = runningSessions.containsKey(instance.id)
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
 
-    var searchQuery by remember { mutableStateOf("") }
-    var levelFilter by remember { mutableStateOf("ALL") }
+    var searchQuery by remember(instance.id) { mutableStateOf("") }
+    var levelFilter by remember(instance.id) { mutableStateOf("ALL") }
     var isDropdownExpanded by remember { mutableStateOf(false) }
     var showCopiedToast by remember { mutableStateOf(false) }
-    var autoScrollToBottom by remember { mutableStateOf(false) }
+    var autoScrollToBottom by remember { mutableStateOf(true) }
+    var hasUnseenNewLogs by remember { mutableStateOf(false) }
+
+    val isAtBottom by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val visibleItems = layoutInfo.visibleItemsInfo
+            if (visibleItems.isEmpty()) true
+            else {
+                val lastVisibleIndex = visibleItems.last().index
+                lastVisibleIndex >= layoutInfo.totalItemsCount - 2
+            }
+        }
+    }
 
     // Lifecycle: Cleanly manage live log watching on mount & unmount
     DisposableEffect(instance.id, isRunning) {
@@ -136,10 +153,27 @@ fun LogsTab(
         }
     }
 
-    // Auto-scroll to bottom when new live lines arrive if enabled
-    LaunchedEffect(filteredLines.size, autoScrollToBottom) {
-        if (autoScrollToBottom && filteredLines.isNotEmpty()) {
-            listState.scrollToItem(filteredLines.lastIndex)
+    // Auto-scroll when new lines arrive if enabled and at bottom, or flag new logs
+    LaunchedEffect(filteredLines.size) {
+        if (filteredLines.isNotEmpty()) {
+            if (autoScrollToBottom) {
+                if (isAtBottom) {
+                    listState.scrollToItem(filteredLines.lastIndex)
+                    hasUnseenNewLogs = false
+                } else {
+                    hasUnseenNewLogs = true
+                }
+            } else {
+                if (!isAtBottom) {
+                    hasUnseenNewLogs = true
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(isAtBottom) {
+        if (isAtBottom) {
+            hasUnseenNewLogs = false
         }
     }
 
@@ -267,25 +301,33 @@ fun LogsTab(
 
             // Right Action Controls
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                // Auto-Scroll Toggle
+                // Auto-Scroll Toggle [ ON ] / [ OFF ]
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
-                        .background(if (autoScrollToBottom) Color(0xFF1A1E29) else Color(0xFF101318))
-                        .border(1.dp, if (autoScrollToBottom) Color.White else Color(0xFF1A1D26), RoundedCornerShape(6.dp))
-                        .clickable { autoScrollToBottom = !autoScrollToBottom }
+                        .background(if (autoScrollToBottom) Color(0xFF16231C) else Color(0xFF101318))
+                        .border(1.dp, if (autoScrollToBottom) Color(0xFF10B981) else Color(0xFF1A1D26), RoundedCornerShape(6.dp))
+                        .clickable {
+                            autoScrollToBottom = !autoScrollToBottom
+                            if (autoScrollToBottom && filteredLines.isNotEmpty()) {
+                                scope.launch {
+                                    listState.scrollToItem(filteredLines.lastIndex)
+                                    hasUnseenNewLogs = false
+                                }
+                            }
+                        }
                         .padding(horizontal = 9.dp, vertical = 6.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Icon(
                             Icons.Default.ArrowDownward,
                             contentDescription = null,
-                            tint = if (autoScrollToBottom) Color.White else Color(0xFF94A3B8),
+                            tint = if (autoScrollToBottom) Color(0xFF10B981) else Color(0xFF94A3B8),
                             modifier = Modifier.size(13.dp)
                         )
                         Text(
-                            text = "Auto-Scroll",
-                            color = if (autoScrollToBottom) Color.White else Color(0xFF94A3B8),
+                            text = if (autoScrollToBottom) "Auto-scroll [ ON ]" else "Auto-scroll [ OFF ]",
+                            color = if (autoScrollToBottom) Color(0xFF10B981) else Color(0xFF94A3B8),
                             fontSize = 11.5.sp,
                             fontWeight = if (autoScrollToBottom) FontWeight.Bold else FontWeight.Medium
                         )
@@ -351,15 +393,10 @@ fun LogsTab(
                     .padding(3.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                val totalCount = logResult?.lines?.size ?: 0
-                val errCount = logResult?.errorCount ?: 0
-                val warnCount = logResult?.warnCount ?: 0
-                val infoCount = logResult?.infoCount ?: 0
-
-                FilterChip("All ($totalCount)", levelFilter == "ALL") { levelFilter = "ALL" }
-                FilterChip("INFO ($infoCount)", levelFilter == "INFO", Color(0xFFE2E8F0)) { levelFilter = "INFO" }
-                FilterChip("WARN ($warnCount)", levelFilter == "WARN", Color(0xFFFBBF24)) { levelFilter = "WARN" }
-                FilterChip("ERROR ($errCount)", levelFilter == "ERROR", Color(0xFFF87171)) { levelFilter = "ERROR" }
+                FilterChip("All", levelFilter == "ALL") { levelFilter = "ALL" }
+                FilterChip("INFO", levelFilter == "INFO", Color(0xFFE2E8F0)) { levelFilter = "INFO" }
+                FilterChip("WARN", levelFilter == "WARN", Color(0xFFFBBF24)) { levelFilter = "WARN" }
+                FilterChip("ERROR", levelFilter == "ERROR", Color(0xFFF87171)) { levelFilter = "ERROR" }
             }
 
             // Truncation notice or line count
@@ -507,6 +544,48 @@ fun LogsTab(
                         items(filteredLines, key = { it.lineNumber }) { logLine ->
                             LogLineRow(logLine)
                         }
+                    }
+                }
+            }
+
+            // Floating "New logs" indicator when scrolled up
+            androidx.compose.animation.AnimatedVisibility(
+                visible = hasUnseenNewLogs && filteredLines.isNotEmpty(),
+                enter = fadeIn() + slideInVertically { it },
+                exit = fadeOut() + slideOutVertically { it },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 16.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(0xFF8B5CF6))
+                        .border(1.dp, Color(0xFFA78BFA), RoundedCornerShape(20.dp))
+                        .clickable {
+                            scope.launch {
+                                listState.animateScrollToItem(filteredLines.lastIndex)
+                                hasUnseenNewLogs = false
+                            }
+                        }
+                        .padding(horizontal = 14.dp, vertical = 7.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.ArrowDownward,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "New logs available",
+                            color = Color.White,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }

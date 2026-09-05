@@ -94,4 +94,14 @@ class JavaRuntimeDetectorTest {
         assertTrue(memoryInfo.recommendedMinMb >= 1024, "Recommended min RAM should be at least 1GB")
         assertTrue(memoryInfo.recommendedMaxMb >= memoryInfo.recommendedMinMb, "Max RAM should be >= Min RAM")
     }
+
+    @Test
+    fun testDetectRealInstalledRuntimes() {
+        val runtimes = JavaRuntimeDetector.detectInstalledRuntimes()
+        println("=== DETECTED REAL RUNTIMES (${runtimes.size}) ===")
+        for (rt in runtimes) {
+            println("Java ${rt.majorVersion} [64Bit=${rt.is64Bit}] Vendor: '${rt.vendor}' Path: ${rt.path}")
+        }
+        assertTrue(runtimes.isNotEmpty(), "Expected at least one Java runtime to be detected on developer machine")
+    }
 }

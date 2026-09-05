@@ -344,7 +344,7 @@ class DiscordRpcService(
         nonce: String = UUID.randomUUID().toString()
     ): String {
         val hasAccount = !username.isNullOrBlank()
-        val visibleName = if (hasAccount) username!! else "Ezz Launcher"
+        val visibleName = if (hasAccount) username!! else "Player"
         val effectiveAvatarUrl = resolveAvatarUrl(avatarUrl, uuid, visibleName)
 
         return buildJsonObject {
@@ -352,10 +352,14 @@ class DiscordRpcService(
             putJsonObject("args") {
                 put("pid", if (processId > 0) processId else ProcessHandle.current().pid())
                 putJsonObject("activity") {
-                    put("name", visibleName)
+                    put("name", "Ezz Launcher")
                     put("type", 0)
-                    put("details", "Ezz Launcher")
-                    put("state", "Ready to play")
+                    if (hasAccount) {
+                        put("details", username!!)
+                        put("state", "Ready to play")
+                    } else {
+                        put("details", "Ready to play")
+                    }
                     putJsonObject("assets") {
                         put("large_image", "ezzlauncher")
                         put("large_text", "Ezz Launcher")
@@ -370,7 +374,6 @@ class DiscordRpcService(
         }.toString()
     }
 
-    @Suppress("UNUSED_PARAMETER")
     internal fun buildMinecraftPayload(
         playerUsername: String,
         minecraftVersion: String,
@@ -390,15 +393,21 @@ class DiscordRpcService(
         val effectiveAvatarUrl = resolveAvatarUrl(avatarUrl, playerUuid, playerUsername)
         val visibleName = playerUsername.ifBlank { "Player" }
 
+        val stateText = if (!instanceName.isNullOrBlank() && !instanceName.equals("Default", ignoreCase = true) && !instanceName.equals(cleanVersion, ignoreCase = true)) {
+            "$instanceName ($cleanVersion)"
+        } else {
+            cleanVersion
+        }
+
         return buildJsonObject {
             put("cmd", "SET_ACTIVITY")
             putJsonObject("args") {
                 put("pid", if (processId > 0) processId else ProcessHandle.current().pid())
                 putJsonObject("activity") {
-                    put("name", visibleName)
+                    put("name", "Ezz Launcher")
                     put("type", 0)
                     put("details", "Playing Minecraft")
-                    put("state", cleanVersion)
+                    put("state", stateText)
                     putJsonObject("timestamps") {
                         put("start", startEpochSeconds)
                     }

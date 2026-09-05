@@ -1,8 +1,12 @@
 package io.ezz.launcher.ui.manager.tabs
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.ui.draw.scale
+import io.ezz.launcher.core.model.modrinth.ModConflict
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -56,6 +60,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -74,7 +79,7 @@ import okio.Path.Companion.toPath
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LocalMod
 import io.ezz.launcher.core.model.modrinth.ModrinthProjectHit
-import io.ezz.launcher.core.model.modrinth.ModUpdateCandidate
+import io.ezz.launcher.ui.audio.EzzAudioService
 import io.ezz.launcher.ui.components.EzzButton
 import io.ezz.launcher.ui.components.EzzButtonSize
 import io.ezz.launcher.ui.components.EzzButtonVariant
@@ -85,8 +90,7 @@ import io.ezz.launcher.ui.viewmodel.AppViewModel
 
 private enum class ModsSubTab(val title: String) {
     INSTALLED("Installed"),
-    BROWSE("Browse Modrinth"),
-    UPDATES("Updates")
+    BROWSE("Browse")
 }
 
 @Composable
@@ -103,15 +107,13 @@ fun ModsTab(
     val browseState by viewModel.modsBrowseState.collectAsState()
     val downloadingProject by viewModel.modrinthDownloadingProject.collectAsState()
     val downloadProgress by viewModel.modrinthDownloadProgress.collectAsState()
-    val updateCandidates by viewModel.modUpdateCandidates.collectAsState()
-    val isCheckingUpdates by viewModel.isCheckingModUpdates.collectAsState()
 
-    var localSearch by remember { mutableStateOf("") }
-    var localFilter by remember { mutableStateOf("ALL") }
-    var inspectModHit by remember { mutableStateOf<ModrinthProjectHit?>(null) }
+    var localSearch by remember(instance.id) { mutableStateOf("") }
+    var localFilter by remember(instance.id) { mutableStateOf("ALL") }
+    var inspectModHit by remember(instance.id) { mutableStateOf<ModrinthProjectHit?>(null) }
 
     // Bulk selection state
-    var selectedModFiles by remember { mutableStateOf(setOf<String>()) }
+    var selectedModFiles by remember(instance.id) { mutableStateOf(setOf<String>()) }
 
     Column(
         modifier = modifier
@@ -124,67 +126,54 @@ fun ModsTab(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Sub-Tab Switcher
+            // Sub-Tab Switcher (No Numeric Badges)
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF101318))
-                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp))
-                    .padding(4.dp),
+                    .background(Color(0xFF10131A))
+                    .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(8.dp))
+                    .padding(3.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                ModsSubTab.values().forEach { tab ->
+                ModsSubTab.entries.forEach { tab ->
                     val isActive = subTab == tab
-                    val badgeCount = when (tab) {
-                        ModsSubTab.INSTALLED -> installedMods.size
-                        ModsSubTab.UPDATES -> updateCandidates.size
-                        ModsSubTab.BROWSE -> null
+                    val interactionSource = remember { MutableInteractionSource() }
+                    val isHovered by interactionSource.collectIsHoveredAsState()
+
+                    LaunchedEffect(isHovered) {
+                        if (isHovered && !isActive) {
+                            EzzAudioService.playHover()
+                        }
                     }
 
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(if (isActive) Color(0xFF1A1E29) else Color.Transparent)
-                            .border(1.dp, if (isActive) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
-                            .clickable {
+                            .background(if (isActive) Color(0xFF1A182E) else if (isHovered) Color(0xFF161A24) else Color.Transparent)
+                            .border(
+                                1.dp,
+                                if (isActive) Color(0xFF8B5CF6) else Color.Transparent,
+                                RoundedCornerShape(6.dp)
+                            )
+                            .clickable(
+                                interactionSource = interactionSource,
+                                indication = null
+                            ) {
+                                EzzAudioService.playSelect()
                                 subTab = tab
                                 if (tab == ModsSubTab.BROWSE && browseState.items.isEmpty()) {
                                     viewModel.searchMods()
-                                } else if (tab == ModsSubTab.UPDATES && updateCandidates.isEmpty()) {
-                                    viewModel.checkForModUpdates()
                                 }
                             }
-                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                            .padding(horizontal = 16.dp, vertical = 7.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = tab.title,
-                                color = if (isActive) Color.White else Color(0xFF94A3B8),
-                                fontSize = 12.5.sp,
-                                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium
-                            )
-                            if (badgeCount != null && badgeCount > 0) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(if (tab == ModsSubTab.UPDATES) Color(0xFFF59E0B) else Color(0xFF141720))
-                                        .border(1.dp, if (tab == ModsSubTab.UPDATES) Color(0xFFF59E0B) else Color(0xFF222735), RoundedCornerShape(4.dp))
-                                        .padding(horizontal = 5.dp, vertical = 1.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = badgeCount.toString(),
-                                        color = if (tab == ModsSubTab.UPDATES) Color.Black else Color.White,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
+                        Text(
+                            text = tab.title,
+                            color = if (isActive) Color.White else if (isHovered) Color(0xFFE2E8F0) else Color(0xFF94A3B8),
+                            fontSize = 12.5.sp,
+                            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium
+                        )
                     }
                 }
             }
@@ -193,20 +182,22 @@ fun ModsTab(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (subTab == ModsSubTab.INSTALLED) {
                     EzzButton(
+                        text = "Install Mod",
+                        onClick = {
+                            subTab = ModsSubTab.BROWSE
+                            if (browseState.items.isEmpty()) viewModel.searchMods()
+                        },
+                        icon = Icons.Default.Download,
+                        variant = EzzButtonVariant.PRIMARY,
+                        size = EzzButtonSize.SMALL
+                    )
+
+                    EzzButton(
                         text = "Open Mods Folder",
                         onClick = { viewModel.openModsFolder(instance.id) },
                         icon = Icons.Default.FolderOpen,
                         variant = EzzButtonVariant.SECONDARY,
                         size = EzzButtonSize.SMALL
-                    )
-                } else if (subTab == ModsSubTab.UPDATES) {
-                    EzzButton(
-                        text = if (isCheckingUpdates) "Checking..." else "Check for Updates",
-                        onClick = { viewModel.checkForModUpdates() },
-                        icon = if (!isCheckingUpdates) Icons.Default.Refresh else null,
-                        variant = EzzButtonVariant.SECONDARY,
-                        size = EzzButtonSize.SMALL,
-                        enabled = !isCheckingUpdates
                     )
                 }
             }
@@ -317,6 +308,8 @@ fun ModsTab(
                         instance = instance,
                         viewModel = viewModel,
                         installedMods = installedMods,
+                        missingDependencies = missingDependencies,
+                        compatibilityConflicts = compatibilityConflicts,
                         localSearch = localSearch,
                         onSearchChange = { localSearch = it },
                         localFilter = localFilter,
@@ -341,13 +334,6 @@ fun ModsTab(
                     browseState = browseState,
                     onInspect = { hit -> inspectModHit = hit },
                     onInstall = { hit -> viewModel.installModrinthProject(hit) }
-                )
-            }
-            ModsSubTab.UPDATES -> {
-                ModUpdatesView(
-                    candidates = updateCandidates,
-                    isChecking = isCheckingUpdates,
-                    onUpdateMod = { candidate -> viewModel.updateModFromCandidate(candidate) }
                 )
             }
         }
@@ -380,6 +366,8 @@ private fun InstalledModsView(
     instance: Instance,
     viewModel: AppViewModel,
     installedMods: List<LocalMod>,
+    missingDependencies: List<String>,
+    compatibilityConflicts: List<ModConflict>,
     localSearch: String,
     onSearchChange: (String) -> Unit,
     localFilter: String,
@@ -454,9 +442,9 @@ private fun InstalledModsView(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 listOf(
-                    "ALL" to "All (${installedMods.size})",
-                    "ENABLED" to "Enabled (${installedMods.count { it.enabled }})",
-                    "DISABLED" to "Disabled (${installedMods.count { !it.enabled }})"
+                    "ALL" to "All",
+                    "ENABLED" to "Enabled",
+                    "DISABLED" to "Disabled"
                 ).forEach { (key, label) ->
                     val isSelected = localFilter == key
                     Box(
@@ -628,6 +616,8 @@ private fun InstalledModsView(
                         mod = mod,
                         instance = instance,
                         viewModel = viewModel,
+                        missingDependencies = missingDependencies,
+                        compatibilityConflicts = compatibilityConflicts,
                         isSelected = isSelected,
                         onSelectToggle = {
                             onSelectionChange(
@@ -648,19 +638,41 @@ private fun InstalledModRow(
     mod: LocalMod,
     instance: Instance,
     viewModel: AppViewModel,
+    missingDependencies: List<String>,
+    compatibilityConflicts: List<ModConflict>,
     isSelected: Boolean,
     onSelectToggle: () -> Unit,
     onToggle: () -> Unit,
     onDelete: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    val isMissingDep = remember(missingDependencies, mod.name, mod.id) {
+        missingDependencies.any { it.contains(mod.name, ignoreCase = true) || it.contains(mod.id, ignoreCase = true) }
+    }
+    val isConflict = remember(compatibilityConflicts, mod.name, mod.id) {
+        compatibilityConflicts.any { it.reason.contains(mod.name, ignoreCase = true) || it.reason.contains(mod.id, ignoreCase = true) }
+    }
+
+    val (statusText, statusColor) = when {
+        isConflict -> "Incompatible" to Color(0xFFF59E0B)
+        isMissingDep -> "Missing Dependency" to Color(0xFFF87171)
+        mod.enabled -> "Enabled" to Color(0xFF10B981)
+        else -> "Disabled" to Color(0xFF64748B)
+    }
+
+    val rowInteraction = remember { MutableInteractionSource() }
+    val isRowHovered by rowInteraction.collectIsHoveredAsState()
+    val imgScale by animateFloatAsState(
+        targetValue = if (isRowHovered) 1.03f else 1.0f,
+        animationSpec = tween(120)
+    )
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF101318))
-            .border(1.dp, if (isSelected) Color.White else Color(0xFF1A1D26), RoundedCornerShape(8.dp))
+            .background(if (isSelected) Color(0xFF161A26) else if (isRowHovered) Color(0xFF131620) else Color(0xFF101318))
+            .border(1.dp, if (isSelected) Color(0xFF8B5CF6) else if (isRowHovered) Color(0xFF2D3748) else Color(0xFF1A1D26), RoundedCornerShape(8.dp))
             .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
         Row(
@@ -678,20 +690,22 @@ private fun InstalledModRow(
                     checked = isSelected,
                     onCheckedChange = { onSelectToggle() },
                     colors = CheckboxDefaults.colors(
-                        checkedColor = Color.White,
-                        checkmarkColor = Color(0xFF07080A),
+                        checkedColor = Color(0xFF8B5CF6),
+                        checkmarkColor = Color.White,
                         uncheckedColor = Color(0xFF64748B)
                     )
                 )
 
-                // Real Thumbnail on Left
-                ModrinthAsyncImage(
-                    url = mod.iconPath,
-                    imageLoader = viewModel.imageLoader,
-                    placeholderIcon = Icons.Default.Extension,
-                    modifier = Modifier.size(46.dp),
-                    shape = RoundedCornerShape(8.dp)
-                )
+                // Thumbnail with micro-hover scale
+                Box(modifier = Modifier.scale(imgScale)) {
+                    ModrinthAsyncImage(
+                        url = mod.iconPath,
+                        imageLoader = viewModel.imageLoader,
+                        placeholderIcon = Icons.Default.Extension,
+                        modifier = Modifier.size(46.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
 
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Row(
@@ -704,14 +718,54 @@ private fun InstalledModRow(
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.SemiBold
                         )
+                    }
+
+                    // Metadata Row: Loader badge + Version + Status Dot & Text
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFF141720))
+                                .border(1.dp, Color(0xFF222735), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                        ) {
+                            Text(text = instance.loaderType.name, color = Color(0xFFA78BFA), fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold)
+                        }
+
                         if (mod.version.isNotBlank()) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFF141720))
+                                    .border(1.dp, Color(0xFF222735), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 5.dp, vertical = 1.dp)
+                            ) {
+                                Text(text = "v${mod.version}", color = Color(0xFF94A3B8), fontSize = 10.5.sp)
+                            }
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(statusColor)
+                            )
                             Text(
-                                text = "v${mod.version}",
-                                color = Color(0xFF94A3B8),
-                                fontSize = 11.sp
+                                text = statusText,
+                                color = statusColor,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
                     }
+
                     Text(
                         text = if (!mod.description.isNullOrBlank()) mod.description!! else mod.fileName,
                         color = Color(0xFF64748B),
@@ -1135,86 +1189,6 @@ private fun ModBrowseCard(
     }
 }
 
-@Composable
-private fun ModUpdatesView(
-    candidates: List<ModUpdateCandidate>,
-    isChecking: Boolean,
-    onUpdateMod: (ModUpdateCandidate) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (candidates.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(240.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF101318))
-                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = Color(0xFF10B981),
-                        modifier = Modifier.size(36.dp)
-                    )
-                    Text(
-                        text = if (isChecking) "Checking Modrinth for mod updates..." else "All installed mods are up to date!",
-                        color = Color(0xFF94A3B8),
-                        fontSize = 13.5.sp
-                    )
-                }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(candidates) { candidate ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF101318))
-                            .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp))
-                            .padding(14.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(
-                                    text = candidate.projectTitle,
-                                    color = Color.White,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "Installed: ${candidate.localMod.version}  →  Latest: ${candidate.latestVersion.versionNumber}",
-                                    color = Color(0xFFF59E0B),
-                                    fontSize = 12.sp
-                                )
-                            }
-
-                            EzzButton(
-                                text = "UPDATE",
-                                onClick = { onUpdateMod(candidate) },
-                                variant = EzzButtonVariant.PRIMARY,
-                                size = EzzButtonSize.SMALL
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun FilterBadge(text: String, color: Color) {

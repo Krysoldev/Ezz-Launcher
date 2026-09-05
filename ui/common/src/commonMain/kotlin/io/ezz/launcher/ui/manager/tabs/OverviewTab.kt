@@ -62,6 +62,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.InstanceManagerTab
+import io.ezz.launcher.ui.components.EzzButton
+import io.ezz.launcher.ui.components.EzzButtonSize
+import io.ezz.launcher.ui.components.EzzButtonVariant
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -78,6 +81,8 @@ fun OverviewTab(
     val manageShaders by viewModel.manageShaders.collectAsState()
     val manageWorlds by viewModel.manageWorlds.collectAsState()
     val manageScreenshots by viewModel.manageScreenshots.collectAsState()
+    val runningSessions by viewModel.runningSessions.collectAsState()
+    val session = runningSessions[instance.id]
 
     val scrollState = rememberScrollState()
 
@@ -96,10 +101,19 @@ fun OverviewTab(
                 modifier = Modifier.weight(0.58f),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
+                // Active Minecraft Runtime Session (if running)
+                if (session != null) {
+                    ActiveSessionSection(
+                        session = session,
+                        onStop = { viewModel.stopInstance(instance.id) }
+                    )
+                }
+
                 // 1. Instance Information & Specs
                 InstanceInformationSection(
                     instance = instance,
-                    viewModel = viewModel
+                    viewModel = viewModel,
+                    session = session
                 )
 
                 // 2. Instance Health Check
@@ -146,12 +160,94 @@ fun OverviewTab(
 }
 
 /**
+ * Live Active Minecraft Session Card.
+ */
+@Composable
+private fun ActiveSessionSection(
+    session: io.ezz.launcher.core.model.runtime.InstanceRuntimeSession,
+    onStop: () -> Unit
+) {
+    val elapsed = remember(session.startedAt) {
+        ((System.currentTimeMillis() - session.startedAt) / 1000).coerceAtLeast(0L)
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color(0xFF0D1C13))
+            .border(1.dp, Color(0xFF10B981).copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+            .padding(14.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF10B981))
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "MINECRAFT RUNNING",
+                            color = Color(0xFF10B981),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFF14291D))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "PID ${session.processId}",
+                                color = Color(0xFF6EE7B7),
+                                fontSize = 10.5.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Session Time: ${io.ezz.launcher.core.model.runtime.formatRuntime(elapsed)}",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 11.5.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+
+            EzzButton(
+                text = "Stop Game",
+                onClick = onStop,
+                variant = EzzButtonVariant.DANGER,
+                size = EzzButtonSize.SMALL
+            )
+        }
+    }
+}
+
+/**
  * Clean, structured instance metadata table.
  */
 @Composable
 private fun InstanceInformationSection(
     instance: Instance,
-    viewModel: AppViewModel
+    viewModel: AppViewModel,
+    session: io.ezz.launcher.core.model.runtime.InstanceRuntimeSession? = null
 ) {
     val javaReq = io.ezz.launcher.core.minecraft.version.JavaCompatibility.getRequiredJavaMajorVersion(instance.minecraftVersion)
     val instancePathStr = viewModel.pathProvider.getInstanceDirectory(instance.id).toString()
@@ -245,6 +341,11 @@ private fun InstanceInformationSection(
                     label = "Total Playtime",
                     value = formatPlaytime(instance.totalPlayTimeSeconds),
                     isEven = false
+                )
+                InfoRow(
+                    label = "Instance Status",
+                    value = if (session != null) "Running (PID: ${session.processId})" else "Ready to launch",
+                    isEven = true
                 )
             }
         }

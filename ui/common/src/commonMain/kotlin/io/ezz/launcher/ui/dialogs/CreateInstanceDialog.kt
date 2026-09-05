@@ -421,10 +421,16 @@ fun CreateInstanceDialog(
                                                     .background(Color(0xFF141720))
                                                     .border(1.dp, Color(0xFF222735), RoundedCornerShape(12.dp))
                                                     .clickable {
-                                                        val picked = viewModel.platformBridge.pickImageFile("Select Instance Icon (PNG, JPG, WEBP)")
-                                                        if (picked != null && picked.exists()) {
-                                                            customIconFile = picked
-                                                        }
+                                                        viewModel.openFilePicker(
+                                                            title = "Select Instance Icon",
+                                                            description = "Select a PNG, JPG, or WEBP image",
+                                                            allowedExtensions = setOf("png", "jpg", "jpeg", "webp"),
+                                                            onFileSelected = { picked ->
+                                                                if (picked != null && picked.exists()) {
+                                                                    customIconFile = picked
+                                                                }
+                                                            }
+                                                        )
                                                     },
                                                 contentAlignment = Alignment.Center
                                             ) {

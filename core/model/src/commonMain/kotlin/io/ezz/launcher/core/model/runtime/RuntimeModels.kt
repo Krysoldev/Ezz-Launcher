@@ -79,5 +79,7 @@ data class LauncherSettings(
     val defaultWindowHeight: Int = 720,
     val defaultFullscreen: Boolean = false,
     val maxConcurrentDownloads: Int = 8,
-    val downloadRetryAttempts: Int = 3
+    val downloadRetryAttempts: Int = 3,
+    val soundEffectsEnabled: Boolean = false,
+    val soundVolume: Float = 0.5f
 )

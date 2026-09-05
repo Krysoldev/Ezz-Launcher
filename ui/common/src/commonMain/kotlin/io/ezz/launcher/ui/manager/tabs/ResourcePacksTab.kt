@@ -46,11 +46,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import io.ezz.launcher.ui.audio.EzzAudioService
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,7 +76,7 @@ import io.ezz.launcher.ui.viewmodel.AppViewModel
 
 private enum class PacksSubTab(val title: String) {
     INSTALLED("Installed"),
-    BROWSE("Browse Modrinth")
+    BROWSE("Browse")
 }
 
 @Composable
@@ -90,10 +92,10 @@ fun ResourcePacksTab(
     val downloadingProject by viewModel.modrinthDownloadingProject.collectAsState()
     val downloadProgress by viewModel.modrinthDownloadProgress.collectAsState()
 
-    var localSearch by remember { mutableStateOf("") }
-    var localFilter by remember { mutableStateOf("ALL") }
-    var selectedPackFiles by remember { mutableStateOf(setOf<String>()) }
-    var inspectPackHit by remember { mutableStateOf<ModrinthProjectHit?>(null) }
+    var localSearch by remember(instance.id) { mutableStateOf("") }
+    var localFilter by remember(instance.id) { mutableStateOf("ALL") }
+    var selectedPackFiles by remember(instance.id) { mutableStateOf(setOf<String>()) }
+    var inspectPackHit by remember(instance.id) { mutableStateOf<ModrinthProjectHit?>(null) }
 
     Column(
         modifier = modifier
@@ -116,50 +118,43 @@ fun ResourcePacksTab(
             ) {
                 PacksSubTab.values().forEach { tab ->
                     val isActive = subTab == tab
-                    val badgeCount = if (tab == PacksSubTab.INSTALLED) installedPacks.size else null
+                    val interactionSource = remember { MutableInteractionSource() }
+                    val isHovered by interactionSource.collectIsHoveredAsState()
+
+                    LaunchedEffect(isHovered) {
+                        if (isHovered && !isActive) {
+                            EzzAudioService.playHover()
+                        }
+                    }
 
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
-                            .background(if (isActive) Color(0xFF1A1E29) else Color.Transparent)
-                            .border(1.dp, if (isActive) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
-                            .clickable {
+                            .background(if (isActive) Color(0xFF1A182E) else if (isHovered) Color(0xFF161A24) else Color.Transparent)
+                            .border(
+                                1.dp,
+                                if (isActive) Color(0xFF8B5CF6) else Color.Transparent,
+                                RoundedCornerShape(6.dp)
+                            )
+                            .clickable(
+                                interactionSource = interactionSource,
+                                indication = null
+                            ) {
+                                EzzAudioService.playSelect()
                                 subTab = tab
                                 if (tab == PacksSubTab.BROWSE && browseState.items.isEmpty()) {
                                     viewModel.searchResourcePacks()
                                 }
                             }
-                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                            .padding(horizontal = 16.dp, vertical = 7.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = tab.title,
-                                color = if (isActive) Color.White else Color(0xFF94A3B8),
-                                fontSize = 12.5.sp,
-                                fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium
-                            )
-                            if (badgeCount != null && badgeCount > 0) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(Color(0xFF141720))
-                                        .border(1.dp, Color(0xFF222735), RoundedCornerShape(4.dp))
-                                        .padding(horizontal = 5.dp, vertical = 1.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = badgeCount.toString(),
-                                        color = Color.White,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
+                        Text(
+                            text = tab.title,
+                            color = if (isActive) Color.White else if (isHovered) Color(0xFFE2E8F0) else Color(0xFF94A3B8),
+                            fontSize = 12.5.sp,
+                            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium
+                        )
                     }
                 }
             }
@@ -343,9 +338,9 @@ private fun InstalledPacksView(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 listOf(
-                    "ALL" to "All (${installedPacks.size})",
-                    "ENABLED" to "Enabled (${installedPacks.count { it.enabled }})",
-                    "DISABLED" to "Disabled (${installedPacks.count { !it.enabled }})"
+                    "ALL" to "All",
+                    "ENABLED" to "Enabled",
+                    "DISABLED" to "Disabled"
                 ).forEach { (key, label) ->
                     val isSelected = localFilter == key
                     Box(

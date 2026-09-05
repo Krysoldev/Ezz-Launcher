@@ -206,7 +206,10 @@ fun <T> EzzUnderlineTabs(
                     .clickable(
                         interactionSource = interactionSource,
                         indication = null,
-                        onClick = { onItemSelected(tab.value) }
+                        onClick = {
+                            io.ezz.launcher.ui.audio.EzzAudioService.playSelect()
+                            onItemSelected(tab.value)
+                        }
                     )
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
