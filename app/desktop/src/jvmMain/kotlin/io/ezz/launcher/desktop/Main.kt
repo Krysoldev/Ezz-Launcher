@@ -65,9 +65,85 @@ import io.ezz.launcher.ui.viewmodel.AppViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.awt.Desktop
+import java.io.File
+import java.io.FileOutputStream
+import java.io.OutputStream
+import java.io.PrintStream
 import java.net.URI
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+
+private fun setupProductionLogging() {
+    try {
+        val appData = System.getenv("APPDATA")
+            ?: (System.getProperty("user.home") + "/AppData/Roaming")
+        val logDir = File(appData, ".ezzlauncher/logs")
+        logDir.mkdirs()
+        val logFile = File(logDir, "launcher.log")
+        if (logFile.exists() && logFile.length() > 10 * 1024 * 1024) {
+            val oldFile = File(logDir, "launcher.old.log")
+            if (oldFile.exists()) oldFile.delete()
+            logFile.renameTo(oldFile)
+        }
+
+        val fos = FileOutputStream(logFile, true)
+        val originalOut = System.out
+        val originalErr = System.err
+
+        val teeOut = object : OutputStream() {
+            override fun write(b: Int) {
+                originalOut.write(b)
+                fos.write(b)
+            }
+            override fun write(b: ByteArray, off: Int, len: Int) {
+                originalOut.write(b, off, len)
+                fos.write(b, off, len)
+            }
+            override fun flush() {
+                originalOut.flush()
+                fos.flush()
+            }
+            override fun close() {
+                originalOut.close()
+                fos.close()
+            }
+        }
+
+        val teeErr = object : OutputStream() {
+            override fun write(b: Int) {
+                originalErr.write(b)
+                fos.write(b)
+            }
+            override fun write(b: ByteArray, off: Int, len: Int) {
+                originalErr.write(b, off, len)
+                fos.write(b, off, len)
+            }
+            override fun flush() {
+                originalErr.flush()
+                fos.flush()
+            }
+            override fun close() {
+                originalErr.close()
+                fos.close()
+            }
+        }
+
+        System.setOut(PrintStream(teeOut, true, "UTF-8"))
+        System.setErr(PrintStream(teeErr, true, "UTF-8"))
+        val now = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+        println("=== EZZ LAUNCHER PRODUCTION LOG [$now] ===")
+        println("OS: ${System.getProperty("os.name")} ${System.getProperty("os.version")} (${System.getProperty("os.arch")})")
+        println("Java: ${System.getProperty("java.version")} by ${System.getProperty("java.vendor")}")
+        println("VM: ${System.getProperty("java.vm.name")} ${System.getProperty("java.vm.version")}")
+        println("User Dir: ${System.getProperty("user.dir")}")
+        println("App Data: $appData")
+    } catch (e: Throwable) {
+        System.err.println("Failed to initialize production log file: ${e.message}")
+    }
+}
 
 fun main() {
+    setupProductionLogging()
     println("STARTING EZZ LAUNCHER")
     println("-> Creating application")
 

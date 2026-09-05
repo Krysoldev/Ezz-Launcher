@@ -32,6 +32,7 @@ kotlin {
 compose.desktop {
     application {
         mainClass = "io.ezz.launcher.desktop.MainKt"
+        jvmArgs("-Dfile.encoding=UTF-8", "-Dsun.jnu.encoding=UTF-8")
 
         nativeDistributions {
             targetFormats(
@@ -45,12 +46,45 @@ compose.desktop {
             description = "Ezz Launcher"
             vendor = "Ezz"
 
+            modules(
+                "java.base",
+                "java.desktop",
+                "java.datatransfer",
+                "java.xml",
+                "java.prefs",
+                "java.logging",
+                "java.management",
+                "java.management.rmi",
+                "java.instrument",
+                "java.naming",
+                "java.net.http",
+                "java.sql",
+                "java.security.jgss",
+                "java.security.sasl",
+                "jdk.crypto.ec",
+                "jdk.crypto.mscapi",
+                "jdk.crypto.cryptoki",
+                "jdk.unsupported",
+                "jdk.unsupported.desktop",
+                "jdk.zipfs",
+                "jdk.charsets",
+                "jdk.localedata",
+                "jdk.httpserver",
+                "jdk.naming.dns",
+                "jdk.security.auth",
+                "jdk.management",
+                "jdk.nio.mapmode",
+                "jdk.random",
+                "jdk.accessibility"
+            )
+
             windows {
                 iconFile.set(project.file("src/jvmMain/resources/icon.ico"))
                 menu = true
                 shortcut = true
                 console = false
                 dirChooser = true
+                perUserInstall = true
             }
         }
 
