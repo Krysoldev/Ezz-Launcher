@@ -196,8 +196,7 @@ public class EzzSkinTextureProvider {
                 }
             }
             if (profMethod != null) {
-                Object p = profMethod.invoke(target);
-                if (p != null) profile = p;
+                profile = profMethod.invoke(target);
             }
 
             if (profile == null) return null;
@@ -426,7 +425,7 @@ public class EzzSkinTextureProvider {
         list.add("§aModel: §f" + (isAlex ? "SLIM (Alex)" : "WIDE (Steve)"));
         list.add("§aEnvironment: §f" + (isSingleplayer() ? "SINGLEPLAYER" : "MULTIPLAYER"));
         list.add("§aServer Skin Override: §f" + (hasServerSkinOverride() ? "ACTIVE (SkinRestorer / Server Skin)" : "NONE (Vault Fallback)"));
-        list.add("§aSkin Source: §f" + (hasServerSkinOverride() ? "SERVER_OVERRIDE" : (enabled ? "EZZ_VAULT" : "DEFAULT")));
+        list.add("§aSkin Source: §f" + getLastAppliedSource());
         list.add("§aVault Texture ID: §f" + (registeredIdentifier != null ? registeredIdentifier.toString() : "NOT_LOADED"));
         list.add("§aVault Texture Bound: §f" + (textureBound ? "YES" : "NO"));
         if (currentServerTextureHash != null && !currentServerTextureHash.isEmpty()) {
@@ -457,6 +456,12 @@ public class EzzSkinTextureProvider {
 
     public static String getComputedSha256() {
         return computedSha256;
+    }
+
+    public static String getLastAppliedSource() {
+        if (!enabled) return "DEFAULT";
+        if (hasServerSkinOverride()) return "SERVER_OVERRIDE";
+        return lastAppliedSource;
     }
 
     public static void printDiagnosticReportToChat() {
