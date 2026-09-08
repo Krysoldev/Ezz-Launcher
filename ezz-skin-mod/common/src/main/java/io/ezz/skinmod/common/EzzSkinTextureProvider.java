@@ -40,7 +40,14 @@ public class EzzSkinTextureProvider {
     private static int imageHeight = 64;
     private static long imageBytesLength = 0;
     private static String computedSha256 = "";
-    private static String lastAppliedSource = "DEFAULT";
+    private static volatile String lastAppliedSource = "DEFAULT";
+
+    // Server-provided skin override state (SkinsRestorer / server skin updates)
+    private static volatile boolean serverOverrideActive = false;
+    private static volatile String initialServerTextureHash = null;
+    private static volatile String currentServerTextureHash = null;
+    private static volatile boolean initialServerTextureRecorded = false;
+    private static volatile long lastSkinFileModified = 0L;
 
     // Cached reflection handles
     private static final ConcurrentHashMap<Class<?>, Method> UUID_GETTER_CACHE = new ConcurrentHashMap<>();
@@ -111,12 +118,126 @@ public class EzzSkinTextureProvider {
         return false;
     }
 
+    public static boolean hasServerSkinOverride() {
+        if (!enabled) return false;
+        if (isSingleplayer()) return false;
+        return serverOverrideActive;
+    }
+
+    public static synchronized void resetServerOverride() {
+        boolean wasActive = serverOverrideActive;
+        serverOverrideActive = false;
+        initialServerTextureHash = null;
+        currentServerTextureHash = null;
+        initialServerTextureRecorded = false;
+        lastAppliedSource = "EZZ_VAULT";
+        if (wasActive) {
+            System.out.println("[EZZ-SKIN] DISCONNECT_RESET: Cleared server skin override, Vault fallback restored.");
+        }
+    }
+
+    public static synchronized void onGameJoin() {
+        serverOverrideActive = false;
+        initialServerTextureHash = null;
+        currentServerTextureHash = null;
+        initialServerTextureRecorded = false;
+        lastAppliedSource = "EZZ_VAULT";
+        System.out.println("[EZZ-SKIN] GAME_JOIN: Initialized session state, Vault fallback active.");
+    }
+
+    public static void updateServerSkinState(Object target) {
+        if (!enabled || target == null || isSingleplayer()) {
+            serverOverrideActive = false;
+            return;
+        }
+
+        try {
+            String rawTextureVal = extractSkinTextureValue(target);
+            if (rawTextureVal == null || rawTextureVal.trim().isEmpty()) {
+                if (!initialServerTextureRecorded) {
+                    initialServerTextureHash = "";
+                    initialServerTextureRecorded = true;
+                }
+                return;
+            }
+
+            String currentHash = calculateSha256(rawTextureVal.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            if (!initialServerTextureRecorded) {
+                // Record initial join server texture property
+                initialServerTextureHash = currentHash;
+                initialServerTextureRecorded = true;
+                return;
+            }
+
+            // If the server texture differs from initial join, a server-side update occurred (e.g. SkinsRestorer /skin)
+            if (!currentHash.equals(initialServerTextureHash)) {
+                if (!currentHash.equals(currentServerTextureHash)) {
+                    currentServerTextureHash = currentHash;
+                    serverOverrideActive = true;
+                    lastAppliedSource = "SERVER_OVERRIDE";
+                    String shortHash = currentHash.length() > 12 ? currentHash.substring(0, 12) : currentHash;
+                    System.out.println("[EZZ-SKIN] SERVER_SKIN_UPDATE_RECEIVED: Server skin update detected (hash: " + shortHash + ")");
+                    System.out.println("[EZZ-SKIN] SKIN_SOURCE_CHANGED: LOCAL_VAULT -> SERVER_OVERRIDE");
+                }
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    public static String extractSkinTextureValue(Object target) {
+        if (target == null) return null;
+        try {
+            Object profile = target;
+            Class<?> clazz = target.getClass();
+            Method profMethod = PROFILE_GETTER_CACHE.get(clazz);
+            if (profMethod == null) {
+                profMethod = getMethodOrNull(clazz, "getProfile", "method_2966", "getGameProfile");
+                if (profMethod != null) {
+                    PROFILE_GETTER_CACHE.put(clazz, profMethod);
+                }
+            }
+            if (profMethod != null) {
+                Object p = profMethod.invoke(target);
+                if (p != null) profile = p;
+            }
+
+            if (profile == null) return null;
+
+            Method getPropertiesMethod = getMethodOrNull(profile.getClass(), "getProperties");
+            if (getPropertiesMethod != null) {
+                Object propsObj = getPropertiesMethod.invoke(profile);
+                if (propsObj != null) {
+                    Method getMethod = getMethodOrNull(propsObj.getClass(), "get");
+                    if (getMethod != null) {
+                        Object col = getMethod.invoke(propsObj, "textures");
+                        if (col instanceof java.util.Collection) {
+                            for (Object p : (java.util.Collection<?>) col) {
+                                Method getName = getMethodOrNull(p.getClass(), "name", "getName");
+                                Object nameObj = getName != null ? getName.invoke(p) : null;
+                                if ("textures".equals(nameObj)) {
+                                    Method getVal = getMethodOrNull(p.getClass(), "value", "getValue");
+                                    if (getVal != null) {
+                                        Object v = getVal.invoke(p);
+                                        if (v instanceof String && !((String) v).isEmpty()) {
+                                            return (String) v;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
     public static Object getCustomSkinTexture() {
         return getCustomSkinTexture(null);
     }
 
     public static Object getCustomSkinTexture(Object entity) {
         if (!enabled) return null;
+        if (hasServerSkinOverride()) return null;
         if (entity != null && !isLocalPlayer(entity)) return null;
 
         ensureTextureLoaded();
@@ -131,6 +252,7 @@ public class EzzSkinTextureProvider {
 
     public static Object getCustomSkinTextures(Object entity) {
         if (!enabled) return null;
+        if (hasServerSkinOverride()) return null;
         if (entity != null && !isLocalPlayer(entity)) return null;
 
         ensureTextureLoaded();
@@ -150,14 +272,12 @@ public class EzzSkinTextureProvider {
 
     public static String getCustomModel(Object entity) {
         if (!enabled) return null;
+        if (hasServerSkinOverride()) return null;
         if (entity != null && !isLocalPlayer(entity)) return null;
         return isAlex ? "slim" : "default";
     }
 
     public static synchronized void ensureTextureLoaded() {
-        if (textureLoaded) return;
-        textureLoaded = true;
-
         initLocalPlayerIdentity();
         EzzSkinConfig config = EzzSkinModCommon.getConfig();
         if (config == null || !config.enabled) return;
@@ -173,6 +293,16 @@ public class EzzSkinTextureProvider {
                 System.err.println("[EZZ-SKIN] Skin file not found at " + skinFile.getAbsolutePath());
                 return;
             }
+
+            long modified = skinFile.lastModified();
+            if (textureLoaded && modified == lastSkinFileModified) {
+                return;
+            }
+
+            textureLoaded = true;
+            lastSkinFileModified = modified;
+            textureBound = false;
+            registeredSkinTextures = null;
 
             imageBytesLength = skinFile.length();
             byte[] fileBytes = readFileBytes(skinFile);
@@ -290,20 +420,24 @@ public class EzzSkinTextureProvider {
     public static String[] getDiagnosticReportLines() {
         List<String> list = new ArrayList<>();
         list.add("§6=== §eEzz Skin Mod Diagnostic §6===");
-        list.add("§aStatus: §f" + (enabled ? "ACTIVE (Zero Render-Thread Overhead)" : "INACTIVE"));
+        list.add("§aStatus: §f" + (enabled ? "ACTIVE (Context-Aware Priority)" : "INACTIVE"));
         list.add("§aUsername: §f" + (cachedLocalUsername != null ? cachedLocalUsername : "N/A"));
         list.add("§aUUID: §f" + (cachedLocalUuid != null ? cachedLocalUuid.toString() : "N/A"));
         list.add("§aModel: §f" + (isAlex ? "SLIM (Alex)" : "WIDE (Steve)"));
-        list.add("§aTexture ID: §f" + (registeredIdentifier != null ? registeredIdentifier.toString() : "NOT_LOADED"));
-        list.add("§aTexture Registered: §f" + (textureBound ? "YES" : "NO"));
-        list.add("§aCustom Texture Active: §f" + (registeredIdentifier != null ? "YES" : "NO"));
-        list.add("§aSkin Source: §f" + lastAppliedSource);
-        list.add("§aDimensions: §f" + imageWidth + "x" + imageHeight);
+        list.add("§aEnvironment: §f" + (isSingleplayer() ? "SINGLEPLAYER" : "MULTIPLAYER"));
+        list.add("§aServer Skin Override: §f" + (hasServerSkinOverride() ? "ACTIVE (SkinRestorer / Server Skin)" : "NONE (Vault Fallback)"));
+        list.add("§aSkin Source: §f" + (hasServerSkinOverride() ? "SERVER_OVERRIDE" : (enabled ? "EZZ_VAULT" : "DEFAULT")));
+        list.add("§aVault Texture ID: §f" + (registeredIdentifier != null ? registeredIdentifier.toString() : "NOT_LOADED"));
+        list.add("§aVault Texture Bound: §f" + (textureBound ? "YES" : "NO"));
+        if (currentServerTextureHash != null && !currentServerTextureHash.isEmpty()) {
+            list.add("§aServer Texture Hash: §f" + (currentServerTextureHash.length() > 16 ? currentServerTextureHash.substring(0, 16) + "..." : currentServerTextureHash));
+        }
+        list.add("§aVault Dimensions: §f" + imageWidth + "x" + imageHeight);
         if (imageBytesLength > 0) {
-            list.add("§aFile Size: §f" + imageBytesLength + " bytes");
+            list.add("§aVault File Size: §f" + imageBytesLength + " bytes");
         }
         if (computedSha256 != null && !computedSha256.isEmpty()) {
-            list.add("§aSHA-256: §f" + (computedSha256.length() > 16 ? computedSha256.substring(0, 16) + "..." : computedSha256));
+            list.add("§aVault SHA-256: §f" + (computedSha256.length() > 16 ? computedSha256.substring(0, 16) + "..." : computedSha256));
         }
         list.add("§6=================================");
         return list.toArray(new String[0]);
@@ -356,14 +490,15 @@ public class EzzSkinTextureProvider {
     public static boolean isSingleplayer() {
         try {
             Object client = getMinecraftClient();
-            if (client == null) return true;
-            Method isIntegratedServerRunning = getMethodOrNull(client.getClass(), "isIntegratedServerRunning", "method_1542", "isInSingleplayer");
-            if (isIntegratedServerRunning != null) {
-                Object res = isIntegratedServerRunning.invoke(client);
-                if (res instanceof Boolean) return (Boolean) res;
+            if (client != null) {
+                Method isIntegrated = getMethodOrNull(client.getClass(), "isIntegratedServerRunning", "method_1542", "isInSingleplayer");
+                if (isIntegrated != null) {
+                    Object res = isIntegrated.invoke(client);
+                    if (res instanceof Boolean) return (Boolean) res;
+                }
             }
         } catch (Throwable ignored) {}
-        return true;
+        return false;
     }
 
     private static Object getMinecraftClient() {

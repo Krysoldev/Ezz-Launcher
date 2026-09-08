@@ -15,9 +15,12 @@ public class PlayerListEntryLegacyMixin {
     @Inject(method = {"getSkinTexture()Lnet/minecraft/class_2960;", "method_2968()Lnet/minecraft/class_2960;"}, at = @At("HEAD"), cancellable = true, remap = false)
     private void ezz_getSkinTexture(CallbackInfoReturnable<Object> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(this)) {
-            Object custom = EzzSkinTextureProvider.getCustomSkinTexture(this);
-            if (custom != null) {
-                cir.setReturnValue(custom);
+            EzzSkinTextureProvider.updateServerSkinState(this);
+            if (!EzzSkinTextureProvider.hasServerSkinOverride()) {
+                Object custom = EzzSkinTextureProvider.getCustomSkinTexture(this);
+                if (custom != null) {
+                    cir.setReturnValue(custom);
+                }
             }
         }
     }
@@ -25,9 +28,11 @@ public class PlayerListEntryLegacyMixin {
     @Inject(method = {"getModel()Ljava/lang/String;", "method_2977()Ljava/lang/String;"}, at = @At("HEAD"), cancellable = true, remap = false)
     private void ezz_getModel(CallbackInfoReturnable<String> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(this)) {
-            String model = EzzSkinTextureProvider.getCustomModel(this);
-            if (model != null) {
-                cir.setReturnValue(model);
+            if (!EzzSkinTextureProvider.hasServerSkinOverride()) {
+                String model = EzzSkinTextureProvider.getCustomModel(this);
+                if (model != null) {
+                    cir.setReturnValue(model);
+                }
             }
         }
     }
@@ -35,7 +40,9 @@ public class PlayerListEntryLegacyMixin {
     @Inject(method = {"hasSkinTexture()Z", "method_2979()Z"}, at = @At("HEAD"), cancellable = true, remap = false)
     private void ezz_hasSkinTexture(CallbackInfoReturnable<Boolean> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(this)) {
-            cir.setReturnValue(true);
+            if (!EzzSkinTextureProvider.hasServerSkinOverride()) {
+                cir.setReturnValue(true);
+            }
         }
     }
 }

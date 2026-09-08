@@ -16,9 +16,15 @@ public class PlayerSkinProviderModernMixin {
     @Inject(method = {"fetchSkinTextures(Lcom/mojang/authlib/GameProfile;)Ljava/util/concurrent/CompletableFuture;", "method_52863(Lcom/mojang/authlib/GameProfile;)Ljava/util/concurrent/CompletableFuture;"}, at = @At("HEAD"), cancellable = true, remap = false)
     private void ezz_fetchSkinTextures(GameProfile profile, CallbackInfoReturnable<CompletableFuture<Optional<Object>>> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(profile)) {
-            Object custom = EzzSkinTextureProvider.getCustomSkinTextures(profile);
-            if (custom != null) {
-                cir.setReturnValue(CompletableFuture.completedFuture(Optional.of(custom)));
+            EzzSkinTextureProvider.updateServerSkinState(profile);
+            if (!EzzSkinTextureProvider.hasServerSkinOverride()) {
+                String val = EzzSkinTextureProvider.extractSkinTextureValue(profile);
+                if (val == null || val.trim().isEmpty()) {
+                    Object custom = EzzSkinTextureProvider.getCustomSkinTextures(profile);
+                    if (custom != null) {
+                        cir.setReturnValue(CompletableFuture.completedFuture(Optional.of(custom)));
+                    }
+                }
             }
         }
     }
@@ -26,9 +32,15 @@ public class PlayerSkinProviderModernMixin {
     @Inject(method = {"getSkinTexturesSupplier(Lcom/mojang/authlib/GameProfile;Z)Ljava/util/function/Supplier;", "method_73544(Lcom/mojang/authlib/GameProfile;Z)Ljava/util/function/Supplier;"}, at = @At("HEAD"), cancellable = true, remap = false)
     private void ezz_getSkinTexturesSupplier(GameProfile profile, boolean requireSecure, CallbackInfoReturnable<Supplier<Object>> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(profile)) {
-            Object custom = EzzSkinTextureProvider.getCustomSkinTextures(profile);
-            if (custom != null) {
-                cir.setReturnValue(() -> custom);
+            EzzSkinTextureProvider.updateServerSkinState(profile);
+            if (!EzzSkinTextureProvider.hasServerSkinOverride()) {
+                String val = EzzSkinTextureProvider.extractSkinTextureValue(profile);
+                if (val == null || val.trim().isEmpty()) {
+                    Object custom = EzzSkinTextureProvider.getCustomSkinTextures(profile);
+                    if (custom != null) {
+                        cir.setReturnValue(() -> custom);
+                    }
+                }
             }
         }
     }

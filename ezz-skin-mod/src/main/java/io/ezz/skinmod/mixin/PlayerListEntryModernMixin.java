@@ -16,9 +16,12 @@ public class PlayerListEntryModernMixin {
     @Inject(method = {"getSkinTextures()Lnet/minecraft/class_8685;", "method_52810()Lnet/minecraft/class_8685;"}, at = @At("HEAD"), cancellable = true, remap = false)
     private void ezz_getSkinTextures(CallbackInfoReturnable<Object> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(this)) {
-            Object custom = EzzSkinTextureProvider.getCustomSkinTextures(this);
-            if (custom != null) {
-                cir.setReturnValue(custom);
+            EzzSkinTextureProvider.updateServerSkinState(this);
+            if (!EzzSkinTextureProvider.hasServerSkinOverride()) {
+                Object custom = EzzSkinTextureProvider.getCustomSkinTextures(this);
+                if (custom != null) {
+                    cir.setReturnValue(custom);
+                }
             }
         }
     }

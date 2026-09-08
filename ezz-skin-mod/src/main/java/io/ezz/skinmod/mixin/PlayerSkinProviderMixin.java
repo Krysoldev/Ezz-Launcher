@@ -17,9 +17,15 @@ public class PlayerSkinProviderMixin {
     @Inject(method = {"fetchSkinTextures", "method_52863"}, at = @At("HEAD"), cancellable = true, remap = false)
     private void ezz_fetchSkinTextures(GameProfile profile, CallbackInfoReturnable<CompletableFuture<Optional<Object>>> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(profile)) {
-            Object custom = EzzSkinTextureProvider.getCustomSkinTextures(profile);
-            if (custom != null) {
-                cir.setReturnValue(CompletableFuture.completedFuture(Optional.of(custom)));
+            EzzSkinTextureProvider.updateServerSkinState(profile);
+            if (!EzzSkinTextureProvider.hasServerSkinOverride()) {
+                String val = EzzSkinTextureProvider.extractSkinTextureValue(profile);
+                if (val == null || val.trim().isEmpty()) {
+                    Object custom = EzzSkinTextureProvider.getCustomSkinTextures(profile);
+                    if (custom != null) {
+                        cir.setReturnValue(CompletableFuture.completedFuture(Optional.of(custom)));
+                    }
+                }
             }
         }
     }
@@ -28,9 +34,15 @@ public class PlayerSkinProviderMixin {
     @Inject(method = {"getSkinTexturesSupplier", "method_73544"}, at = @At("HEAD"), cancellable = true, remap = false)
     private void ezz_getSkinTexturesSupplier(GameProfile profile, boolean requireSecure, CallbackInfoReturnable<Supplier<Object>> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(profile)) {
-            Object custom = EzzSkinTextureProvider.getCustomSkinTextures(profile);
-            if (custom != null) {
-                cir.setReturnValue(() -> custom);
+            EzzSkinTextureProvider.updateServerSkinState(profile);
+            if (!EzzSkinTextureProvider.hasServerSkinOverride()) {
+                String val = EzzSkinTextureProvider.extractSkinTextureValue(profile);
+                if (val == null || val.trim().isEmpty()) {
+                    Object custom = EzzSkinTextureProvider.getCustomSkinTextures(profile);
+                    if (custom != null) {
+                        cir.setReturnValue(() -> custom);
+                    }
+                }
             }
         }
     }

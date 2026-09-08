@@ -16,9 +16,11 @@ public class DefaultSkinHelperLegacyMixin {
     @Inject(method = {"getTexture(Ljava/util/UUID;)Lnet/minecraft/class_2960;", "method_4648(Ljava/util/UUID;)Lnet/minecraft/class_2960;"}, at = @At("HEAD"), cancellable = true, remap = false)
     private static void ezz_getTextureFromUuid(UUID uuid, CallbackInfoReturnable<Object> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(uuid)) {
-            Object custom = EzzSkinTextureProvider.getCustomSkinTexture(uuid);
-            if (custom != null) {
-                cir.setReturnValue(custom);
+            if (!EzzSkinTextureProvider.hasServerSkinOverride()) {
+                Object custom = EzzSkinTextureProvider.getCustomSkinTexture(uuid);
+                if (custom != null) {
+                    cir.setReturnValue(custom);
+                }
             }
         }
     }
@@ -26,9 +28,11 @@ public class DefaultSkinHelperLegacyMixin {
     @Inject(method = {"getModel(Ljava/util/UUID;)Ljava/lang/String;", "method_4649(Ljava/util/UUID;)Ljava/lang/String;"}, at = @At("HEAD"), cancellable = true, remap = false)
     private static void ezz_getModelFromUuid(UUID uuid, CallbackInfoReturnable<String> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(uuid)) {
-            String model = EzzSkinTextureProvider.getCustomModel(uuid);
-            if (model != null) {
-                cir.setReturnValue(model);
+            if (!EzzSkinTextureProvider.hasServerSkinOverride()) {
+                String model = EzzSkinTextureProvider.getCustomModel(uuid);
+                if (model != null) {
+                    cir.setReturnValue(model);
+                }
             }
         }
     }

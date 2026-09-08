@@ -24,4 +24,9 @@ public class ClientPlayNetworkHandlerMixin {
             ci.cancel();
         }
     }
+
+    @Inject(method = {"clearWorld", "method_2874"}, at = @At("HEAD"), remap = false, require = 0)
+    private void ezz_onClearWorld(CallbackInfo ci) {
+        EzzSkinTextureProvider.resetServerOverride();
+    }
 }
