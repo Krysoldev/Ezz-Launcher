@@ -48,9 +48,11 @@ object LaunchArgumentBuilder {
         command.add("-Xms${minMem}M")
         command.add("-Xmx${maxMem}M")
 
-        // 2. Classpath assembly
+        // 2. Classpath assembly with deduplication
         val pathSeparator = if (os == OperatingSystem.WINDOWS) ";" else ":"
-        val fullClasspath = (classpathEntries + clientJarPath).joinToString(pathSeparator) { it.toString() }
+        val fullClasspath = (classpathEntries + clientJarPath)
+            .distinct()
+            .joinToString(pathSeparator) { it.toString() }
 
         val variables = mapOf(
             "auth_player_name" to account.username,

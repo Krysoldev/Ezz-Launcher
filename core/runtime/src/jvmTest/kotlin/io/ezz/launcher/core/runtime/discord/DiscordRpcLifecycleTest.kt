@@ -76,4 +76,37 @@ class DiscordRpcLifecycleTest {
         service.clearActivity(disconnect = true)
         delay(500L)
     }
+
+    @Test
+    fun testDisabledRpcLifecycle() = runBlocking {
+        val service = DiscordRpcService()
+        // Initialize as disabled
+        service.initialize(account = null, enabled = false)
+        assertEquals(false, service.isEnabled)
+        assertEquals(DiscordRpcStatus.DISABLED, service.status.value)
+
+        // Presence updates when disabled should be safe and no-op
+        service.setMinecraftPresence("Player", "1.21.11")
+        service.onMinecraftExited()
+        assertEquals(DiscordRpcStatus.DISABLED, service.status.value)
+    }
+
+    @Test
+    fun testRapidMinecraftStartAndExitSequence() = runBlocking {
+        val service = DiscordRpcService()
+        service.initialize(account = null, enabled = true)
+
+        // Rapid start and stop
+        for (i in 1..5) {
+            service.setMinecraftPresence(
+                playerUsername = "User$i",
+                minecraftVersion = "1.21.11",
+                processId = 1000L + i
+            )
+            service.onMinecraftExited(processId = 1000L + i)
+        }
+
+        service.clearActivity(disconnect = true)
+    }
 }
+

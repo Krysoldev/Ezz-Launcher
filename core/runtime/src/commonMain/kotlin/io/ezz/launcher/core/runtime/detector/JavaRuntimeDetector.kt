@@ -13,9 +13,19 @@ data class SystemMemoryInfo(
 
 object JavaRuntimeDetector {
 
-    fun detectInstalledRuntimes(): List<JavaRuntime> {
+    private var cachedRuntimes: List<JavaRuntime>? = null
+
+    fun invalidateCache() {
+        cachedRuntimes = null
+    }
+
+    fun detectInstalledRuntimes(forceRefresh: Boolean = false): List<JavaRuntime> {
+        if (!forceRefresh) {
+            cachedRuntimes?.let { return it }
+        }
+
         if (isAndroid()) {
-            return listOf(
+            val androidRuntimes = listOf(
                 JavaRuntime(
                     path = "android_runtime",
                     majorVersion = 21,
@@ -24,6 +34,8 @@ object JavaRuntimeDetector {
                     is64Bit = true
                 )
             )
+            cachedRuntimes = androidRuntimes
+            return androidRuntimes
         }
 
         val found = mutableListOf<JavaRuntime>()
@@ -118,10 +130,12 @@ object JavaRuntimeDetector {
         }
 
         // Sort prioritizing 64-Bit and then highest major version
-        return found.sortedWith(
+        val sorted = found.sortedWith(
             compareByDescending<JavaRuntime> { it.is64Bit }
                 .thenByDescending { it.majorVersion }
         )
+        cachedRuntimes = sorted
+        return sorted
     }
 
     fun inspectJavaHome(dirOrBinaryPath: String): JavaRuntime? {

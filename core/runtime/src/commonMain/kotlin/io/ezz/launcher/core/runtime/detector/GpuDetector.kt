@@ -91,6 +91,8 @@ object GpuDetector {
         return env
     }
 
+    private val configuredGpuPreferences = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     /**
      * Registers the Java binary in Windows User GPU Preferences (HKCU\Software\Microsoft\DirectX\UserGpuPreferences).
      */
@@ -98,13 +100,18 @@ object GpuDetector {
         val isWindows = System.getProperty("os.name")?.lowercase()?.contains("win") ?: false
         if (!isWindows || javaPath.isBlank()) return
 
+        val cleanPath = File(javaPath).absolutePath
+        val prefValue = when (preference) {
+            GpuPreference.HIGH_PERFORMANCE -> "GpuPreference=2;"
+            GpuPreference.POWER_SAVING -> "GpuPreference=1;"
+            GpuPreference.AUTO -> "GpuPreference=0;"
+        }
+        val cacheKey = "$cleanPath:$prefValue"
+        if (!configuredGpuPreferences.add(cacheKey)) {
+            return // Already registered and enforced in this session (0ms overhead)
+        }
+
         try {
-            val prefValue = when (preference) {
-                GpuPreference.HIGH_PERFORMANCE -> "GpuPreference=2;"
-                GpuPreference.POWER_SAVING -> "GpuPreference=1;"
-                GpuPreference.AUTO -> "GpuPreference=0;"
-            }
-            val cleanPath = File(javaPath).absolutePath
             val proc = ProcessBuilder("reg", "add", "HKCU\\Software\\Microsoft\\DirectX\\UserGpuPreferences", "/v", cleanPath, "/t", "REG_SZ", "/d", prefValue, "/f")
                 .redirectErrorStream(true)
                 .start()

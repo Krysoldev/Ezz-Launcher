@@ -67,6 +67,7 @@ fun MainScreen(
 ) {
     val currentScreen by viewModel.currentScreen.collectAsState()
     val activeDownload by viewModel.activeDownloadState.collectAsState()
+    val launchProgress by viewModel.launchProgressState.collectAsState()
     val launchErrorData by viewModel.launchErrorDialogData.collectAsState()
 
     val showCreateInstance by viewModel.showCreateInstanceDialog.collectAsState()
@@ -146,13 +147,21 @@ fun MainScreen(
                     }
 
                     // Floating Download & Installation HUD Overlay
-                    DownloadProgressOverlay(
-                        state = activeDownload,
-                        onCancel = {
-                            viewModel.activeDownloadState.value = null
-                        },
-                        modifier = Modifier.align(Alignment.BottomCenter)
-                    )
+                    // Suppressed on Home screen when launch progress track is actively displayed in the hero card
+                    val isLaunchOnHome = currentScreen == NavigationScreen.HOME && launchProgress != null
+                    if (activeDownload != null && !isLaunchOnHome) {
+                        DownloadProgressOverlay(
+                            state = activeDownload,
+                            onCancel = {
+                                if (launchProgress != null) {
+                                    viewModel.cancelLaunch()
+                                } else {
+                                    viewModel.activeDownloadState.value = null
+                                }
+                            },
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                        )
+                    }
                 }
             }
 

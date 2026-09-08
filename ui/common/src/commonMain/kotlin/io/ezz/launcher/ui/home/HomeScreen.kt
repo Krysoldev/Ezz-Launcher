@@ -3,6 +3,10 @@ package io.ezz.launcher.ui.home
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -62,12 +66,14 @@ import io.ezz.launcher.core.model.account.Account
 import io.ezz.launcher.core.model.account.AccountType
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LoaderType
+import io.ezz.launcher.core.model.runtime.LaunchProgressState
 import io.ezz.launcher.core.model.runtime.ProcessState
 import io.ezz.launcher.ui.components.EzzButton
 import io.ezz.launcher.ui.components.EzzButtonSize
 import io.ezz.launcher.ui.components.EzzButtonVariant
 import io.ezz.launcher.ui.components.HeroRuntimeActionDisplay
 import io.ezz.launcher.ui.components.InstanceArtworkIcon
+import io.ezz.launcher.ui.components.LaunchProgressTrack
 import io.ezz.launcher.ui.components.MinecraftSkinHead
 import io.ezz.launcher.ui.components.RuntimeDisplay
 import io.ezz.launcher.ui.viewmodel.AppViewModel
@@ -89,6 +95,7 @@ fun HomeScreen(
     val announcements by viewModel.announcements.collectAsState()
 
     val selectedStartedAt = selectedInstance?.let { runningSessions[it.id]?.startedAt }
+    val launchProgress by viewModel.launchProgressState.collectAsState()
 
     Box(
         modifier = modifier
@@ -177,12 +184,14 @@ fun HomeScreen(
                 instance = selectedInstance,
                 instances = instances,
                 processState = processState,
+                launchProgress = launchProgress,
                 startedAt = selectedStartedAt,
                 onSelectInstance = { viewModel.selectInstance(it) },
                 onLaunch = {
                     io.ezz.launcher.ui.audio.EzzAudioService.playLaunch()
                     viewModel.launchInstance(selectedInstance)
                 },
+                onCancelLaunch = { viewModel.cancelLaunch() },
                 onManage = {
                     selectedInstance?.let { viewModel.openInstanceManager(it) }
                         ?: run { viewModel.navigateTo(NavigationScreen.INSTANCES) }
@@ -433,9 +442,11 @@ private fun ActiveLaunchTargetCard(
     instance: Instance?,
     instances: List<Instance>,
     processState: ProcessState,
+    launchProgress: LaunchProgressState?,
     startedAt: Long?,
     onSelectInstance: (Instance) -> Unit,
     onLaunch: () -> Unit,
+    onCancelLaunch: () -> Unit,
     onManage: () -> Unit,
     onConfigure: () -> Unit,
     onOpenFolder: () -> Unit,
@@ -454,7 +465,8 @@ private fun ActiveLaunchTargetCard(
         if (instance != null) {
             val javaReq = io.ezz.launcher.core.minecraft.version.JavaCompatibility.getRequiredJavaMajorVersion(instance.minecraftVersion)
             val isRunning = processState is ProcessState.Running || startedAt != null
-            val isPreparing = processState is ProcessState.Preparing
+            val isPreparing = processState is ProcessState.Preparing || (launchProgress != null && launchProgress.percentage < 100)
+            val isLaunching = launchProgress != null || isPreparing
 
             Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
                 // Top Row: Large Instance Artwork + Title & Metadata + Switcher Dropdown
@@ -635,6 +647,24 @@ private fun ActiveLaunchTargetCard(
                             fontWeight = FontWeight.Bold,
                             dotColor = Color(0xFF10B981)
                         )
+                    } else if (launchProgress != null) {
+                        val isErr = launchProgress.error != null
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (!isErr) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(12.dp),
+                                    color = Color(0xFFA78BFA),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                            }
+                            Text(
+                                text = launchProgress.stage.uppercase(),
+                                color = if (isErr) Color(0xFFEF4444) else Color(0xFFA78BFA),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     } else if (isPreparing) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(
@@ -669,6 +699,21 @@ private fun ActiveLaunchTargetCard(
                     }
                 }
 
+                // Minecraft Steve Runner Real-Time Launch Progress Track
+                AnimatedVisibility(
+                    visible = launchProgress != null && (launchProgress.instanceId.isBlank() || launchProgress.instanceId == instance.id),
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    launchProgress?.let { progress ->
+                        LaunchProgressTrack(
+                            progressState = progress,
+                            onCancel = onCancelLaunch,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                        )
+                    }
+                }
+
                 // Bottom Row: The Next-Gen Tactile Play Button + Secondary Actions
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -680,13 +725,13 @@ private fun ActiveLaunchTargetCard(
                     val isPressed by interactionSource.collectIsPressedAsState()
 
                     androidx.compose.runtime.LaunchedEffect(isHovered) {
-                        if (isHovered && !isRunning && !isPreparing) {
+                        if (isHovered && !isRunning && !isLaunching) {
                             io.ezz.launcher.ui.audio.EzzAudioService.playHover()
                         }
                     }
 
                     val scale by animateFloatAsState(
-                        targetValue = if (isPressed) 0.97f else if (isHovered && !isRunning && !isPreparing) 1.025f else 1.0f,
+                        targetValue = if (isPressed) 0.97f else if (isHovered && !isRunning && !isLaunching) 1.025f else 1.0f,
                         animationSpec = tween(120)
                     )
 
@@ -697,7 +742,7 @@ private fun ActiveLaunchTargetCard(
                             .background(
                                 when {
                                     isRunning -> Color(0xFF131122)
-                                    isPreparing -> Color(0xFF261838)
+                                    isLaunching -> Color(0xFF261838)
                                     isHovered -> Color(0xFF7C3AED)
                                     else -> Color(0xFF8B5CF6)
                                 }
@@ -706,7 +751,7 @@ private fun ActiveLaunchTargetCard(
                                 1.dp,
                                 when {
                                     isRunning -> Color(0xFF10B981)
-                                    isPreparing -> Color(0xFF6D28D9)
+                                    isLaunching -> Color(0xFF6D28D9)
                                     isHovered -> Color(0xFFA78BFA)
                                     else -> Color(0xFF8B5CF6)
                                 },
@@ -715,13 +760,27 @@ private fun ActiveLaunchTargetCard(
                             .clickable(
                                 interactionSource = interactionSource,
                                 indication = null,
-                                enabled = !isRunning && !isPreparing,
+                                enabled = !isRunning && !isLaunching,
                                 onClick = onLaunch
                             )
                             .padding(horizontal = 46.dp, vertical = 14.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         when {
+                            launchProgress != null -> {
+                                val prepText = if (launchProgress.percentage >= 100 || launchProgress.stage.contains("START", ignoreCase = true)) {
+                                    "STARTING MINECRAFT..."
+                                } else {
+                                    "LAUNCHING..."
+                                }
+                                Text(
+                                    text = prepText,
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.6.sp
+                                )
+                            }
                             isPreparing -> {
                                 val prepStage = (processState as? ProcessState.Preparing)?.stage
                                 val prepText = if (prepStage?.contains("starting", ignoreCase = true) == true) {
@@ -729,21 +788,13 @@ private fun ActiveLaunchTargetCard(
                                 } else {
                                     "LAUNCHING..."
                                 }
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        color = Color.White,
-                                        strokeWidth = 2.dp
-                                    )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Text(
-                                        text = prepText,
-                                        color = Color.White,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 0.6.sp
-                                    )
-                                }
+                                Text(
+                                    text = prepText,
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.6.sp
+                                )
                             }
                             isRunning && startedAt != null -> {
                                 HeroRuntimeActionDisplay(startedAt = startedAt)

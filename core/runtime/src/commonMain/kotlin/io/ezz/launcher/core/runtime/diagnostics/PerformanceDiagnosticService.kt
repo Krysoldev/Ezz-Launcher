@@ -256,22 +256,40 @@ object PerformanceDiagnosticService {
         )
     }
 
+    @Volatile
+    private var cachedPowerSource: String? = null
+    @Volatile
+    private var lastPowerSourceCheck = 0L
+
+    @Volatile
+    private var cachedPowerScheme: String? = null
+    @Volatile
+    private var lastPowerSchemeCheck = 0L
+
     private fun detectPowerSource(): String {
         val isWindows = System.getProperty("os.name")?.lowercase()?.contains("win") ?: false
         if (!isWindows) return "AC Power"
 
+        val now = System.currentTimeMillis()
+        cachedPowerSource?.let {
+            if (now - lastPowerSourceCheck < 60_000L) return it
+        }
+
         return try {
-            val proc = ProcessBuilder("powershell", "-Command", "Get-CimInstance -ClassName Win32_Battery | Select-Object -ExpandProperty BatteryStatus")
+            val proc = ProcessBuilder("powershell", "-NoProfile", "-NonInteractive", "-Command", "Get-CimInstance -ClassName Win32_Battery | Select-Object -ExpandProperty BatteryStatus")
                 .redirectErrorStream(true)
                 .start()
             val out = proc.inputStream.bufferedReader().readText().trim()
             proc.waitFor()
-            when (out) {
+            val result = when (out) {
                 "1" -> "Discharging (Battery)"
                 "2" -> "AC Power (Connected)"
                 "3" -> "Fully Charged (AC Power)"
                 else -> "AC Power"
             }
+            cachedPowerSource = result
+            lastPowerSourceCheck = now
+            result
         } catch (_: Exception) {
             "AC Power"
         }
@@ -281,6 +299,11 @@ object PerformanceDiagnosticService {
         val isWindows = System.getProperty("os.name")?.lowercase()?.contains("win") ?: false
         if (!isWindows) return "Standard"
 
+        val now = System.currentTimeMillis()
+        cachedPowerScheme?.let {
+            if (now - lastPowerSchemeCheck < 60_000L) return it
+        }
+
         return try {
             val proc = ProcessBuilder("powercfg", "/getactivescheme")
                 .redirectErrorStream(true)
@@ -288,7 +311,10 @@ object PerformanceDiagnosticService {
             val out = proc.inputStream.bufferedReader().readText().trim()
             proc.waitFor()
             val match = Regex("\\((.*?)\\)").find(out)
-            match?.groupValues?.get(1) ?: "Balanced"
+            val result = match?.groupValues?.get(1) ?: "Balanced"
+            cachedPowerScheme = result
+            lastPowerSchemeCheck = now
+            result
         } catch (_: Exception) {
             "Balanced"
         }

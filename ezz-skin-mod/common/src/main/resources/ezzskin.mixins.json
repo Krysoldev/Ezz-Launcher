@@ -4,6 +4,7 @@
   "package": "io.ezz.skinmod.mixin",
   "compatibilityLevel": "JAVA_17",
   "client": [
+    "AbstractClientPlayerEntityMixin",
     "PlayerListEntryMixin",
     "DefaultSkinHelperMixin",
     "PlayerSkinProviderMixin",

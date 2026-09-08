@@ -35,14 +35,30 @@ import io.ezz.launcher.core.storage.path.PathProvider
 import io.ezz.launcher.core.storage.repository.InstanceRepository
 import io.ezz.launcher.core.storage.repository.SettingsRepository
 import io.ezz.launcher.core.storage.repository.VaultSkinRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.flowOn
 import okio.FileSystem
 import java.io.File
 
 sealed class LaunchEvent {
     data class StateChanged(val state: ProcessState) : LaunchEvent()
-    data class ProgressUpdate(val progress: DownloadProgress) : LaunchEvent()
+    data class ProgressUpdate(
+        val operationId: String,
+        val stage: String,
+        val status: String,
+        val progress: Float,
+        val displayProgress: Float = progress,
+        val completedWork: Long = 0L,
+        val totalWork: Long = 0L,
+        val isIndeterminate: Boolean = false
+    ) : LaunchEvent()
+    data class DownloadProgressUpdate(val progress: DownloadProgress) : LaunchEvent()
     data class LogReceived(val line: String, val isError: Boolean = false) : LaunchEvent()
 }
 
@@ -63,13 +79,168 @@ class LaunchEngine(
 ) {
     fun launch(
         instance: Instance,
-        account: Account? = null
-    ): Flow<LaunchEvent> = flow {
+        account: Account? = null,
+        operationId: String = java.util.UUID.randomUUID().toString(),
+        playClickTime: Long = System.currentTimeMillis(),
+        skipDisplayInterpolation: Boolean = false
+    ): Flow<LaunchEvent> = channelFlow {
         val launchPreparationStartTime = System.currentTimeMillis()
         var runningPid: Long = 0L
 
+        var realProgress = 0f
+        var currentStage = "PREPARING LAUNCH"
+        var currentStatus = "Preparing launch environment..."
+        var currentCompletedWork = 0L
+        var currentTotalWork = 0L
+        var currentIsIndeterminate = false
+
+        var realProgressStartTime = 0L
+        var realProgress25Time = 0L
+        var realProgress50Time = 0L
+        var realProgress75Time = 0L
+        var realProgressReadyTime = 0L
+        var displayProgress100Time = 0L
+        var processSpawnStartTime = 0L
+        var processSpawnedTime = 0L
+
+        fun emit(event: LaunchEvent) {
+            trySend(event)
+        }
+
+        println("[PerformanceTiming] PLAY_CLICK: $playClickTime")
+        println("[PerformanceTiming] LAUNCH_PREPARATION_START: $launchPreparationStartTime (+${launchPreparationStartTime - playClickTime}ms from click)")
+        emit(LaunchEvent.LogReceived("[PerformanceTiming] PLAY_CLICK: $playClickTime", isError = false))
+        emit(LaunchEvent.LogReceived("[PerformanceTiming] LAUNCH_PREPARATION_START: $launchPreparationStartTime (+${launchPreparationStartTime - playClickTime}ms)", isError = false))
+
+        var displayProgress = 0f
+        val isDisplayComplete = kotlinx.coroutines.CompletableDeferred<Unit>()
+
+        var jumpStartProgress = 0f
+        var jumpTargetProgress = 0f
+        var jumpStartTime = System.currentTimeMillis()
+        var jumpDurationMs = 0
+
+        fun updateProgress(
+            stage: String,
+            status: String,
+            rawProgress: Float,
+            completedWork: Long = 0L,
+            totalWork: Long = 0L,
+            isIndeterminate: Boolean = false
+        ) {
+            val clamped = rawProgress.coerceIn(0f, 1f)
+            val safe = maxOf(realProgress, clamped)
+            realProgress = safe
+            currentStage = stage
+            currentStatus = status
+            currentCompletedWork = completedWork
+            currentTotalWork = totalWork
+            currentIsIndeterminate = isIndeterminate
+
+            val now = System.currentTimeMillis()
+            if (realProgressStartTime == 0L && safe >= 0.01f) {
+                realProgressStartTime = now
+                println("[PerformanceTiming] REAL_PROGRESS_START: $realProgressStartTime (+${realProgressStartTime - playClickTime}ms from click)")
+                emit(LaunchEvent.LogReceived("[PerformanceTiming] REAL_PROGRESS_START: $realProgressStartTime (+${realProgressStartTime - playClickTime}ms from click)", isError = false))
+            }
+            if (realProgress25Time == 0L && safe >= 0.25f) {
+                realProgress25Time = now
+                println("[PerformanceTiming] REAL_PROGRESS_25: $realProgress25Time (+${realProgress25Time - playClickTime}ms from click)")
+                emit(LaunchEvent.LogReceived("[PerformanceTiming] REAL_PROGRESS_25: $realProgress25Time (+${realProgress25Time - playClickTime}ms from click)", isError = false))
+            }
+            if (realProgress50Time == 0L && safe >= 0.50f) {
+                realProgress50Time = now
+                println("[PerformanceTiming] REAL_PROGRESS_50: $realProgress50Time (+${realProgress50Time - playClickTime}ms from click)")
+                emit(LaunchEvent.LogReceived("[PerformanceTiming] REAL_PROGRESS_50: $realProgress50Time (+${realProgress50Time - playClickTime}ms from click)", isError = false))
+            }
+            if (realProgress75Time == 0L && safe >= 0.75f) {
+                realProgress75Time = now
+                println("[PerformanceTiming] REAL_PROGRESS_75: $realProgress75Time (+${realProgress75Time - playClickTime}ms from click)")
+                emit(LaunchEvent.LogReceived("[PerformanceTiming] REAL_PROGRESS_75: $realProgress75Time (+${realProgress75Time - playClickTime}ms from click)", isError = false))
+            }
+
+            if (safe > jumpTargetProgress) {
+                jumpStartProgress = displayProgress
+                jumpTargetProgress = safe
+                jumpStartTime = now
+                jumpDurationMs = io.ezz.launcher.core.model.runtime.computeDisplayInterpolationDuration(
+                    jumpTargetProgress - jumpStartProgress,
+                    isTargetFinal = false
+                )
+            }
+
+            if (skipDisplayInterpolation) {
+                displayProgress = safe
+                emit(LaunchEvent.StateChanged(ProcessState.Preparing(status, safe)))
+                emit(LaunchEvent.ProgressUpdate(
+                    operationId = operationId,
+                    stage = stage,
+                    status = status,
+                    progress = safe,
+                    displayProgress = safe,
+                    completedWork = completedWork,
+                    totalWork = totalWork,
+                    isIndeterminate = isIndeterminate
+                ))
+            }
+        }
+
+        val displayInterpolatorJob = if (!skipDisplayInterpolation) {
+            kotlinx.coroutines.CoroutineScope(Dispatchers.Default).launch {
+                var lastEmittedPct = -1
+                var lastEmittedFloat = 0f
+
+                while (isActive) {
+                    val now = System.currentTimeMillis()
+                    val target = jumpTargetProgress
+                    val start = jumpStartProgress
+                    val dur = jumpDurationMs
+
+                    if (target > displayProgress) {
+                        val elapsed = now - jumpStartTime
+                        val t = if (dur > 0) (elapsed.toFloat() / dur.toFloat()).coerceIn(0f, 1f) else 1f
+                        val interpolated = start + (target - start) * t
+                        // Guarantee displayProgress never exceeds realProgress
+                        displayProgress = interpolated.coerceIn(0f, realProgress)
+
+                        val pct = io.ezz.launcher.core.model.runtime.computeDisplayPercentage(
+                            displayProgress = displayProgress,
+                            isFinished = realProgress >= 1.0f && displayProgress >= 1.0f
+                        )
+                        if (pct != lastEmittedPct || kotlin.math.abs(displayProgress - lastEmittedFloat) >= 0.002f || displayProgress >= 1.0f) {
+                            lastEmittedPct = pct
+                            lastEmittedFloat = displayProgress
+                            emit(LaunchEvent.ProgressUpdate(
+                                operationId = operationId,
+                                stage = currentStage,
+                                status = currentStatus,
+                                progress = realProgress,
+                                displayProgress = displayProgress,
+                                completedWork = currentCompletedWork,
+                                totalWork = currentTotalWork,
+                                isIndeterminate = currentIsIndeterminate
+                            ))
+                            emit(LaunchEvent.StateChanged(ProcessState.Preparing(currentStatus, displayProgress)))
+                        }
+                    }
+
+                    if (realProgress >= 1.0f && displayProgress >= 1.0f) {
+                        isDisplayComplete.complete(Unit)
+                        break
+                    }
+                    kotlinx.coroutines.delay(16L) // ~60 FPS smooth ticker
+                }
+            }
+        } else {
+            null
+        }
+
         try {
-            emit(LaunchEvent.StateChanged(ProcessState.Preparing("Preparing launch environment...")))
+            updateProgress(
+                stage = "PREPARING LAUNCH",
+                status = "Preparing launch environment...",
+                rawProgress = 0.01f
+            )
 
             val validAccount = account ?: OfflineAccount(
                 id = "default-offline",
@@ -79,7 +250,11 @@ class LaunchEngine(
 
             // Resolve and validate Java runtime
             val currentSettings = settingsRepository?.settings?.value ?: LauncherSettings()
-            emit(LaunchEvent.StateChanged(ProcessState.Preparing("Resolving Java Runtime...")))
+            updateProgress(
+                stage = "RESOLVING JAVA RUNTIME",
+                status = "Resolving Java Runtime...",
+                rawProgress = 0.03f
+            )
             val requiredJavaMajor = JavaRuntimeDetector.getRequiredJavaMajorVersion(instance.minecraftVersion)
             val javaRuntime = resolveJavaRuntime(instance, currentSettings.defaultJavaPath)
 
@@ -89,7 +264,7 @@ class LaunchEngine(
                 emit(LaunchEvent.StateChanged(ProcessState.Failed(
                     LaunchError.MissingJavaRuntime("Java executable not found at '${javaRuntime.path}'. Please install Java $requiredJavaMajor (64-Bit) or select a valid Java runtime in Instance Settings.")
                 )))
-                return@flow
+                return@channelFlow
             }
 
             // Validate Java version compatibility
@@ -97,7 +272,7 @@ class LaunchEngine(
                 emit(LaunchEvent.StateChanged(ProcessState.Failed(
                     LaunchError.IncompatibleJava(required = requiredJavaMajor, found = javaRuntime.majorVersion)
                 )))
-                return@flow
+                return@channelFlow
             }
 
             // Warning if 32-bit Java is detected
@@ -105,10 +280,30 @@ class LaunchEngine(
                 emit(LaunchEvent.LogReceived("[WARNING] Detected 32-Bit Java runtime. Maximum usable memory is ~1.5 GB. 64-Bit Java is strongly recommended for optimal FPS and stability.", isError = true))
             }
 
-            emit(LaunchEvent.StateChanged(ProcessState.Preparing("Resolving version metadata...")))
+            updateProgress(
+                stage = "RESOLVING JAVA RUNTIME",
+                status = "Java ${javaRuntime.majorVersion} (${javaRuntime.vendor}) verified",
+                rawProgress = 0.05f
+            )
+
+            updateProgress(
+                stage = "RESOLVING VERSION METADATA",
+                status = "Resolving version metadata...",
+                rawProgress = 0.08f
+            )
             val versionInfo = resolveVersionInfo(instance)
 
-            emit(LaunchEvent.StateChanged(ProcessState.Preparing("Resolving required dependencies...")))
+            updateProgress(
+                stage = "RESOLVING VERSION METADATA",
+                status = "Minecraft ${instance.minecraftVersion} metadata resolved",
+                rawProgress = 0.15f
+            )
+
+            updateProgress(
+                stage = "RESOLVING DEPENDENCIES",
+                status = "Resolving required dependencies...",
+                rawProgress = 0.16f
+            )
             val clientDownloadTask = resolveClientJarTask(versionInfo, instance.minecraftVersion)
             val libraryResolved = libraryResolver.resolveLibraries(versionInfo)
             val libraryTasks = libraryResolved.mapNotNull { it.downloadTask }
@@ -121,32 +316,127 @@ class LaunchEngine(
             allDownloadTasks.addAll(libraryTasks)
             allDownloadTasks.addAll(assetTasks)
 
-            // Fast incremental verification of cached files
-            val missingTasks = allDownloadTasks.filter { task: DownloadTask ->
+            // Fast incremental verification of cached files with continuous real-time progress
+            val totalTasksCount = allDownloadTasks.size
+            val missingTasks = mutableListOf<DownloadTask>()
+
+            var lastProgressEmitTime = 0L
+            allDownloadTasks.forEachIndexed { index, task ->
+                currentCoroutineContext().ensureActive()
                 val f = File(task.destinationPath)
-                !IncrementalLaunchCache.isFileValid(f, task.expectedSize)
+                val isValid = IncrementalLaunchCache.isFileValid(f, task.expectedSize)
+                if (!isValid) {
+                    missingTasks.add(task)
+                }
+                val now = System.currentTimeMillis()
+                val isLast = (index == totalTasksCount - 1)
+                if (totalTasksCount > 0 && (isLast || now - lastProgressEmitTime >= 40L)) {
+                    lastProgressEmitTime = now
+                    val fraction = (index + 1).toFloat() / totalTasksCount.toFloat()
+                    val p = 0.16f + (fraction * 0.14f) // 16% to 30%
+                    updateProgress(
+                        stage = "VERIFYING DEPENDENCIES",
+                        status = "Checking ${task.description.ifBlank { f.name }} (${index + 1}/$totalTasksCount)",
+                        rawProgress = p,
+                        completedWork = (index + 1).toLong(),
+                        totalWork = totalTasksCount.toLong()
+                    )
+                }
             }
 
             if (missingTasks.isNotEmpty()) {
-                emit(LaunchEvent.StateChanged(ProcessState.Preparing("Downloading files (0/${missingTasks.size})...", 0f)))
-                val downloadResult = downloadManager.downloadAll(missingTasks) { _: DownloadProgress -> }
+                val totalMissingBytes = missingTasks.sumOf { it.expectedSize }
+                updateProgress(
+                    stage = "DOWNLOADING REQUIRED FILES",
+                    status = "Downloading 0/${missingTasks.size} files...",
+                    rawProgress = 0.30f,
+                    completedWork = 0L,
+                    totalWork = totalMissingBytes
+                )
+
+                val downloadResult = downloadManager.downloadAll(missingTasks) { dlProgress: DownloadProgress ->
+                    val byteFraction = if (dlProgress.totalBytes > 0) {
+                        dlProgress.bytesDownloaded.toDouble() / dlProgress.totalBytes.toDouble()
+                    } else {
+                        dlProgress.currentTaskIndex.toDouble() / dlProgress.totalTasks.coerceAtLeast(1).toDouble()
+                    }
+                    val overallProgress = (0.30 + (byteFraction.coerceIn(0.0, 1.0) * 0.45)).toFloat() // 30% to 75%
+                    val mbDownloaded = dlProgress.bytesDownloaded / (1024 * 1024)
+                    val mbTotal = dlProgress.totalBytes / (1024 * 1024)
+                    val speedText = if (mbTotal > 0) "$mbDownloaded MB / $mbTotal MB" else "${dlProgress.bytesDownloaded / 1024} KB"
+
+                    updateProgress(
+                        stage = "DOWNLOADING REQUIRED FILES",
+                        status = "${dlProgress.currentItemName} ($speedText • ${dlProgress.currentTaskIndex}/${dlProgress.totalTasks})",
+                        rawProgress = overallProgress,
+                        completedWork = dlProgress.bytesDownloaded,
+                        totalWork = dlProgress.totalBytes
+                    )
+                }
 
                 if (downloadResult is DownloadResult.Failure) {
                     emit(LaunchEvent.StateChanged(ProcessState.Failed(LaunchError.DownloadFailed(downloadResult.message))))
-                    return@flow
+                    return@channelFlow
                 }
 
                 // Mark successfully downloaded files in incremental cache
                 missingTasks.forEach { task: DownloadTask ->
                     IncrementalLaunchCache.markValid(File(task.destinationPath))
                 }
+
+                updateProgress(
+                    stage = "DOWNLOADING REQUIRED FILES",
+                    status = "All ${missingTasks.size} files downloaded successfully",
+                    rawProgress = 0.75f,
+                    completedWork = totalMissingBytes,
+                    totalWork = totalMissingBytes
+                )
+            } else {
+                updateProgress(
+                    stage = "VERIFYING DEPENDENCIES",
+                    status = "All $totalTasksCount dependencies verified from cache",
+                    rawProgress = 0.75f,
+                    completedWork = totalTasksCount.toLong(),
+                    totalWork = totalTasksCount.toLong()
+                )
             }
 
-            // Extract natives
-            emit(LaunchEvent.StateChanged(ProcessState.Preparing("Extracting native libraries...")))
+            val dependenciesReadyTime = System.currentTimeMillis()
+            println("[PerformanceTiming] DEPENDENCIES_READY: $dependenciesReadyTime (+${dependenciesReadyTime - launchPreparationStartTime}ms from prep start)")
+            emit(LaunchEvent.LogReceived("[PerformanceTiming] DEPENDENCIES_READY: $dependenciesReadyTime (+${dependenciesReadyTime - launchPreparationStartTime}ms from prep start)", isError = false))
+
+            // Extract natives with fine-grained jar-by-jar progress
+            updateProgress(
+                stage = "EXTRACTING NATIVE LIBRARIES",
+                status = "Extracting native libraries...",
+                rawProgress = 0.75f
+            )
             val nativeJars = libraryResolved.filter { it.isNative }.map { it.localPath }
             val nativesDir = pathProvider.getInstanceNativesDirectory(instance.id)
-            NativeExtractor.extractNatives(nativeJars, nativesDir, fileSystem)
+            val totalNatives = nativeJars.size
+            NativeExtractor.extractNatives(nativeJars, nativesDir, fileSystem) { extractedCount, totalCount, jarName ->
+                val fraction = extractedCount.toFloat() / totalCount.coerceAtLeast(1).toFloat()
+                val progress = 0.75f + (fraction * 0.07f) // 75% to 82%
+                updateProgress(
+                    stage = "EXTRACTING NATIVE LIBRARIES",
+                    status = "Extracting $jarName ($extractedCount/$totalCount)",
+                    rawProgress = progress,
+                    completedWork = extractedCount.toLong(),
+                    totalWork = totalCount.toLong()
+                )
+            }
+
+            updateProgress(
+                stage = "EXTRACTING NATIVE LIBRARIES",
+                status = "Native libraries extracted ($totalNatives/$totalNatives)",
+                rawProgress = 0.82f,
+                completedWork = totalNatives.toLong(),
+                totalWork = totalNatives.toLong()
+            )
+
+            val filesReadyTime = System.currentTimeMillis()
+            println("[PerformanceTiming] FILES_READY: $filesReadyTime (+${filesReadyTime - dependenciesReadyTime}ms)")
+            emit(LaunchEvent.LogReceived("[PerformanceTiming] FILES_READY: $filesReadyTime (+${filesReadyTime - dependenciesReadyTime}ms)", isError = false))
 
             // Build classpath
             val classpath = libraryResolved.filter { !it.isNative }.map { it.localPath }
@@ -158,6 +448,12 @@ class LaunchEngine(
             val assetsDir = pathProvider.assetsDirectory
             val workingDir = gameDir.toFile()
             val hwProfile = io.ezz.launcher.core.runtime.detector.HardwareDetector.detectHardware()
+
+            updateProgress(
+                stage = "CONFIGURING SETTINGS",
+                status = "Applying performance profile and video settings...",
+                rawProgress = 0.83f
+            )
 
             // Apply Video / Performance Profile to options.txt if configured
             MinecraftOptionsManager.applyPerformanceProfile(
@@ -234,7 +530,19 @@ class LaunchEngine(
             val modsDirectory = gameDir.resolve("mods").toFile()
             if (modsDirectory.exists() && modsDirectory.isDirectory) {
                 val installedModJars = modsDirectory.listFiles { _, name -> name.endsWith(".jar") } ?: emptyArray()
-                for (modJar in installedModJars) {
+                val totalMods = installedModJars.size
+                for ((modIdx, modJar) in installedModJars.withIndex()) {
+                    currentCoroutineContext().ensureActive()
+                    val fraction = (modIdx + 1).toFloat() / totalMods.coerceAtLeast(1).toFloat()
+                    val p = 0.88f + (fraction * 0.05f) // 88% to 93%
+                    updateProgress(
+                        stage = "VALIDATING MODS",
+                        status = "Validating ${modJar.name} (${modIdx + 1}/$totalMods)",
+                        rawProgress = p,
+                        completedWork = (modIdx + 1).toLong(),
+                        totalWork = totalMods.toLong()
+                    )
+
                     val compatCheck = io.ezz.launcher.core.minecraft.mod.ModBytecodeValidator.validateJarFile(
                         jarFile = modJar,
                         javaMajorVersion = effectiveJavaRuntime.majorVersion
@@ -250,7 +558,7 @@ class LaunchEngine(
                         val errMsg = compatCheck.errorMessage
                         emit(LaunchEvent.LogReceived(errMsg, isError = true))
                         emit(LaunchEvent.StateChanged(ProcessState.Failed(LaunchError.ExecutionFailed(errMsg))))
-                        return@flow
+                        return@channelFlow
                     }
                 }
 
@@ -280,21 +588,31 @@ class LaunchEngine(
                             val conflictMsg = "[MOD COMPATIBILITY ERROR] ${firstConflict.reason}"
                             emit(LaunchEvent.LogReceived(conflictMsg, isError = true))
                             emit(LaunchEvent.StateChanged(ProcessState.Failed(LaunchError.ExecutionFailed(conflictMsg))))
-                            return@flow
+                            return@channelFlow
                         } else if (launchReport.missingDependencies.isNotEmpty()) {
                             val firstMissing = launchReport.missingDependencies.first()
                             val missingMsg = "[MISSING REQUIRED DEPENDENCY ERROR] $firstMissing"
                             emit(LaunchEvent.LogReceived(missingMsg, isError = true))
                             emit(LaunchEvent.StateChanged(ProcessState.Failed(LaunchError.ExecutionFailed(missingMsg))))
-                            return@flow
+                            return@channelFlow
                         }
                     }
                 } catch (e: Throwable) {
                     println("[LaunchEngine] Mod launch validation notice: ${e.message}")
                 }
+            } else {
+                updateProgress(
+                    stage = "VALIDATING MODS",
+                    status = "No mods to validate",
+                    rawProgress = 0.93f
+                )
             }
 
-            emit(LaunchEvent.StateChanged(ProcessState.Preparing("Building optimized launch command...")))
+            updateProgress(
+                stage = "BUILDING LAUNCH COMMAND",
+                status = "Building optimized launch command...",
+                rawProgress = 0.96f
+            )
             val launchCommand = LaunchArgumentBuilder.buildLaunchCommand(
                 instance = instance,
                 account = validAccount,
@@ -311,7 +629,7 @@ class LaunchEngine(
                 globalJvmArgs = currentSettings.globalJvmArgs
             )
 
-            // Enforce Windows DirectX GPU Preference for high-performance dedicated graphics
+            // Enforce Windows DirectX GPU Preference for high-performance dedicated graphics (cached in memory)
             GpuDetector.ensureWindowsGpuPreference(effectiveJavaRuntime.path, instance.gpuPreference)
 
             val preparationDurationMs = System.currentTimeMillis() - launchPreparationStartTime
@@ -325,14 +643,11 @@ class LaunchEngine(
                 )
             )
 
-            // Generate Pre-Launch Live Diagnostic Report
-            val diagnosticReport = io.ezz.launcher.core.runtime.diagnostics.PerformanceDiagnosticService.generateDiagnosticReport(
-                instance = instance,
-                gameDir = workingDir,
-                javaRuntime = effectiveJavaRuntime
-            )
+            val commandReadyTime = System.currentTimeMillis()
+            println("[PerformanceTiming] COMMAND_READY: $commandReadyTime (+${commandReadyTime - filesReadyTime}ms)")
+            emit(LaunchEvent.LogReceived("[PerformanceTiming] COMMAND_READY: $commandReadyTime (+${commandReadyTime - filesReadyTime}ms)", isError = false))
 
-            emit(LaunchEvent.LogReceived("==================== EZZ LAUNCHER DIAGNOSTIC & PROFILE ====================", isError = false))
+            emit(LaunchEvent.LogReceived("==================== EZZ LAUNCHER PROFILE ====================", isError = false))
             emit(LaunchEvent.LogReceived("Instance Name     : ${instance.name} (MC ${instance.minecraftVersion}, ${instance.loaderType.name})", isError = false))
             emit(LaunchEvent.LogReceived("Account           : ${validAccount.username} (${validAccount.type})", isError = false))
             emit(LaunchEvent.LogReceived("Player Skin       : $activeVaultSkinName ($activeVaultSkinModel)", isError = false))
@@ -358,13 +673,46 @@ class LaunchEngine(
                 }
             }
             emit(LaunchEvent.LogReceived("Launch Command    : ${sanitizedCommand.joinToString(" ")}", isError = false))
-            emit(LaunchEvent.LogReceived("===========================================================================", isError = false))
-            emit(LaunchEvent.LogReceived(diagnosticReport.formattedReport, isError = false))
+            emit(LaunchEvent.LogReceived("===============================================================", isError = false))
 
-            // Preparing to start process
-            emit(LaunchEvent.StateChanged(ProcessState.Preparing("Starting Minecraft Java Process...", 0.99f)))
+            // Everything required for process spawn is completely ready.
+            realProgressReadyTime = System.currentTimeMillis()
+            println("[PerformanceTiming] REAL_PROGRESS_READY: $realProgressReadyTime (+${realProgressReadyTime - playClickTime}ms from click)")
+            emit(LaunchEvent.LogReceived("[PerformanceTiming] REAL_PROGRESS_READY: $realProgressReadyTime (+${realProgressReadyTime - playClickTime}ms from click)", isError = false))
 
-            val launchStartTime = System.currentTimeMillis()
+            updateProgress(
+                stage = "STARTING MINECRAFT",
+                status = "Starting Minecraft...",
+                rawProgress = 1.0f
+            )
+
+            // Await display progress smoothly finishing (e.g. 98 -> 99 -> 100)
+            if (displayProgress < 1.0f && !skipDisplayInterpolation) {
+                isDisplayComplete.await()
+            }
+            displayProgress = 1.0f
+            displayInterpolatorJob?.cancel()
+
+            // Emit authoritative final 100% progress state
+            emit(LaunchEvent.ProgressUpdate(
+                operationId = operationId,
+                stage = "STARTING MINECRAFT",
+                status = "Starting Minecraft...",
+                progress = 1.0f,
+                displayProgress = 1.0f,
+                completedWork = 1L,
+                totalWork = 1L
+            ))
+            emit(LaunchEvent.StateChanged(ProcessState.Preparing("Starting Minecraft...", 1.0f)))
+
+            displayProgress100Time = System.currentTimeMillis()
+            println("[PerformanceTiming] DISPLAY_PROGRESS_100: $displayProgress100Time (+${displayProgress100Time - playClickTime}ms from click)")
+            emit(LaunchEvent.LogReceived("[PerformanceTiming] DISPLAY_PROGRESS_100: $displayProgress100Time (+${displayProgress100Time - playClickTime}ms from click)", isError = false))
+
+            processSpawnStartTime = System.currentTimeMillis()
+            val d100ToSpawnGap = processSpawnStartTime - displayProgress100Time
+            println("[PerformanceTiming] PROCESS_SPAWN_START: $processSpawnStartTime (Gap from 100%: ${d100ToSpawnGap}ms)")
+            emit(LaunchEvent.LogReceived("[PerformanceTiming] PROCESS_SPAWN_START: $processSpawnStartTime (Gap from 100%: ${d100ToSpawnGap}ms)", isError = false))
 
             processLauncher.launch(
                 command = launchCommand,
@@ -375,8 +723,28 @@ class LaunchEngine(
                 when (event) {
                     is ProcessEvent.Started -> {
                         runningPid = event.pid
-                        val processStartedAt = System.currentTimeMillis()
-                        emit(LaunchEvent.StateChanged(ProcessState.Running(processId = event.pid, startedAt = processStartedAt)))
+                        processSpawnedTime = System.currentTimeMillis()
+                        val spawnDuration = processSpawnedTime - processSpawnStartTime
+                        val totalPlayToSpawn = processSpawnedTime - playClickTime
+
+                        println("[PerformanceTiming] PROCESS_SPAWNED (PID: ${event.pid}): $processSpawnedTime")
+                        println("[PerformanceTiming] DISPLAY_PROGRESS_100 -> PROCESS_SPAWN_START: ${d100ToSpawnGap}ms")
+                        println("[PerformanceTiming] PROCESS_SPAWN_START -> PROCESS_SPAWNED: ${spawnDuration}ms")
+                        println("[PerformanceTiming] TOTAL PLAY_CLICK -> PROCESS_SPAWNED: ${totalPlayToSpawn}ms")
+
+                        emit(LaunchEvent.LogReceived("[PerformanceTiming] PROCESS_SPAWNED (PID: ${event.pid}): $processSpawnedTime", isError = false))
+                        emit(LaunchEvent.LogReceived("[PerformanceTiming] DISPLAY_PROGRESS_100 -> PROCESS_SPAWN_START: ${d100ToSpawnGap}ms", isError = false))
+                        emit(LaunchEvent.LogReceived("[PerformanceTiming] PROCESS_SPAWN_START -> PROCESS_SPAWNED: ${spawnDuration}ms", isError = false))
+                        emit(LaunchEvent.LogReceived("[PerformanceTiming] TOTAL PLAY_CLICK -> PROCESS_SPAWNED: ${totalPlayToSpawn}ms", isError = false))
+
+                        updateProgress(
+                            stage = "MINECRAFT STARTED",
+                            status = "Minecraft running successfully (PID: ${event.pid})",
+                            rawProgress = 1.0f,
+                            completedWork = 1L,
+                            totalWork = 1L
+                        )
+                        emit(LaunchEvent.StateChanged(ProcessState.Running(processId = event.pid, startedAt = processSpawnedTime)))
                         emit(LaunchEvent.LogReceived("=== Process Started (PID: ${event.pid}) ===", isError = false))
 
                         val resolvedAvatarUrl = when (validAccount.type) {
@@ -396,10 +764,26 @@ class LaunchEngine(
                             instanceName = instance.name,
                             playerUuid = validAccount.uuid,
                             avatarUrl = resolvedAvatarUrl,
-                            startedAtMs = processStartedAt,
+                            startedAtMs = processSpawnedTime,
                             processId = event.pid,
                             enabled = currentSettings.enableDiscordRpc
                         )
+
+                        // Asynchronously generate telemetry and diagnostic report in background
+                        // Passes event.pid so GpuDetector checks the actual running process!
+                        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                            try {
+                                val diagnosticReport = io.ezz.launcher.core.runtime.diagnostics.PerformanceDiagnosticService.generateDiagnosticReport(
+                                    instance = instance,
+                                    gameDir = workingDir,
+                                    javaRuntime = effectiveJavaRuntime,
+                                    runningPid = event.pid
+                                )
+                                emit(LaunchEvent.LogReceived(diagnosticReport.formattedReport, isError = false))
+                            } catch (e: Throwable) {
+                                println("[LaunchEngine] Notice generating background diagnostics: ${e.message}")
+                            }
+                        }
 
                         val activeNvidiaGpuInfo = GpuDetector.getActiveNvidiaGpuProcessInfo(event.pid)
                         if (activeNvidiaGpuInfo != null) {
@@ -413,7 +797,7 @@ class LaunchEngine(
                     }
                     is ProcessEvent.Terminated -> {
                         discordRpcService?.onMinecraftExited(processId = runningPid)
-                        val playTimeSeconds = (System.currentTimeMillis() - launchStartTime) / 1000L
+                        val playTimeSeconds = (System.currentTimeMillis() - processSpawnStartTime) / 1000L
 
                         if (event.exitCode == 0) {
                             // Successful session: save Known Good Configuration snapshot
@@ -466,10 +850,18 @@ class LaunchEngine(
             }
 
         } catch (e: Exception) {
+            displayInterpolatorJob?.cancel()
             discordRpcService?.onMinecraftExited(processId = runningPid)
-            emit(LaunchEvent.StateChanged(ProcessState.Failed(LaunchError.ExecutionFailed(e.message ?: "Launch failed", e))))
+            if (e is kotlinx.coroutines.CancellationException) {
+                emit(LaunchEvent.LogReceived("=== Launch cancelled by user ===", isError = false))
+                throw e
+            } else {
+                emit(LaunchEvent.StateChanged(ProcessState.Failed(LaunchError.ExecutionFailed(e.message ?: "Launch failed", e))))
+            }
+        } finally {
+            displayInterpolatorJob?.cancel()
         }
-    }
+    }.flowOn(Dispatchers.IO)
 
     private suspend fun resolveVersionInfo(instance: Instance): VersionInfo {
         val baseVersion = versionManifestService.getVersionInfo(instance.minecraftVersion)

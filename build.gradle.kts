@@ -105,6 +105,30 @@ tasks.register("buildAllVersions") {
             """.trimIndent()
             File(buildDir, "fabric.mod.json").writeText(fabricJson)
 
+            val clientMixins = when (spec.version) {
+                "1.21", "1.26" -> listOf(
+                    "AbstractClientPlayerEntityModernMixin",
+                    "PlayerListEntryModernMixin",
+                    "DefaultSkinHelperModernMixin",
+                    "PlayerSkinProviderModernMixin",
+                    "ClientPlayNetworkHandlerMixin"
+                )
+                "1.16", "1.17", "1.18", "1.19" -> listOf(
+                    "AbstractClientPlayerEntityLegacyMixin",
+                    "PlayerListEntryLegacyMixin",
+                    "DefaultSkinHelperLegacyMixin",
+                    "ClientPlayNetworkHandlerMixin"
+                )
+                else -> listOf(
+                    "AbstractClientPlayerEntityTransitionMixin",
+                    "PlayerListEntryMixin",
+                    "DefaultSkinHelperMixin",
+                    "PlayerSkinProviderModernMixin",
+                    "ClientPlayNetworkHandlerMixin"
+                )
+            }
+            val mixinEntriesJson = clientMixins.joinToString(",\n                    ") { "\"$it\"" }
+
             val mixinJson = """
                 {
                   "required": true,
@@ -112,10 +136,7 @@ tasks.register("buildAllVersions") {
                   "package": "io.ezz.skinmod.mixin",
                   "compatibilityLevel": "JAVA_${spec.javaRelease}",
                   "client": [
-                    "PlayerListEntryMixin",
-                    "DefaultSkinHelperMixin",
-                    "PlayerSkinProviderMixin",
-                    "ClientPlayNetworkHandlerMixin"
+                    $mixinEntriesJson
                   ],
                   "injectors": { "defaultRequire": 0 }
                 }

@@ -101,9 +101,13 @@ class LocalModScanner(
 
     companion object {
         private val jsonParser = Json { ignoreUnknownKeys = true; isLenient = true }
+        private val singleModCache = java.util.concurrent.ConcurrentHashMap<String, LocalMod>()
 
         fun scanSingleMod(file: File, instanceId: String = ""): LocalMod {
-            return parseModFile(instanceId, file).toLocalMod()
+            val key = "${file.absolutePath}:${file.lastModified()}:${file.length()}"
+            return singleModCache.getOrPut(key) {
+                parseModFile(instanceId, file).toLocalMod()
+            }
         }
 
         fun parseModFile(instanceId: String, file: File): ModMetadata {

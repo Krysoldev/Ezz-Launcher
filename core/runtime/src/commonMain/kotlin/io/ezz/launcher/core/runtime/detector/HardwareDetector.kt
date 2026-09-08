@@ -23,7 +23,11 @@ data class DetailedHardwareProfile(
 
 object HardwareDetector {
 
+    private var cachedProfile: DetailedHardwareProfile? = null
+
     fun detectHardware(): DetailedHardwareProfile {
+        cachedProfile?.let { return it }
+
         val cpuModel = detectCpuModel()
         val cpuCores = Runtime.getRuntime().availableProcessors()
         val memInfo = JavaRuntimeDetector.getSystemMemoryInfo()
@@ -57,7 +61,7 @@ object HardwareDetector {
             GpuPreference.AUTO
         }
 
-        return DetailedHardwareProfile(
+        val profile = DetailedHardwareProfile(
             cpuModel = cpuModel,
             cpuCores = cpuCores,
             totalRamMb = memInfo.totalRamMb,
@@ -72,6 +76,8 @@ object HardwareDetector {
             recommendedProfile = recommendedProfile,
             recommendedGpuPreference = recommendedGpuPref
         )
+        cachedProfile = profile
+        return profile
     }
 
     private fun detectCpuModel(): String {

@@ -4,6 +4,7 @@ import io.ezz.skinmod.common.EzzSkinConfig;
 import io.ezz.skinmod.common.EzzSkinModCommon;
 import io.ezz.skinmod.common.EzzSkinTextureProvider;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.loader.api.FabricLoader;
 import java.io.File;
 
 public class EzzSkinMod implements ClientModInitializer {
@@ -11,7 +12,13 @@ public class EzzSkinMod implements ClientModInitializer {
     public void onInitializeClient() {
         System.out.println("==================================================");
         System.out.println("[EZZ-SKIN] CHECKPOINT 1 — Mod initialization");
-        EzzSkinModCommon.init(new File("."));
+        File gameDir;
+        try {
+            gameDir = FabricLoader.getInstance().getGameDir().toFile();
+        } catch (Throwable t) {
+            gameDir = new File(".");
+        }
+        EzzSkinModCommon.init(gameDir);
 
         EzzSkinConfig config = EzzSkinModCommon.getConfig();
         System.out.println("[EZZ-SKIN] CHECKPOINT 2 — Config loaded");

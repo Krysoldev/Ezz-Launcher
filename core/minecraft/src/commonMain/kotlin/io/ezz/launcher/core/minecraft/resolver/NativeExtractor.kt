@@ -9,14 +9,20 @@ object NativeExtractor {
     fun extractNatives(
         nativeJars: List<Path>,
         instanceNativesDir: Path,
-        fileSystem: FileSystem = FileSystem.SYSTEM
+        fileSystem: FileSystem = FileSystem.SYSTEM,
+        onProgress: (extractedCount: Int, totalCount: Int, jarName: String) -> Unit = { _, _, _ -> }
     ) {
         if (!fileSystem.exists(instanceNativesDir)) {
             fileSystem.createDirectories(instanceNativesDir)
         }
 
+        val totalJars = nativeJars.size
+        var extractedSoFar = 0
+
         for (nativeJar in nativeJars) {
             val jarFile = nativeJar.toFile()
+            extractedSoFar++
+            onProgress(extractedSoFar, totalJars, jarFile.name)
             if (!jarFile.exists()) continue
 
             try {
@@ -32,6 +38,9 @@ object NativeExtractor {
                         if (name.endsWith(".dll") || name.endsWith(".so") || name.endsWith(".dylib") || name.endsWith(".jnilib")) {
                             val fileName = name.substringAfterLast('/')
                             val destFile = instanceNativesDir.resolve(fileName).toFile()
+                            if (destFile.exists() && destFile.length() == entry.size && entry.size > 0L) {
+                                continue // Already extracted with matching size (fast path)
+                            }
                             destFile.parentFile?.mkdirs()
                             zip.getInputStream(entry).use { input ->
                                 destFile.outputStream().use { output ->

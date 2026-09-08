@@ -1,5 +1,7 @@
 package io.ezz.launcher.core.model.runtime
 
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -27,6 +29,66 @@ fun formatRuntime(seconds: Long): String {
     val minutes = (totalSecs % 3600) / 60
     val secs = totalSecs % 60
     return "${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}"
+}
+
+/**
+ * Authoritative single source of truth for Minecraft launch progress.
+ */
+@Serializable
+data class LaunchProgressState(
+    val operationId: String,
+    val instanceId: String,
+    val stage: String,
+    val status: String,
+    val progress: Float = 0f,
+    val displayProgress: Float = progress,
+    val percentage: Int = 0,
+    val completedWork: Long = 0L,
+    val totalWork: Long = 0L,
+    val isIndeterminate: Boolean = false,
+    val isCancellable: Boolean = true,
+    val error: String? = null,
+    val startedAt: Long = 0L
+)
+
+/**
+ * Computes display percentage from display progress (0.0f..1.0f).
+ * Real operation safety: 100% is strictly reserved for when the launch
+ * operation has finished (isFinished is true) or display progress has reached 1.0f.
+ */
+fun computeDisplayPercentage(displayProgress: Float, isFinished: Boolean): Int {
+    val raw = (displayProgress.coerceIn(0f, 1f) * 100f).roundToInt()
+    return if (!isFinished && displayProgress < 0.999f) {
+        raw.coerceIn(0, 99)
+    } else {
+        raw.coerceIn(0, 100)
+    }
+}
+
+/**
+ * Dynamic interpolation duration in milliseconds based on the size of the progress jump.
+ * Smooth, deliberate, premium progression:
+ * - Small jumps (1-2%) catch up smoothly (~120ms)
+ * - Medium jumps (3-5%) take ~240ms
+ * - Moderate jumps (6-15%) take ~550ms
+ * - Noticeable jumps (16-35%, e.g. 16% -> 32%) take ~1000ms (~1 second)
+ * - Large jumps (35-65%) take ~1600ms
+ * - Massive jumps (65-100%, e.g. 32% -> 100%) take ~2100ms (~2.1 seconds)
+ *
+ * This allows Chibi Steve to visibly and naturally walk across the progress bar,
+ * smoothly visiting intermediate integers (16..32, 32..100) without instant skipping.
+ */
+fun computeDisplayInterpolationDuration(delta: Float, @Suppress("UNUSED_PARAMETER") isTargetFinal: Boolean = false): Int {
+    val d = abs(delta)
+    return when {
+        d <= 0.001f -> 0
+        d <= 0.02f -> 120
+        d <= 0.05f -> 240
+        d <= 0.15f -> 550
+        d <= 0.35f -> 1000
+        d <= 0.65f -> 1600
+        else -> 2100
+    }
 }
 
 sealed interface ProcessState {

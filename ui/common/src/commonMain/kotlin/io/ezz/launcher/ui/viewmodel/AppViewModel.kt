@@ -345,6 +345,11 @@ class AppViewModel(
     // Download & Launch Progress HUD
     val activeDownloadState = MutableStateFlow<ActiveDownloadState?>(null)
 
+    // Authoritative Single Source of Truth for Minecraft Launch Progress
+    val launchProgressState = MutableStateFlow<io.ezz.launcher.core.model.runtime.LaunchProgressState?>(null)
+    private var activeLaunchJob: kotlinx.coroutines.Job? = null
+    private var activeLaunchOperationId: String? = null
+
     // Diagnostic Error Dialog State
     val launchErrorDialogData = MutableStateFlow<LaunchErrorData?>(null)
 
@@ -565,10 +570,11 @@ class AppViewModel(
         scope.launch {
             try {
                 val rpcEnabled = settingsRepository.settings.value.enableDiscordRpc
+                println("[DiscordRPC] settings loaded: enableDiscordRpc = $rpcEnabled")
                 val currentAccount = accountRepository.selectedAccount.value
                 discordRpcService?.initialize(account = currentAccount, enabled = rpcEnabled)
             } catch (e: Throwable) {
-                println("[DiscordRPC] RPC errors: Startup initialization failed: ${e.message}")
+                println("[DiscordRPC] connection failure: Startup initialization failed: ${e.message}")
             }
         }
 
@@ -1190,6 +1196,7 @@ class AppViewModel(
     }
 
     fun launchInstance(instance: Instance? = _selectedInstance.value) {
+        val playClickTime = System.currentTimeMillis()
         val targetInstance = instance ?: _selectedInstance.value
         if (targetInstance == null) {
             _logs.value = _logs.value + ConsoleLogEntry(message = "Error: No instance selected to launch.", isError = true)
@@ -1212,37 +1219,139 @@ class AppViewModel(
 
         val rawAccount = account
 
-        scope.launch {
+        activeLaunchJob?.cancel()
+        val operationId = java.util.UUID.randomUUID().toString()
+        activeLaunchOperationId = operationId
+
+        val initialProgressState = io.ezz.launcher.core.model.runtime.LaunchProgressState(
+            operationId = operationId,
+            instanceId = targetInstance.id,
+            stage = "PREPARING LAUNCH",
+            status = "Preparing launch environment...",
+            progress = 0.01f,
+            percentage = 1,
+            startedAt = System.currentTimeMillis()
+        )
+        launchProgressState.value = initialProgressState
+        activeDownloadState.value = ActiveDownloadState(
+            stage = "PREPARING LAUNCH",
+            currentFile = "Preparing launch environment...",
+            progress = 0.01f
+        )
+
+        activeLaunchJob = scope.launch {
             val launchAccount = try {
-                authManager.getValidSession(rawAccount)
+                withContext(Dispatchers.IO) {
+                    authManager.getValidSession(rawAccount)
+                }
             } catch (e: Exception) {
                 _logs.value = listOf(ConsoleLogEntry(message = "[Auth Notice] ${e.message}", isError = false))
                 rawAccount
             }
 
             _logs.value = listOf(ConsoleLogEntry(message = "=== Launching ${targetInstance.name} (${targetInstance.minecraftVersion}) as ${launchAccount.username} ==="))
-            activeDownloadState.value = ActiveDownloadState(
-                stage = "PREPARING",
-                currentFile = "Checking dependencies...",
-                progress = 0.05f
-            )
 
             try {
-                launchEngine.launch(targetInstance, launchAccount).collect { event ->
+                launchEngine.launch(targetInstance, launchAccount, operationId, playClickTime).collect { event ->
+                    if (activeLaunchOperationId != operationId) return@collect
+
                     when (event) {
+                        is LaunchEvent.ProgressUpdate -> {
+                            if (event.operationId != activeLaunchOperationId) return@collect
+                            val current = launchProgressState.value
+                            val newProgress = event.progress.coerceIn(0f, 1f)
+                            val newDisplayProgress = event.displayProgress.coerceIn(0f, 1f)
+                            // Monotonic progress protection: progress cannot move backward within the same launch attempt
+                            val safeProgress = if (current != null && current.operationId == event.operationId) {
+                                maxOf(current.progress, newProgress)
+                            } else {
+                                newProgress
+                            }
+                            val safeDisplayProgress = if (current != null && current.operationId == event.operationId) {
+                                maxOf(current.displayProgress, newDisplayProgress)
+                            } else {
+                                newDisplayProgress
+                            }
+                            val percentage = io.ezz.launcher.core.model.runtime.computeDisplayPercentage(
+                                displayProgress = safeDisplayProgress,
+                                isFinished = safeProgress >= 1.0f && safeDisplayProgress >= 1.0f
+                            )
+
+                            // High-frequency coalescing: only skip if percentage, displayProgress, status, stage, and isIndeterminate are identical
+                            if (current != null &&
+                                current.percentage == percentage &&
+                                kotlin.math.abs(current.displayProgress - safeDisplayProgress) < 0.001f &&
+                                current.status == event.status &&
+                                current.stage == event.stage &&
+                                current.isIndeterminate == event.isIndeterminate
+                            ) {
+                                return@collect
+                            }
+
+                            val updatedState = io.ezz.launcher.core.model.runtime.LaunchProgressState(
+                                operationId = event.operationId,
+                                instanceId = targetInstance.id,
+                                stage = event.stage,
+                                status = event.status,
+                                progress = safeProgress,
+                                displayProgress = safeDisplayProgress,
+                                percentage = percentage,
+                                completedWork = event.completedWork,
+                                totalWork = event.totalWork,
+                                isIndeterminate = event.isIndeterminate,
+                                startedAt = current?.startedAt ?: System.currentTimeMillis()
+                            )
+                            launchProgressState.value = updatedState
+
+                            activeDownloadState.value = ActiveDownloadState(
+                                stage = event.stage,
+                                currentFile = event.status,
+                                progress = safeProgress,
+                                downloadedBytes = event.completedWork,
+                                totalBytes = event.totalWork,
+                                speedText = if (event.totalWork > 0) "${(event.completedWork / 1024 / 1024)} MB / ${(event.totalWork / 1024 / 1024)} MB" else ""
+                            )
+                        }
+                        is LaunchEvent.DownloadProgressUpdate -> {
+                            // legacy support
+                        }
                         is LaunchEvent.StateChanged -> {
                             val state = event.state
                             _processState.value = state
                             when (state) {
                                 is ProcessState.Preparing -> {
+                                    val current = launchProgressState.value
+                                    val safeProgress = state.progress?.coerceIn(0f, 1f) ?: (current?.progress ?: 0.05f)
+                                    val safeDisplay = state.progress?.coerceIn(0f, 1f) ?: (current?.displayProgress ?: 0.05f)
+                                    val percentage = io.ezz.launcher.core.model.runtime.computeDisplayPercentage(
+                                        displayProgress = safeDisplay,
+                                        isFinished = safeProgress >= 1.0f && safeDisplay >= 1.0f
+                                    )
+                                    launchProgressState.value = (current ?: initialProgressState).copy(
+                                        stage = "PREPARING",
+                                        status = state.stage,
+                                        progress = safeProgress,
+                                        displayProgress = safeDisplay,
+                                        percentage = percentage
+                                    )
                                     activeDownloadState.value = ActiveDownloadState(
-                                        stage = state.stage.uppercase(),
+                                        stage = "PREPARING",
                                         currentFile = state.stage,
-                                        progress = state.progress ?: 0.2f
+                                        progress = safeProgress
                                     )
                                 }
                                 is ProcessState.Running -> {
+                                    val current = launchProgressState.value
+                                    launchProgressState.value = (current ?: initialProgressState).copy(
+                                        stage = "MINECRAFT STARTED",
+                                        status = "Minecraft running (PID: ${state.processId})",
+                                        progress = 1.0f,
+                                        displayProgress = 1.0f,
+                                        percentage = 100,
+                                        isIndeterminate = false
+                                    )
                                     activeDownloadState.value = null
+
                                     val startedAt = if (state.startedAt > 0L) state.startedAt else System.currentTimeMillis()
                                     val session = io.ezz.launcher.core.model.runtime.InstanceRuntimeSession(
                                         instanceId = targetInstance.id,
@@ -1254,21 +1363,61 @@ class AppViewModel(
                                         sessionTracker.registerSession(targetInstance.id, state.processId ?: 0L, startedAt)
                                     }
                                     _logs.value = _logs.value + ConsoleLogEntry(message = "=== Process started (PID: ${state.processId}) ===")
+
+                                    // Asynchronously update Discord RPC without blocking or delaying launch sequence
+                                    val rpcEnabled = settingsRepository.settings.value.enableDiscordRpc
+                                    val currentAccount = accountRepository.selectedAccount.value
+                                    val rpcUsername = currentAccount?.username ?: "Player"
+                                    scope.launch(Dispatchers.IO) {
+                                        discordRpcService?.setMinecraftPresence(
+                                            playerUsername = rpcUsername,
+                                            minecraftVersion = targetInstance.minecraftVersion,
+                                            instanceName = targetInstance.name,
+                                            playerUuid = currentAccount?.uuid,
+                                            startedAtMs = startedAt,
+                                            processId = state.processId ?: 0L,
+                                            enabled = rpcEnabled
+                                        )
+                                    }
+
+                                    // Keep 100% visible for 1.8 seconds for smooth display progress arrival & victory celebration
+                                    scope.launch {
+                                        kotlinx.coroutines.delay(1800)
+                                        if (activeLaunchOperationId == operationId) {
+                                            launchProgressState.value = null
+                                        }
+                                    }
                                 }
                                 is ProcessState.Exited -> {
+                                    launchProgressState.value = null
                                     activeDownloadState.value = null
                                     _runningSessions.value = _runningSessions.value - targetInstance.id
                                     scope.launch(Dispatchers.IO) {
                                         sessionTracker.unregisterSession(targetInstance.id)
                                     }
                                     _logs.value = _logs.value + ConsoleLogEntry(message = "=== Process exited with code ${state.exitCode} ===")
+                                    val rpcEnabled = settingsRepository.settings.value.enableDiscordRpc
+                                    val currentAccount = accountRepository.selectedAccount.value
+                                    discordRpcService?.onMinecraftExited()
+                                    discordRpcService?.setLauncherPresence(currentAccount, enabled = rpcEnabled)
                                 }
                                 is ProcessState.Failed -> {
+                                    val current = launchProgressState.value
+                                    launchProgressState.value = current?.copy(
+                                        stage = "LAUNCH FAILED",
+                                        status = state.error.message,
+                                        error = state.error.message,
+                                        isIndeterminate = false
+                                    )
                                     activeDownloadState.value = null
                                     _runningSessions.value = _runningSessions.value - targetInstance.id
                                     scope.launch(Dispatchers.IO) {
                                         sessionTracker.unregisterSession(targetInstance.id)
                                     }
+                                    val rpcEnabled = settingsRepository.settings.value.enableDiscordRpc
+                                    val currentAccount = accountRepository.selectedAccount.value
+                                    discordRpcService?.onMinecraftExited()
+                                    discordRpcService?.setLauncherPresence(currentAccount, enabled = rpcEnabled)
                                     _logs.value = _logs.value + ConsoleLogEntry(message = "=== Launch Failed: ${state.error.message} ===", isError = true)
                                     launchErrorDialogData.value = LaunchErrorData(
                                         instanceName = targetInstance.name,
@@ -1277,22 +1426,17 @@ class AppViewModel(
                                         errorSummary = state.error.message,
                                         details = (state.error as? io.ezz.launcher.core.model.runtime.LaunchError.ExecutionFailed)?.cause?.stackTraceToString()
                                     )
+                                    scope.launch {
+                                        kotlinx.coroutines.delay(1800)
+                                        if (activeLaunchOperationId == operationId) {
+                                            launchProgressState.value = null
+                                        }
+                                    }
                                 }
                                 else -> {
-                                    activeDownloadState.value = null
+                                    // Idle
                                 }
                             }
-                        }
-                        is LaunchEvent.ProgressUpdate -> {
-                            val dl = event.progress
-                            activeDownloadState.value = ActiveDownloadState(
-                                stage = "DOWNLOADING",
-                                currentFile = dl.currentItemName,
-                                progress = dl.percentage,
-                                downloadedBytes = dl.bytesDownloaded,
-                                totalBytes = dl.totalBytes,
-                                speedText = if (dl.totalBytes > 0) "${(dl.bytesDownloaded / 1024 / 1024)} MB / ${(dl.totalBytes / 1024 / 1024)} MB" else "${(dl.bytesDownloaded / 1024)} KB"
-                            )
                         }
                         is LaunchEvent.LogReceived -> {
                             appendConsoleLog(event.line, isError = event.isError)
@@ -1300,17 +1444,40 @@ class AppViewModel(
                     }
                 }
             } catch (e: Exception) {
-                _processState.value = ProcessState.Failed(io.ezz.launcher.core.model.runtime.LaunchError.ExecutionFailed(e.message ?: "Launch Failed", e))
-                activeDownloadState.value = null
-                launchErrorDialogData.value = LaunchErrorData(
-                    instanceName = targetInstance.name,
-                    minecraftVersion = targetInstance.minecraftVersion,
-                    javaVersion = targetInstance.javaPath ?: "System Default Runtime",
-                    errorSummary = e.message ?: "Unknown launch failure",
-                    details = e.stackTraceToString()
-                )
+                val rpcEnabled = settingsRepository.settings.value.enableDiscordRpc
+                val currentAccount = accountRepository.selectedAccount.value
+                discordRpcService?.onMinecraftExited()
+                discordRpcService?.setLauncherPresence(currentAccount, enabled = rpcEnabled)
+                if (e is kotlinx.coroutines.CancellationException) {
+                    _logs.value = _logs.value + ConsoleLogEntry(message = "=== Launch cancelled by user ===")
+                } else {
+                    _processState.value = ProcessState.Failed(io.ezz.launcher.core.model.runtime.LaunchError.ExecutionFailed(e.message ?: "Launch Failed", e))
+                    launchProgressState.value = null
+                    activeDownloadState.value = null
+                    launchErrorDialogData.value = LaunchErrorData(
+                        instanceName = targetInstance.name,
+                        minecraftVersion = targetInstance.minecraftVersion,
+                        javaVersion = targetInstance.javaPath ?: "System Default Runtime",
+                        errorSummary = e.message ?: "Unknown launch failure",
+                        details = e.stackTraceToString()
+                    )
+                }
             }
         }
+    }
+
+    fun cancelLaunch() {
+        activeLaunchJob?.cancel()
+        activeLaunchJob = null
+        activeLaunchOperationId = null
+        launchProgressState.value = null
+        activeDownloadState.value = null
+        _processState.value = ProcessState.Idle
+        _logs.value = _logs.value + ConsoleLogEntry(message = "=== Launch cancelled by user ===")
+        val rpcEnabled = settingsRepository.settings.value.enableDiscordRpc
+        val currentAccount = accountRepository.selectedAccount.value
+        discordRpcService?.onMinecraftExited()
+        discordRpcService?.setLauncherPresence(currentAccount, enabled = rpcEnabled)
     }
 
     fun createInstance(

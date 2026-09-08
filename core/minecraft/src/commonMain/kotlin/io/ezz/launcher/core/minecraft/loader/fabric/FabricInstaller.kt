@@ -67,13 +67,27 @@ class FabricInstaller(
         val versionDir = pathProvider.versionsDirectory.resolve(versionId)
         val versionFile = versionDir.resolve("$versionId.json")
 
-        val profile = fabricMetaClient.fetchProfileJson(gameVersion, loaderVersion)
+        // 1. Try fetching online Fabric profile
+        try {
+            val profile = fabricMetaClient.fetchProfileJson(gameVersion, loaderVersion)
 
-        fileSystem.createDirectories(versionDir)
-        fileSystem.write(versionFile) {
-            writeUtf8(json.encodeToString(profile))
+            fileSystem.createDirectories(versionDir)
+            fileSystem.write(versionFile) {
+                writeUtf8(json.encodeToString(profile))
+            }
+
+            return@withContext profile
+        } catch (netEx: Exception) {
+            // 2. Fallback to cached profile on disk if available (offline support)
+            if (fileSystem.exists(versionFile)) {
+                try {
+                    val cachedJson = fileSystem.read(versionFile) { readUtf8() }
+                    return@withContext json.decodeFromString<VersionInfo>(cachedJson)
+                } catch (diskEx: Exception) {
+                    println("[FabricInstaller] Notice: Failed to parse cached profile for $versionId: ${diskEx.message}")
+                }
+            }
+            throw netEx
         }
-
-        profile
     }
 }

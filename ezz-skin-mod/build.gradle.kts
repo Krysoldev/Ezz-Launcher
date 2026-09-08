@@ -63,29 +63,7 @@ tasks.jar {
 }
 
 val packageModJars by tasks.registering {
-    dependsOn(tasks.jar)
-    doLast {
-        val builtJar = tasks.jar.get().archiveFile.get().asFile
-        val resourcesDir = file("../core/minecraft/src/commonMain/resources")
-        resourcesDir.mkdirs()
-
-        val targetJars = listOf(
-            "ezz-skin-mod-1.16.jar",
-            "ezz-skin-mod-1.17.jar",
-            "ezz-skin-mod-1.18.jar",
-            "ezz-skin-mod-1.19.jar",
-            "ezz-skin-mod-1.20.jar",
-            "ezz-skin-mod-1.21.jar",
-            "ezz-skin-mod-1.26.jar",
-            "ezz-skin-mod-universal.jar"
-        )
-
-        for (targetName in targetJars) {
-            val targetFile = file("${resourcesDir.absolutePath}/$targetName")
-            builtJar.copyTo(targetFile, overwrite = true)
-            println("[EzzSkinMod] Packaged Java 21 build into: ${targetFile.name} (${targetFile.length()} bytes)")
-        }
-    }
+    dependsOn(rootProject.tasks.named("buildAllVersions"))
 }
 
 tasks.named("build") {

@@ -110,27 +110,32 @@ object ModBytecodeValidator {
         return ModCompatibilityResult.Compatible
     }
 
+    private val bytecodeValidationCache = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
     /**
      * Validates if a JAR file is compatible with the target Java runtime version.
      */
     fun validateJarFile(jarFile: File, javaMajorVersion: Int): ModCompatibilityResult {
         if (!jarFile.exists() || !jarFile.isFile) return ModCompatibilityResult.Compatible
-        return jarFile.inputStream().use { stream ->
-            val maxClassVersion = getMaxClassMajorVersion(stream)
-            if (maxClassVersion == 0) return@use ModCompatibilityResult.Compatible
 
-            val currentMaxSupportedClassVersion = javaReleaseToClassVersion(javaMajorVersion)
-            if (maxClassVersion > currentMaxSupportedClassVersion) {
-                val requiredJava = classVersionToJavaRelease(maxClassVersion)
-                ModCompatibilityResult.Incompatible(
-                    modName = jarFile.name,
-                    maxMajorVersionFound = maxClassVersion,
-                    requiredJavaVersion = requiredJava,
-                    currentJavaVersion = javaMajorVersion
-                )
-            } else {
-                ModCompatibilityResult.Compatible
+        val cacheKey = "${jarFile.absolutePath}:${jarFile.lastModified()}:${jarFile.length()}"
+        val maxClassVersion = bytecodeValidationCache.getOrPut(cacheKey) {
+            jarFile.inputStream().use { stream ->
+                getMaxClassMajorVersion(stream)
             }
         }
+        if (maxClassVersion == 0) return ModCompatibilityResult.Compatible
+
+        val currentMaxSupportedClassVersion = javaReleaseToClassVersion(javaMajorVersion)
+        if (maxClassVersion > currentMaxSupportedClassVersion) {
+            val requiredJava = classVersionToJavaRelease(maxClassVersion)
+            return ModCompatibilityResult.Incompatible(
+                modName = jarFile.name,
+                maxMajorVersionFound = maxClassVersion,
+                requiredJavaVersion = requiredJava,
+                currentJavaVersion = javaMajorVersion
+            )
+        }
+        return ModCompatibilityResult.Compatible
     }
 }

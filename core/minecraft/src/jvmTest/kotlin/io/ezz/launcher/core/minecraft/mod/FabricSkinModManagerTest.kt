@@ -15,6 +15,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class FabricSkinModManagerTest {
@@ -323,5 +324,248 @@ class FabricSkinModManagerTest {
         assertTrue(fileSystem.exists(jarA), "Instance A must have active JAR")
         assertTrue(!fileSystem.exists(jarB), "Instance B must NOT have active JAR")
         assertTrue(fileSystem.exists(jarBDisabled), "Instance B must have .disabled JAR preserved")
+    }
+
+    @Test
+    fun testAllSupportedVersionsResolutionAndBytecodeCompatibility() {
+        val testMatrix = listOf(
+            // 1.16.x family (Java 8 target)
+            "1.16" to 8,
+            "1.16.1" to 8,
+            "1.16.2" to 8,
+            "1.16.3" to 8,
+            "1.16.4" to 8,
+            "1.16.5" to 8,
+
+            // 1.17.x family (Java 16/17 target)
+            "1.17" to 17,
+            "1.17.1" to 17,
+
+            // 1.18.x family (Java 17 target)
+            "1.18" to 17,
+            "1.18.1" to 17,
+            "1.18.2" to 17,
+
+            // 1.19.x family (Java 17 target)
+            "1.19" to 17,
+            "1.19.1" to 17,
+            "1.19.2" to 17,
+            "1.19.3" to 17,
+            "1.19.4" to 17,
+
+            // 1.20.x family (Java 17/21 target)
+            "1.20" to 17,
+            "1.20.1" to 17,
+            "1.20.2" to 17,
+            "1.20.3" to 17,
+            "1.20.4" to 17,
+            "1.20.5" to 21,
+            "1.20.6" to 21,
+
+            // 1.21.x family (Java 21 target)
+            "1.21" to 21,
+            "1.21.1" to 21,
+            "1.21.2" to 21,
+            "1.21.3" to 21,
+            "1.21.4" to 21,
+            "1.21.11" to 21,
+
+            // 1.26.x / 26.x family (Java 21/26 target)
+            "1.26" to 21,
+            "1.26.1" to 21,
+            "1.26.2" to 21,
+            "26.1" to 21,
+            "26.2" to 21,
+            "26.3" to 21
+        )
+
+        val account = OfflineAccount(
+            id = "acc-krysol",
+            username = "KrysolDev",
+            uuid = "11111111-2222-3333-4444-555555555555"
+        )
+        val skin = VaultSkin(
+            id = "skin-matrix-1",
+            name = "Matrix Test Skin",
+            fileName = "matrix.png",
+            fileHash = "matrix_hash_xyz",
+            modelType = SkinModelType.STEVE
+        )
+        val skinBytes = "VALID_PNG_RAW_BYTES".toByteArray()
+
+        for ((mcVersion, javaRuntimeVer) in testMatrix) {
+            val entry = FabricSkinModManager.resolveModEntry(mcVersion)
+            assertNotNull(entry, "ModVersionEntry must resolve for Minecraft $mcVersion")
+
+            val instance = Instance(
+                id = "inst-test-${mcVersion.replace('.', '-')}",
+                name = "Test $mcVersion",
+                minecraftVersion = mcVersion,
+                loaderType = LoaderType.FABRIC,
+                ezzSkinEnabled = true
+            )
+
+            val prepResult = FabricSkinModManager.prepareInstanceSkinMod(
+                instance = instance,
+                account = account,
+                skin = skin,
+                skinBytes = skinBytes,
+                pathProvider = pathProvider,
+                fileSystem = fileSystem
+            )
+            assertTrue(prepResult.isSuccess, "Preparation must succeed for $mcVersion")
+
+            val gameDir = pathProvider.getInstanceGameDirectory(instance.id)
+            val stagedJar = gameDir.resolve("mods").resolve(entry.jarName)
+            assertTrue(fileSystem.exists(stagedJar), "Staged JAR ${entry.jarName} must exist for $mcVersion")
+
+            val jarBytes = fileSystem.read(stagedJar) { readByteArray() }
+            val compatResult = ModBytecodeValidator.validateJarBytes(
+                modName = entry.jarName,
+                jarBytes = jarBytes,
+                javaMajorVersion = javaRuntimeVer
+            )
+
+            assertTrue(
+                compatResult is ModCompatibilityResult.Compatible,
+                "JAR ${entry.jarName} for Minecraft $mcVersion must be compatible with Java $javaRuntimeVer (was $compatResult)"
+            )
+        }
+    }
+
+    @Test
+    fun testSkinModelSwitchingClassicVsSlim() {
+        val instance = Instance(
+            id = "inst-model-switch",
+            name = "Model Switch Instance",
+            minecraftVersion = "1.20.1",
+            loaderType = LoaderType.FABRIC,
+            ezzSkinEnabled = true
+        )
+        val account = OfflineAccount(
+            id = "acc-krysol",
+            username = "KrysolDev",
+            uuid = "11111111-2222-3333-4444-555555555555"
+        )
+
+        // 1. Classic (STEVE)
+        val steveSkin = VaultSkin(
+            id = "skin-steve",
+            name = "Steve Skin",
+            fileName = "steve.png",
+            fileHash = "steve_hash",
+            modelType = SkinModelType.STEVE
+        )
+        FabricSkinModManager.prepareInstanceSkinMod(
+            instance = instance,
+            account = account,
+            skin = steveSkin,
+            skinBytes = "STEVE_BYTES".toByteArray(),
+            pathProvider = pathProvider,
+            fileSystem = fileSystem
+        )
+
+        val gameDir = pathProvider.getInstanceGameDirectory(instance.id)
+        val configFile = gameDir.resolve("config").resolve("ezz-skin-config.json")
+        var configJson = fileSystem.read(configFile) { readUtf8() }
+        assertTrue(configJson.contains("\"model\": \"STEVE\""), "Config must specify STEVE model")
+
+        // 2. Slim (ALEX)
+        val alexSkin = VaultSkin(
+            id = "skin-alex",
+            name = "Alex Skin",
+            fileName = "alex.png",
+            fileHash = "alex_hash",
+            modelType = SkinModelType.ALEX
+        )
+        FabricSkinModManager.prepareInstanceSkinMod(
+            instance = instance,
+            account = account,
+            skin = alexSkin,
+            skinBytes = "ALEX_BYTES".toByteArray(),
+            pathProvider = pathProvider,
+            fileSystem = fileSystem
+        )
+
+        configJson = fileSystem.read(configFile) { readUtf8() }
+        assertTrue(configJson.contains("\"model\": \"ALEX\""), "Config must specify ALEX model after switch")
+    }
+
+    @Test
+    fun testMultiplayerIsolationRule_PreservesRemotePlayers() {
+        val localUuid = java.util.UUID.fromString("11111111-2222-3333-4444-555555555555")
+        val localUsername = "KrysolDev"
+
+        val remoteUuid = java.util.UUID.fromString("99999999-8888-7777-6666-555555555555")
+        val remoteUsername = "RemoteFriend"
+
+        // Set up test config in temp directory
+        val runDir = tempDir.resolve("multiplayer_test")
+        runDir.mkdirs()
+        val configDir = runDir.resolve("config").apply { mkdirs() }
+        val ezzSkinDir = configDir.resolve("ezz-skin").apply { mkdirs() }
+        val skinFile = ezzSkinDir.resolve("skin.png")
+        skinFile.writeBytes("DUMMY_SKIN_PNG".toByteArray())
+
+        val configFile = configDir.resolve("ezz-skin-config.json")
+        configFile.writeText(
+            """
+            {
+                "enabled": true,
+                "username": "$localUsername",
+                "uuid": "$localUuid",
+                "accountId": "acc-1",
+                "skinId": "skin-1",
+                "skinHash": "hash1",
+                "model": "STEVE",
+                "skinFile": "config/ezz-skin/skin.png"
+            }
+            """.trimIndent()
+        )
+
+        // Extract the packaged 1.21 JAR to test directly with dynamic ClassLoader
+        val entry = FabricSkinModManager.resolveModEntry("1.21.4")
+        assertNotNull(entry, "Entry for 1.21.4 must exist")
+        val jarBytes = FabricSkinModManager.getModJarBytes(entry)
+        val jarFile = tempDir.resolve("ezz-skin-mod-1.21.jar")
+        jarFile.writeBytes(jarBytes)
+
+        val classLoader = java.net.URLClassLoader(arrayOf(jarFile.toURI().toURL()), javaClass.classLoader)
+        try {
+            val commonClass = classLoader.loadClass("io.ezz.skinmod.common.EzzSkinModCommon")
+            val providerClass = classLoader.loadClass("io.ezz.skinmod.common.EzzSkinTextureProvider")
+
+            // Initialize EzzSkinModCommon with this config
+            commonClass.getMethod("init", java.io.File::class.java).invoke(null, runDir)
+            providerClass.getMethod("initLocalPlayerIdentity").invoke(null)
+
+            val isLocalPlayerMethod = providerClass.getMethod("isLocalPlayer", Any::class.java)
+            val getCustomSkinTextureMethod = providerClass.getMethod("getCustomSkinTexture", Any::class.java)
+            val getCustomModelMethod = providerClass.getMethod("getCustomModel", Any::class.java)
+
+            // 1. Local player verification
+            val isLocalUuid = isLocalPlayerMethod.invoke(null, localUuid) as Boolean
+            val isLocalName = isLocalPlayerMethod.invoke(null, localUsername) as Boolean
+            assertTrue(isLocalUuid, "Local UUID must be recognized as local player")
+            assertTrue(isLocalName, "Local username must be recognized as local player")
+
+            // 2. Remote player isolation verification (Multiplayer & SkinsRestorer rule)
+            val isRemoteUuid = isLocalPlayerMethod.invoke(null, remoteUuid) as Boolean
+            val isRemoteName = isLocalPlayerMethod.invoke(null, remoteUsername) as Boolean
+            assertTrue(!isRemoteUuid, "Remote player UUID must NOT be recognized as local player")
+            assertTrue(!isRemoteName, "Remote player username must NOT be recognized as local player")
+
+            // Remote players must return null, guaranteeing no global texture overwrite!
+            assertNull(
+                getCustomSkinTextureMethod.invoke(null, remoteUuid),
+                "Remote player skin texture must be null to preserve SkinsRestorer/server skin"
+            )
+            assertNull(
+                getCustomModelMethod.invoke(null, remoteUuid),
+                "Remote player model must be null to preserve server model"
+            )
+        } finally {
+            classLoader.close()
+        }
     }
 }
