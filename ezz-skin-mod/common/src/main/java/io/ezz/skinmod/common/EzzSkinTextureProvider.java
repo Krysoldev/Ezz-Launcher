@@ -44,10 +44,16 @@ public class EzzSkinTextureProvider {
 
     // Server-provided skin override state (SkinsRestorer / server skin updates)
     private static volatile boolean serverOverrideActive = false;
-    private static volatile String initialServerTextureHash = null;
     private static volatile String currentServerTextureHash = null;
-    private static volatile boolean initialServerTextureRecorded = false;
+    private static volatile String baselineClientTextureHash = null;
+    private static volatile boolean baselineChecked = false;
     private static volatile long lastSkinFileModified = 0L;
+
+    // Deduplicated diagnostics logging
+    private static volatile String lastLoggedSource = null;
+    private static volatile String lastLoggedTexture = null;
+    private static volatile String lastLoggedReason = null;
+    private static volatile String lastLoggedOverrideState = null;
 
     // Cached reflection handles
     private static final ConcurrentHashMap<Class<?>, Method> UUID_GETTER_CACHE = new ConcurrentHashMap<>();
@@ -78,7 +84,57 @@ public class EzzSkinTextureProvider {
                     }
                 }
             }
+
+            checkBaselineTexture();
         } catch (Throwable ignored) {}
+    }
+
+    public static void checkBaselineTexture() {
+        if (baselineChecked) return;
+        try {
+            Object client = getMinecraftClient();
+            if (client == null) return;
+            Method getSession = getMethodOrNull(client.getClass(), "getSession", "method_1548");
+            if (getSession == null) return;
+            Object session = getSession.invoke(client);
+            if (session == null) return;
+            Object sessionProfile = extractGameProfile(session);
+            if (sessionProfile != null) {
+                String baseVal = extractSkinTextureValue(sessionProfile);
+                if (baseVal != null && !baseVal.trim().isEmpty()) {
+                    baselineClientTextureHash = calculateSha256(baseVal.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                } else {
+                    baselineClientTextureHash = "";
+                }
+            } else {
+                baselineClientTextureHash = "";
+            }
+            baselineChecked = true;
+        } catch (Throwable ignored) {}
+    }
+
+    public static void logServerOverride(String state, String reason) {
+        String logKey = state + ":" + reason;
+        if (logKey.equals(lastLoggedOverrideState)) return;
+        lastLoggedOverrideState = logKey;
+        System.out.println("[SERVER_SKIN_OVERRIDE] " + state + " - " + reason);
+    }
+
+    public static void logSkinSource(Object target, String source, String reason) {
+        String uuidStr = "unknown";
+        UUID u = extractUuidFast(target);
+        if (u != null) {
+            uuidStr = u.toString();
+        } else if (cachedLocalUuid != null) {
+            uuidStr = cachedLocalUuid.toString();
+        }
+        String texture = "VAULT".equals(source) ? "ezzskin:textures/skin/custom_skin" : "minecraft:server_skin";
+        String logKey = uuidStr + ":" + source + ":" + texture + ":" + reason;
+        if (logKey.equals(lastLoggedReason)) return;
+        lastLoggedReason = logKey;
+        lastLoggedSource = source;
+        lastLoggedTexture = texture;
+        System.out.println("[SKIN_SOURCE] player=" + uuidStr + " source=" + source + " texture=" + texture + " reason=" + reason);
     }
 
     /**
@@ -124,13 +180,27 @@ public class EzzSkinTextureProvider {
         return serverOverrideActive;
     }
 
+    public static boolean shouldApplyVaultSkin(Object target) {
+        if (!enabled) return false;
+        if (target != null && !isLocalPlayer(target)) return false;
+        if (isSingleplayer()) {
+            logSkinSource(target, "VAULT", "Singleplayer integrated server");
+            return true;
+        }
+        if (hasServerSkinOverride()) {
+            logSkinSource(target, "SERVER", "Server skin override active");
+            return false;
+        }
+        logSkinSource(target, "VAULT", "Multiplayer without server override");
+        return true;
+    }
+
     public static synchronized void resetServerOverride() {
         boolean wasActive = serverOverrideActive;
         serverOverrideActive = false;
-        initialServerTextureHash = null;
         currentServerTextureHash = null;
-        initialServerTextureRecorded = false;
         lastAppliedSource = "EZZ_VAULT";
+        logServerOverride("CLEARED", "Disconnect or world reset");
         if (wasActive) {
             System.out.println("[EZZ-SKIN] DISCONNECT_RESET: Cleared server skin override, Vault fallback restored.");
         }
@@ -138,46 +208,72 @@ public class EzzSkinTextureProvider {
 
     public static synchronized void onGameJoin() {
         serverOverrideActive = false;
-        initialServerTextureHash = null;
         currentServerTextureHash = null;
-        initialServerTextureRecorded = false;
         lastAppliedSource = "EZZ_VAULT";
+        baselineChecked = false;
+        checkBaselineTexture();
+        logServerOverride("CLEARED", "Game join initialized");
         System.out.println("[EZZ-SKIN] GAME_JOIN: Initialized session state, Vault fallback active.");
     }
 
     public static void updateServerSkinState(Object target) {
         if (!enabled || target == null || isSingleplayer()) {
-            serverOverrideActive = false;
+            if (serverOverrideActive) {
+                serverOverrideActive = false;
+                logServerOverride("CLEARED", "Singleplayer or mod disabled");
+            }
             return;
         }
 
         try {
+            checkBaselineTexture();
+
             String rawTextureVal = extractSkinTextureValue(target);
             if (rawTextureVal == null || rawTextureVal.trim().isEmpty()) {
-                if (!initialServerTextureRecorded) {
-                    initialServerTextureHash = "";
-                    initialServerTextureRecorded = true;
+                if (serverOverrideActive) {
+                    serverOverrideActive = false;
+                    currentServerTextureHash = null;
+                    lastAppliedSource = "EZZ_VAULT";
+                    logServerOverride("CLEARED", "No server texture present in profile");
+                    logSkinSource(target, "VAULT", "No server texture in profile");
                 }
                 return;
             }
 
             String currentHash = calculateSha256(rawTextureVal.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            if (!initialServerTextureRecorded) {
-                // Record initial join server texture property
-                initialServerTextureHash = currentHash;
-                initialServerTextureRecorded = true;
-                return;
+
+            boolean isOverride = false;
+            String overrideReason = "";
+
+            if (baselineClientTextureHash == null || baselineClientTextureHash.isEmpty()) {
+                // Offline launcher account has no Mojang session skin.
+                // Any texture present on the server was authoritatively provided by the server (e.g. SkinsRestorer)
+                isOverride = true;
+                overrideReason = "SERVER_SUPPLIED_TEXTURE_OFFLINE_PLAYER";
+            } else if (!currentHash.equals(baselineClientTextureHash)) {
+                // Online account whose server texture differs from its initial Mojang baseline:
+                // Server plugin (SkinsRestorer /skin) has overridden the skin
+                isOverride = true;
+                overrideReason = "SERVER_TEXTURE_DIFFERS_FROM_MOJANG_BASELINE";
             }
 
-            // If the server texture differs from initial join, a server-side update occurred (e.g. SkinsRestorer /skin)
-            if (!currentHash.equals(initialServerTextureHash)) {
-                if (!currentHash.equals(currentServerTextureHash)) {
-                    currentServerTextureHash = currentHash;
+            if (isOverride) {
+                if (!serverOverrideActive || !currentHash.equals(currentServerTextureHash)) {
+                    boolean isUpdate = serverOverrideActive;
                     serverOverrideActive = true;
+                    currentServerTextureHash = currentHash;
                     lastAppliedSource = "SERVER_OVERRIDE";
-                    String shortHash = currentHash.length() > 12 ? currentHash.substring(0, 12) : currentHash;
-                    System.out.println("[EZZ-SKIN] SERVER_SKIN_UPDATE_RECEIVED: Server skin update detected (hash: " + shortHash + ")");
-                    System.out.println("[EZZ-SKIN] SKIN_SOURCE_CHANGED: LOCAL_VAULT -> SERVER_OVERRIDE");
+                    String shortH = currentHash.length() > 12 ? currentHash.substring(0, 12) : currentHash;
+                    logServerOverride(isUpdate ? "UPDATED" : "ACTIVE", overrideReason + " (hash: " + shortH + ")");
+                    logSkinSource(target, "SERVER", overrideReason);
+                }
+            } else {
+                if (serverOverrideActive) {
+                    serverOverrideActive = false;
+                    currentServerTextureHash = null;
+                    lastAppliedSource = "EZZ_VAULT";
+                    logServerOverride("CLEARED", "Server texture matches Mojang baseline");
+                    logSkinSource(target, "VAULT", "Server texture matches Mojang baseline");
                 }
             }
         } catch (Throwable ignored) {}

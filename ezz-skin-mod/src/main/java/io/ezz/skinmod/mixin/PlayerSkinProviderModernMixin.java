@@ -17,7 +17,7 @@ public class PlayerSkinProviderModernMixin {
     private void ezz_fetchSkinTextures(GameProfile profile, CallbackInfoReturnable<CompletableFuture<Optional<Object>>> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(profile)) {
             EzzSkinTextureProvider.updateServerSkinState(profile);
-            if (!EzzSkinTextureProvider.hasServerSkinOverride()) {
+            if (EzzSkinTextureProvider.shouldApplyVaultSkin(profile)) {
                 String val = EzzSkinTextureProvider.extractSkinTextureValue(profile);
                 if (val == null || val.trim().isEmpty()) {
                     Object custom = EzzSkinTextureProvider.getCustomSkinTextures(profile);
@@ -33,7 +33,7 @@ public class PlayerSkinProviderModernMixin {
     private void ezz_getSkinTexturesSupplier(GameProfile profile, boolean requireSecure, CallbackInfoReturnable<Supplier<Object>> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(profile)) {
             EzzSkinTextureProvider.updateServerSkinState(profile);
-            if (!EzzSkinTextureProvider.hasServerSkinOverride()) {
+            if (EzzSkinTextureProvider.shouldApplyVaultSkin(profile)) {
                 String val = EzzSkinTextureProvider.extractSkinTextureValue(profile);
                 if (val == null || val.trim().isEmpty()) {
                     Object custom = EzzSkinTextureProvider.getCustomSkinTextures(profile);

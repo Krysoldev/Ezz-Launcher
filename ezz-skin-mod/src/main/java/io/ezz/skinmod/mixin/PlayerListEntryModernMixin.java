@@ -17,7 +17,7 @@ public class PlayerListEntryModernMixin {
     private void ezz_getSkinTextures(CallbackInfoReturnable<Object> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(this)) {
             EzzSkinTextureProvider.updateServerSkinState(this);
-            if (!EzzSkinTextureProvider.hasServerSkinOverride()) {
+            if (EzzSkinTextureProvider.shouldApplyVaultSkin(this)) {
                 Object custom = EzzSkinTextureProvider.getCustomSkinTextures(this);
                 if (custom != null) {
                     cir.setReturnValue(custom);

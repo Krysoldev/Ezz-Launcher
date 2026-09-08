@@ -103,6 +103,8 @@ class ServerSkinOverridePriorityTest {
             val getCustomModelMethod = providerClass.getMethod("getCustomModel", Any::class.java)
             val getDiagnosticReportLinesMethod = providerClass.getMethod("getDiagnosticReportLines")
 
+            val shouldApplyVaultSkinMethod = providerClass.getMethod("shouldApplyVaultSkin", Any::class.java)
+
             // 1. Initial State: Local Player is identified
             assertTrue(isLocalPlayerMethod.invoke(null, localUuid) as Boolean)
             assertTrue(isLocalPlayerMethod.invoke(null, localUsername) as Boolean)
@@ -122,6 +124,7 @@ class ServerSkinOverridePriorityTest {
 
             // Still Vault fallback because no server-side skin update has arrived
             assertFalse(hasServerSkinOverrideMethod.invoke(null) as Boolean)
+            assertTrue(shouldApplyVaultSkinMethod.invoke(null, localProfile) as Boolean, "Vault skin must apply when server provides no skin")
 
             // 3. Server changes local player skin to Skin B (via SkinsRestorer /skin)
             val skinBBase64 = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvc2tpbkJ1cmwifX19"
@@ -138,6 +141,10 @@ class ServerSkinOverridePriorityTest {
             assertTrue(
                 hasServerSkinOverrideMethod.invoke(null) as Boolean,
                 "Server skin override must be active after server sends Skin B"
+            )
+            assertFalse(
+                shouldApplyVaultSkinMethod.invoke(null, localProfile) as Boolean,
+                "Vault skin must yield (return false) when server skin override is active"
             )
 
             // Local Vault getter must return null, allowing the server skin to render!
@@ -229,6 +236,7 @@ class ServerSkinOverridePriorityTest {
                 assertNotNull(providerClass.getMethod("updateServerSkinState", Any::class.java), "${entry.jarName} must have updateServerSkinState")
                 assertNotNull(providerClass.getMethod("extractSkinTextureValue", Any::class.java), "${entry.jarName} must have extractSkinTextureValue")
                 assertNotNull(providerClass.getMethod("extractGameProfile", Any::class.java), "${entry.jarName} must have extractGameProfile")
+                assertNotNull(providerClass.getMethod("shouldApplyVaultSkin", Any::class.java), "${entry.jarName} must have shouldApplyVaultSkin")
 
                 // Verify ClientPlayNetworkHandlerMixin contains no references to method_2874
                 val mixinEntry = "io/ezz/skinmod/mixin/ClientPlayNetworkHandlerMixin.class"

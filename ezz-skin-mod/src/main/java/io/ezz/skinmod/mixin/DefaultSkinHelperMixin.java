@@ -16,7 +16,7 @@ public class DefaultSkinHelperMixin {
     private static void ezz_getSkinTexturesFromProfile(GameProfile profile, CallbackInfoReturnable<Object> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(profile)) {
             EzzSkinTextureProvider.updateServerSkinState(profile);
-            if (!EzzSkinTextureProvider.hasServerSkinOverride()) {
+            if (EzzSkinTextureProvider.shouldApplyVaultSkin(profile)) {
                 Object custom = EzzSkinTextureProvider.getCustomSkinTextures(profile);
                 if (custom != null) {
                     cir.setReturnValue(custom);
@@ -29,7 +29,7 @@ public class DefaultSkinHelperMixin {
     @Inject(method = {"getSkinTextures(Ljava/util/UUID;)Lnet/minecraft/class_8685;", "method_4648(Ljava/util/UUID;)Lnet/minecraft/class_8685;"}, at = @At("HEAD"), cancellable = true, remap = false)
     private static void ezz_getSkinTexturesFromUuid(UUID uuid, CallbackInfoReturnable<Object> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(uuid)) {
-            if (!EzzSkinTextureProvider.hasServerSkinOverride()) {
+            if (EzzSkinTextureProvider.shouldApplyVaultSkin(uuid)) {
                 Object custom = EzzSkinTextureProvider.getCustomSkinTextures(uuid);
                 if (custom != null) {
                     cir.setReturnValue(custom);
@@ -42,7 +42,7 @@ public class DefaultSkinHelperMixin {
     @Inject(method = {"getTexture(Ljava/util/UUID;)Lnet/minecraft/class_2960;", "method_4648(Ljava/util/UUID;)Lnet/minecraft/class_2960;"}, at = @At("HEAD"), cancellable = true, remap = false)
     private static void ezz_getTextureFromUuid(UUID uuid, CallbackInfoReturnable<Object> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(uuid)) {
-            if (!EzzSkinTextureProvider.hasServerSkinOverride()) {
+            if (EzzSkinTextureProvider.shouldApplyVaultSkin(uuid)) {
                 Object custom = EzzSkinTextureProvider.getCustomSkinTexture(uuid);
                 if (custom != null) {
                     cir.setReturnValue(custom);
@@ -55,7 +55,7 @@ public class DefaultSkinHelperMixin {
     @Inject(method = {"getModel(Ljava/util/UUID;)Ljava/lang/String;", "method_4649(Ljava/util/UUID;)Ljava/lang/String;"}, at = @At("HEAD"), cancellable = true, remap = false)
     private static void ezz_getModelFromUuid(UUID uuid, CallbackInfoReturnable<String> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(uuid)) {
-            if (!EzzSkinTextureProvider.hasServerSkinOverride()) {
+            if (EzzSkinTextureProvider.shouldApplyVaultSkin(uuid)) {
                 String model = EzzSkinTextureProvider.getCustomModel(uuid);
                 if (model != null) {
                     cir.setReturnValue(model);

@@ -18,7 +18,7 @@ public class AbstractClientPlayerEntityLegacyMixin {
     private void ezz_getSkinTexture(CallbackInfoReturnable<Object> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(this)) {
             EzzSkinTextureProvider.updateServerSkinState(this);
-            if (!EzzSkinTextureProvider.hasServerSkinOverride()) {
+            if (EzzSkinTextureProvider.shouldApplyVaultSkin(this)) {
                 Object custom = EzzSkinTextureProvider.getCustomSkinTexture(this);
                 if (custom != null) {
                     cir.setReturnValue(custom);
@@ -30,7 +30,7 @@ public class AbstractClientPlayerEntityLegacyMixin {
     @Inject(method = {"getModel()Ljava/lang/String;", "method_3121()Ljava/lang/String;"}, at = @At("HEAD"), cancellable = true, remap = false)
     private void ezz_getModel(CallbackInfoReturnable<String> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(this)) {
-            if (!EzzSkinTextureProvider.hasServerSkinOverride()) {
+            if (EzzSkinTextureProvider.shouldApplyVaultSkin(this)) {
                 String model = EzzSkinTextureProvider.getCustomModel(this);
                 if (model != null) {
                     cir.setReturnValue(model);
