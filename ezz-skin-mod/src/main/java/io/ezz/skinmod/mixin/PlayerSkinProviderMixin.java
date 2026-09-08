@@ -14,7 +14,7 @@ import java.util.function.Supplier;
 public class PlayerSkinProviderMixin {
 
     // 1.20.2+ / 1.21+ CompletableFuture<Optional<SkinTextures>> fetchSkinTextures(GameProfile profile)
-    @Inject(method = {"fetchSkinTextures", "method_52863"}, at = @At("HEAD"), cancellable = true, remap = false)
+    @Inject(method = {"fetchSkinTextures(Lcom/mojang/authlib/GameProfile;)Ljava/util/concurrent/CompletableFuture;", "method_52863(Lcom/mojang/authlib/GameProfile;)Ljava/util/concurrent/CompletableFuture;"}, at = @At("HEAD"), cancellable = true, remap = false, require = 0)
     private void ezz_fetchSkinTextures(GameProfile profile, CallbackInfoReturnable<CompletableFuture<Optional<Object>>> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(profile)) {
             EzzSkinTextureProvider.updateServerSkinState(profile);
@@ -31,7 +31,7 @@ public class PlayerSkinProviderMixin {
     }
 
     // 1.20.2+ / 1.21+ Supplier<SkinTextures> getSkinTexturesSupplier(GameProfile profile, boolean requireSecure)
-    @Inject(method = {"getSkinTexturesSupplier", "method_73544"}, at = @At("HEAD"), cancellable = true, remap = false)
+    @Inject(method = {"getSkinTexturesSupplier(Lcom/mojang/authlib/GameProfile;Z)Ljava/util/function/Supplier;", "method_73544(Lcom/mojang/authlib/GameProfile;Z)Ljava/util/function/Supplier;"}, at = @At("HEAD"), cancellable = true, remap = false, require = 0)
     private void ezz_getSkinTexturesSupplier(GameProfile profile, boolean requireSecure, CallbackInfoReturnable<Supplier<Object>> cir) {
         if (EzzSkinTextureProvider.isLocalPlayer(profile)) {
             EzzSkinTextureProvider.updateServerSkinState(profile);

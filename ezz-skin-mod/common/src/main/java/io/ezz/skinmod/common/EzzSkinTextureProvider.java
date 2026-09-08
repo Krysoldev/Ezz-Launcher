@@ -183,23 +183,43 @@ public class EzzSkinTextureProvider {
         } catch (Throwable ignored) {}
     }
 
+    public static Object extractGameProfile(Object target) {
+        if (target == null) return null;
+        if (target.getClass().getName().endsWith("GameProfile")) return target;
+
+        Class<?> clazz = target.getClass();
+        Method profMethod = PROFILE_GETTER_CACHE.get(clazz);
+        if (profMethod == null) {
+            profMethod = getMethodOrNull(clazz,
+                "getProfile", "method_2966", "comp_868", "profile",
+                "getGameProfile", "method_7334", "method_53462",
+                "getPlayerListEntry", "method_3123"
+            );
+            if (profMethod != null) {
+                PROFILE_GETTER_CACHE.put(clazz, profMethod);
+            }
+        }
+
+        if (profMethod != null) {
+            try {
+                Object res = profMethod.invoke(target);
+                if (res != null) {
+                    if (res.getClass().getName().endsWith("GameProfile")) {
+                        return res;
+                    }
+                    return extractGameProfile(res);
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        return null;
+    }
+
     public static String extractSkinTextureValue(Object target) {
         if (target == null) return null;
         try {
-            Object profile = target;
-            Class<?> clazz = target.getClass();
-            Method profMethod = PROFILE_GETTER_CACHE.get(clazz);
-            if (profMethod == null) {
-                profMethod = getMethodOrNull(clazz, "getProfile", "method_2966", "getGameProfile");
-                if (profMethod != null) {
-                    PROFILE_GETTER_CACHE.put(clazz, profMethod);
-                }
-            }
-            if (profMethod != null) {
-                profile = profMethod.invoke(target);
-            }
-
-            if (profile == null) return null;
+            Object profile = extractGameProfile(target);
+            if (profile == null) profile = target;
 
             Method getPropertiesMethod = getMethodOrNull(profile.getClass(), "getProperties");
             if (getPropertiesMethod != null) {
@@ -374,19 +394,9 @@ public class EzzSkinTextureProvider {
         }
 
         // Profile fallback
-        Method profMethod = PROFILE_GETTER_CACHE.get(clazz);
-        if (profMethod == null) {
-            profMethod = getMethodOrNull(clazz, "getProfile", "method_2966", "getGameProfile");
-            if (profMethod != null) {
-                PROFILE_GETTER_CACHE.put(clazz, profMethod);
-            }
-        }
-
-        if (profMethod != null) {
-            try {
-                Object prof = profMethod.invoke(target);
-                if (prof != null) return extractUuidFast(prof);
-            } catch (Throwable ignored) {}
+        Object prof = extractGameProfile(target);
+        if (prof != null && prof != target) {
+            return extractUuidFast(prof);
         }
 
         return null;

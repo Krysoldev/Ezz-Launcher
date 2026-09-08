@@ -228,6 +228,28 @@ class ServerSkinOverridePriorityTest {
                 assertNotNull(providerClass.getMethod("onGameJoin"), "${entry.jarName} must have onGameJoin")
                 assertNotNull(providerClass.getMethod("updateServerSkinState", Any::class.java), "${entry.jarName} must have updateServerSkinState")
                 assertNotNull(providerClass.getMethod("extractSkinTextureValue", Any::class.java), "${entry.jarName} must have extractSkinTextureValue")
+                assertNotNull(providerClass.getMethod("extractGameProfile", Any::class.java), "${entry.jarName} must have extractGameProfile")
+
+                // Verify ClientPlayNetworkHandlerMixin contains no references to method_2874
+                val mixinEntry = "io/ezz/skinmod/mixin/ClientPlayNetworkHandlerMixin.class"
+                val zipFile = java.util.zip.ZipFile(tempJar)
+                try {
+                    val entryZip = zipFile.getEntry(mixinEntry)
+                    if (entryZip != null) {
+                        val classBytes = zipFile.getInputStream(entryZip).readBytes()
+                        val classContent = String(classBytes, Charsets.ISO_8859_1)
+                        assertFalse(
+                            classContent.contains("method_2874"),
+                            "${entry.jarName} ClientPlayNetworkHandlerMixin must NEVER reference method_2874 (which returns PlayerListEntry)"
+                        )
+                        assertTrue(
+                            classContent.contains("method_54134") || classContent.contains("method_47658") || classContent.contains("method_2868"),
+                            "${entry.jarName} ClientPlayNetworkHandlerMixin must reference correct clearWorld void method"
+                        )
+                    }
+                } finally {
+                    zipFile.close()
+                }
             } finally {
                 classLoader.close()
             }
