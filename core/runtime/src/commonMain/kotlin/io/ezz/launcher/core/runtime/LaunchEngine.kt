@@ -309,12 +309,8 @@ class LaunchEngine(
             val libraryTasks = libraryResolved.mapNotNull { it.downloadTask }
             val assetTasks = assetResolver.resolveAssetTasks(versionInfo)
 
-            val allDownloadTasks = mutableListOf<DownloadTask>()
-            if (clientDownloadTask != null) {
-                allDownloadTasks.add(clientDownloadTask)
-            }
-            allDownloadTasks.addAll(libraryTasks)
-            allDownloadTasks.addAll(assetTasks)
+            val allDownloadTasks = (listOfNotNull(clientDownloadTask) + libraryTasks + assetTasks)
+                .distinctBy { it.destinationPath }
 
             // Fast incremental verification of cached files with continuous real-time progress
             val totalTasksCount = allDownloadTasks.size
@@ -439,7 +435,7 @@ class LaunchEngine(
             emit(LaunchEvent.LogReceived("[PerformanceTiming] FILES_READY: $filesReadyTime (+${filesReadyTime - dependenciesReadyTime}ms)", isError = false))
 
             // Build classpath
-            val classpath = libraryResolved.filter { !it.isNative }.map { it.localPath }
+            val classpath = libraryResolved.filter { !it.isNative }.map { it.localPath }.distinct()
             val clientJarPath = pathProvider.versionsDirectory
                 .resolve(instance.minecraftVersion)
                 .resolve("${instance.minecraftVersion}.jar")

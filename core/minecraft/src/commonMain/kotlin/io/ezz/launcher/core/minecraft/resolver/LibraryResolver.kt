@@ -21,6 +21,13 @@ class LibraryResolver(
         currentArch: String = System.getProperty("os.arch") ?: "x86_64"
     ): List<ResolvedLibrary> {
         val resolved = mutableListOf<ResolvedLibrary>()
+        val seenEntries = mutableSetOf<Pair<Path, Boolean>>()
+
+        fun addResolved(res: ResolvedLibrary) {
+            if (seenEntries.add(res.localPath to res.isNative)) {
+                resolved.add(res)
+            }
+        }
 
         for (library in versionInfo.libraries) {
             if (!RuleEvaluator.isAllowed(library.rules, currentOs, currentArch)) {
@@ -32,16 +39,23 @@ class LibraryResolver(
             if (artifact != null) {
                 val relPath = artifact.path ?: mavenCoordinateToPath(library.name)
                 val localPath = pathProvider.librariesDirectory.resolve(relPath)
+                val isModernNative = library.name.contains(":natives-") || relPath.contains("-natives-")
                 val task = DownloadTask(
                     url = artifact.url,
                     destinationPath = localPath.toString(),
                     expectedSha1 = artifact.sha1,
                     expectedSize = artifact.size,
-                    description = "Library: ${library.name}"
+                    description = if (isModernNative) "Native: ${library.name}" else "Library: ${library.name}"
                 )
-                resolved.add(ResolvedLibrary(localPath, isNative = false, downloadTask = task))
-            } else if (library.url != null || library.name.isNotBlank()) {
-                // Custom maven repository URL (e.g., Fabric libraries)
+                if (isModernNative) {
+                    // Modern natives are extracted to natives directory AND placed on classpath
+                    addResolved(ResolvedLibrary(localPath, isNative = true, downloadTask = task))
+                    addResolved(ResolvedLibrary(localPath, isNative = false, downloadTask = null))
+                } else {
+                    addResolved(ResolvedLibrary(localPath, isNative = false, downloadTask = task))
+                }
+            } else if (library.downloads == null && (library.url != null || library.name.isNotBlank())) {
+                // Custom maven repository URL (e.g., Fabric libraries without downloads object)
                 val relPath = mavenCoordinateToPath(library.name)
                 val localPath = pathProvider.librariesDirectory.resolve(relPath)
                 val repoUrl = (library.url ?: "https://libraries.minecraft.net/").trimEnd('/')
@@ -53,10 +67,10 @@ class LibraryResolver(
                     expectedSize = 0L,
                     description = "Library: ${library.name}"
                 )
-                resolved.add(ResolvedLibrary(localPath, isNative = false, downloadTask = task))
+                addResolved(ResolvedLibrary(localPath, isNative = false, downloadTask = task))
             }
 
-            // 2. Check native classifiers
+            // 2. Check legacy native classifiers (1.16 - 1.18)
             val natives = library.natives
             if (natives != null) {
                 val nativeKey = natives[currentOs.standardName]?.replace("\${arch}", getArchBits(currentArch))
@@ -72,7 +86,7 @@ class LibraryResolver(
                             expectedSize = classifierArtifact.size,
                             description = "Native: ${library.name} ($nativeKey)"
                         )
-                        resolved.add(ResolvedLibrary(localPath, isNative = true, downloadTask = task))
+                        addResolved(ResolvedLibrary(localPath, isNative = true, downloadTask = task))
                     }
                 }
             }

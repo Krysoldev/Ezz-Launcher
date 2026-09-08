@@ -53,20 +53,23 @@ object VersionMerger {
      */
     fun mergeLibraries(childLibraries: List<Library>, parentLibraries: List<Library>): List<Library> {
         val result = mutableListOf<Library>()
-        val seenArtifactKeys = mutableSetOf<String>()
+        val childOverrideKeys = mutableSetOf<String>()
 
         // 1. Child (Loader, e.g. Fabric) libraries take priority
         for (lib in childLibraries) {
             val key = getLibraryArtifactKey(lib)
-            if (seenArtifactKeys.add(key)) {
+            if (childOverrideKeys.add(key)) {
                 result.add(lib)
             }
         }
 
-        // 2. Parent (Vanilla Minecraft) libraries are included unless overridden by child
+        // 2. Parent (Vanilla Minecraft) libraries are included unless overridden by child.
+        // Parent libraries must NOT be deduplicated against other parent libraries here,
+        // because vanilla version manifests contain distinct entries for different OS rules
+        // (e.g. macOS 3.2.1 vs Windows/Linux 3.2.2) and native classifiers.
         for (lib in parentLibraries) {
             val key = getLibraryArtifactKey(lib)
-            if (seenArtifactKeys.add(key)) {
+            if (!childOverrideKeys.contains(key)) {
                 result.add(lib)
             }
         }

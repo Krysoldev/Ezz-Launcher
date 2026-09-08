@@ -8,6 +8,7 @@ import io.ezz.launcher.core.model.account.OfflineAccount
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LoaderType
 import io.ezz.launcher.core.model.minecraft.Library
+import io.ezz.launcher.core.model.minecraft.Rule
 import io.ezz.launcher.core.model.minecraft.VersionInfo
 import io.ezz.launcher.core.model.skin.SkinModelType
 import io.ezz.launcher.core.model.skin.VaultSkin
@@ -165,6 +166,130 @@ class VersionMatrixCompatibilityTest {
         assertTrue(merged.libraries.any { it.name == "org.lwjgl:lwjgl:3.3.3" })
         assertTrue(merged.libraries.any { it.name == "org.lwjgl:lwjgl:3.3.3:natives-windows" })
         assertTrue(merged.libraries.any { it.name == "org.lwjgl:lwjgl:3.3.3:natives-linux" })
+    }
+
+    @Test
+    fun testMinecraft1165LegacyLwjglResolution_Windows() {
+        // Reproduce real 1.16.5 manifest structure:
+        // Mojang puts macOS (3.2.1) first with rule "osx", then Windows/Linux (3.2.2) with rule "!osx"
+        val parent = VersionInfo(
+            id = "1.16.5",
+            libraries = listOf(
+                // Base ASM in vanilla
+                Library(name = "org.ow2.asm:asm:9.1"),
+                // LWJGL core
+                Library(
+                    name = "org.lwjgl:lwjgl:3.2.1",
+                    rules = listOf(Rule(action = "allow", os = io.ezz.launcher.core.model.minecraft.OsRule(name = "osx")))
+                ),
+                Library(
+                    name = "org.lwjgl:lwjgl:3.2.2",
+                    rules = listOf(
+                        Rule(action = "allow"),
+                        Rule(action = "disallow", os = io.ezz.launcher.core.model.minecraft.OsRule(name = "osx"))
+                    ),
+                    downloads = io.ezz.launcher.core.model.minecraft.LibraryDownloads(
+                        artifact = io.ezz.launcher.core.model.minecraft.DownloadArtifact(
+                            path = "org/lwjgl/lwjgl/3.2.2/lwjgl-3.2.2.jar",
+                            sha1 = "abc",
+                            size = 100L,
+                            url = "https://example.com/lwjgl-3.2.2.jar"
+                        )
+                    )
+                ),
+                // LWJGL core natives
+                Library(
+                    name = "org.lwjgl:lwjgl:3.2.2",
+                    rules = listOf(
+                        Rule(action = "allow"),
+                        Rule(action = "disallow", os = io.ezz.launcher.core.model.minecraft.OsRule(name = "osx"))
+                    ),
+                    natives = mapOf("windows" to "natives-windows"),
+                    downloads = io.ezz.launcher.core.model.minecraft.LibraryDownloads(
+                        classifiers = mapOf(
+                            "natives-windows" to io.ezz.launcher.core.model.minecraft.DownloadArtifact(
+                                path = "org/lwjgl/lwjgl/3.2.2/lwjgl-3.2.2-natives-windows.jar",
+                                sha1 = "def",
+                                size = 200L,
+                                url = "https://example.com/lwjgl-3.2.2-natives-windows.jar"
+                            )
+                        )
+                    )
+                ),
+                // GLFW
+                Library(
+                    name = "org.lwjgl:lwjgl-glfw:3.2.1",
+                    rules = listOf(Rule(action = "allow", os = io.ezz.launcher.core.model.minecraft.OsRule(name = "osx")))
+                ),
+                Library(
+                    name = "org.lwjgl:lwjgl-glfw:3.2.2",
+                    rules = listOf(
+                        Rule(action = "allow"),
+                        Rule(action = "disallow", os = io.ezz.launcher.core.model.minecraft.OsRule(name = "osx"))
+                    ),
+                    downloads = io.ezz.launcher.core.model.minecraft.LibraryDownloads(
+                        artifact = io.ezz.launcher.core.model.minecraft.DownloadArtifact(
+                            path = "org/lwjgl/lwjgl-glfw/3.2.2/lwjgl-glfw-3.2.2.jar",
+                            sha1 = "d3ad",
+                            size = 108907L,
+                            url = "https://libraries.minecraft.net/org/lwjgl/lwjgl-glfw/3.2.2/lwjgl-glfw-3.2.2.jar"
+                        )
+                    )
+                ),
+                // GLFW natives
+                Library(
+                    name = "org.lwjgl:lwjgl-glfw:3.2.2",
+                    rules = listOf(
+                        Rule(action = "allow"),
+                        Rule(action = "disallow", os = io.ezz.launcher.core.model.minecraft.OsRule(name = "osx"))
+                    ),
+                    natives = mapOf("windows" to "natives-windows"),
+                    downloads = io.ezz.launcher.core.model.minecraft.LibraryDownloads(
+                        classifiers = mapOf(
+                            "natives-windows" to io.ezz.launcher.core.model.minecraft.DownloadArtifact(
+                                path = "org/lwjgl/lwjgl-glfw/3.2.2/lwjgl-glfw-3.2.2-natives-windows.jar",
+                                sha1 = "dc68",
+                                size = 266648L,
+                                url = "https://libraries.minecraft.net/org/lwjgl/lwjgl-glfw/3.2.2/lwjgl-glfw-3.2.2-natives-windows.jar"
+                            )
+                        )
+                    )
+                )
+            )
+        )
+
+        val child = VersionInfo(
+            id = "fabric-loader-0.19.5-1.16.5",
+            libraries = listOf(
+                Library(name = "org.ow2.asm:asm:9.10.1"),
+                Library(name = "net.fabricmc:fabric-loader:0.19.5")
+            )
+        )
+
+        val merged = VersionMerger.merge(child, parent)
+
+        // 1. Verify child ASM overrides parent older ASM
+        val asmBaseLibs = merged.libraries.filter { it.name.startsWith("org.ow2.asm:asm:") }
+        assertEquals(1, asmBaseLibs.size)
+        assertEquals("org.ow2.asm:asm:9.10.1", asmBaseLibs.first().name)
+
+        // 2. Resolve libraries for Windows
+        val resolver = io.ezz.launcher.core.minecraft.resolver.LibraryResolver(pathProvider)
+        val resolved = resolver.resolveLibraries(merged, currentOs = io.ezz.launcher.core.minecraft.resolver.OperatingSystem.WINDOWS)
+
+        val classpathLibs = resolved.filter { !it.isNative }
+        val nativeLibs = resolved.filter { it.isNative }
+
+        // Must resolve GLFW 3.2.2 jar on classpath
+        assertTrue(classpathLibs.any { it.localPath.toString().contains("lwjgl-glfw-3.2.2.jar") }, "GLFW 3.2.2 must be resolved to classpath on Windows")
+        // Must resolve LWJGL 3.2.2 jar on classpath
+        assertTrue(classpathLibs.any { it.localPath.toString().contains("lwjgl-3.2.2.jar") }, "LWJGL 3.2.2 core must be resolved to classpath on Windows")
+        // Must resolve GLFW natives-windows for native extraction
+        assertTrue(nativeLibs.any { it.localPath.toString().contains("lwjgl-glfw-3.2.2-natives-windows.jar") }, "GLFW natives-windows must be resolved on Windows")
+        // Must resolve LWJGL core natives-windows
+        assertTrue(nativeLibs.any { it.localPath.toString().contains("lwjgl-3.2.2-natives-windows.jar") }, "LWJGL core natives-windows must be resolved on Windows")
+        // Must NOT have macOS 3.2.1 on Windows
+        assertFalse(classpathLibs.any { it.localPath.toString().contains("3.2.1") }, "macOS 3.2.1 must not be on Windows classpath")
     }
 
     @Test
