@@ -18,7 +18,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,7 +57,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -67,6 +69,7 @@ import io.ezz.launcher.core.minecraft.skin.MinecraftSkinManager
 import io.ezz.launcher.core.model.account.Account
 import io.ezz.launcher.core.model.account.AccountType
 import io.ezz.launcher.ui.audio.EzzAudioService
+import io.ezz.launcher.ui.theme.EzzTheme
 import io.ezz.launcher.ui.viewmodel.NavigationScreen
 
 data class NavItem(
@@ -75,6 +78,10 @@ data class NavItem(
     val icon: ImageVector,
     val badge: String? = null
 )
+
+private const val ITEM_HEIGHT_DP = 38
+private const val ITEM_GAP_DP = 3
+private const val ITEM_STEP_DP = ITEM_HEIGHT_DP + ITEM_GAP_DP // 41dp per item slot
 
 @Composable
 fun Sidebar(
@@ -87,6 +94,7 @@ fun Sidebar(
     modifier: Modifier = Modifier
 ) {
     var showAccountSwitcher by remember { mutableStateOf(false) }
+    val enableAnim = EzzTheme.state.enableAnimations
 
     val navItems = remember {
         listOf(
@@ -98,6 +106,48 @@ fun Sidebar(
             NavItem(NavigationScreen.SETTINGS, "Settings", Icons.Default.Settings)
         )
     }
+
+    // Determine current active item index
+    val activeIndex = remember(currentScreen) {
+        val found = navItems.indexOfFirst { it.screen == currentScreen }
+        if (found >= 0) found else 0
+    }
+
+    // Single unified hover & press tracking state across all navigation items
+    var hoveredIndex by remember { mutableStateOf<Int?>(null) }
+    var pressedIndex by remember { mutableStateOf<Int?>(null) }
+    var lastKnownHoverIndex by remember { mutableStateOf(activeIndex) }
+
+    // Centralized audio feedback on hover change (fires at most once per hover transition)
+    LaunchedEffect(hoveredIndex) {
+        if (hoveredIndex != null && hoveredIndex != activeIndex) {
+            EzzAudioService.playHover()
+        }
+    }
+
+    // GPU-friendly single active indicator vertical translation
+    val activeAnimDuration = if (enableAnim) 180 else 0
+    val activeOffsetY by animateDpAsState(
+        targetValue = (activeIndex * ITEM_STEP_DP).dp,
+        animationSpec = tween(durationMillis = activeAnimDuration, easing = FastOutSlowInEasing),
+        label = "SidebarActivePillY"
+    )
+
+    // GPU-friendly single hover highlight vertical translation & alpha
+    val hoverAnimDuration = if (enableAnim) 130 else 0
+    val targetHoverIndex = hoveredIndex ?: lastKnownHoverIndex
+    val hoverOffsetY by animateDpAsState(
+        targetValue = (targetHoverIndex * ITEM_STEP_DP).dp,
+        animationSpec = tween(durationMillis = hoverAnimDuration, easing = FastOutSlowInEasing),
+        label = "SidebarHoverPillY"
+    )
+
+    val hoverAlphaDuration = if (enableAnim) 110 else 0
+    val hoverAlpha by animateFloatAsState(
+        targetValue = if (hoveredIndex != null && hoveredIndex != activeIndex) 1f else 0f,
+        animationSpec = tween(durationMillis = hoverAlphaDuration, easing = FastOutSlowInEasing),
+        label = "SidebarHoverPillAlpha"
+    )
 
     Box(
         modifier = modifier
@@ -162,134 +212,196 @@ fun Sidebar(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Navigation Item List
-                navItems.forEach { item ->
-                    val isSelected = currentScreen == item.screen
-                    val interactionSource = remember { MutableInteractionSource() }
-                    val isHovered by interactionSource.collectIsHoveredAsState()
-
-                    val backgroundColor by animateColorAsState(
-                        targetValue = when {
-                            isSelected -> Color(0x1F8B5CF6)
-                            isHovered -> Color(0xFF161A24)
-                            else -> Color.Transparent
-                        },
-                        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
-                    )
-
-                    val borderColor by animateColorAsState(
-                        targetValue = when {
-                            isSelected -> Color(0x338B5CF6)
-                            isHovered -> Color(0xFF242A3B)
-                            else -> Color.Transparent
-                        },
-                        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
-                    )
-
-                    val textAndIconColor by animateColorAsState(
-                        targetValue = when {
-                            isSelected -> Color.White
-                            isHovered -> Color(0xFFF1F5F9)
-                            else -> Color(0xFF94A3B8)
-                        },
-                        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
-                    )
-
-                    val iconTint by animateColorAsState(
-                        targetValue = when {
-                            isSelected -> Color(0xFFA78BFA)
-                            isHovered -> Color(0xFFF1F5F9)
-                            else -> Color(0xFF64748B)
-                        },
-                        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
-                    )
-
-                    val indicatorHeight by animateDpAsState(
-                        targetValue = if (isSelected) 18.dp else 0.dp,
-                        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
-                    )
-
-                    val indicatorAlpha by animateFloatAsState(
-                        targetValue = if (isSelected) 1f else 0f,
-                        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
-                    )
-
+                // ==========================================================
+                // NAVIGATION ITEMS CONTAINER WITH UNIFIED SLIDING HIGHLIGHT
+                // ==========================================================
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    if (event.type == PointerEventType.Exit) {
+                                        hoveredIndex = null
+                                        pressedIndex = null
+                                    }
+                                }
+                            }
+                        }
+                ) {
+                    // 1. SINGLE SLIDING HOVER HIGHLIGHT LAYER (GPU translationY, zero animation queues)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(38.dp)
-                            .padding(vertical = 1.5.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(backgroundColor)
-                            .border(1.dp, borderColor, RoundedCornerShape(8.dp))
-                            .clickable(
-                                interactionSource = interactionSource,
-                                indication = null,
-                                onClick = {
-                                    EzzAudioService.playSelect()
-                                    onNavigate(item.screen)
-                                }
-                            )
-                    ) {
-                        LaunchedEffect(isHovered) {
-                            if (isHovered && !isSelected) {
-                                EzzAudioService.playHover()
+                            .height(ITEM_HEIGHT_DP.dp)
+                            .graphicsLayer {
+                                translationY = hoverOffsetY.toPx()
+                                alpha = hoverAlpha
                             }
-                        }
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF161A24))
+                            .border(1.dp, Color(0xFF242A3B), RoundedCornerShape(8.dp))
+                    )
 
-                        // Left active indicator bar positioned without shifting inner content
+                    // 2. SINGLE SLIDING ACTIVE INDICATOR PILL LAYER (GPU translationY)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(ITEM_HEIGHT_DP.dp)
+                            .graphicsLayer {
+                                translationY = activeOffsetY.toPx()
+                            }
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x1F8B5CF6))
+                            .border(1.dp, Color(0x338B5CF6), RoundedCornerShape(8.dp))
+                    ) {
+                        // Left purple active accent bar
                         Box(
                             modifier = Modifier
                                 .align(Alignment.CenterStart)
                                 .width(3.dp)
-                                .height(indicatorHeight)
+                                .height(18.dp)
                                 .clip(RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp))
-                                .background(Color(0xFF8B5CF6).copy(alpha = indicatorAlpha))
+                                .background(Color(0xFF8B5CF6))
                         )
+                    }
 
-                        // Inner content row with stationary coordinates (zero layout shift)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(start = 12.dp, end = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Optically centered icon container
-                            Box(
-                                modifier = Modifier.size(20.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = item.icon,
-                                    contentDescription = item.title,
-                                    tint = iconTint,
-                                    modifier = Modifier.size(17.dp)
-                                )
-                            }
+                    // 3. NAVIGATION ITEMS CONTENT LAYER (Completely stationary, zero layout shift)
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(ITEM_GAP_DP.dp)
+                    ) {
+                        navItems.forEachIndexed { index, item ->
+                            val isSelected = index == activeIndex
+                            val isHovered = index == hoveredIndex
+                            val isPressed = index == pressedIndex
 
-                            Spacer(modifier = Modifier.width(10.dp))
-
-                            Text(
-                                text = item.title,
-                                color = textAndIconColor,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 13.sp,
-                                modifier = Modifier.weight(1f)
+                            val textAndIconColor by animateColorAsState(
+                                targetValue = when {
+                                    isSelected -> Color.White
+                                    isHovered -> Color(0xFFF1F5F9)
+                                    else -> Color(0xFF94A3B8)
+                                },
+                                animationSpec = tween(
+                                    durationMillis = if (enableAnim) 120 else 0,
+                                    easing = FastOutSlowInEasing
+                                ),
+                                label = "SidebarItemTextColor"
                             )
 
-                            if (item.badge != null) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(Color(0xFF1E2330))
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = item.badge,
-                                        color = Color.White,
-                                        fontSize = 9.5.sp,
-                                        fontWeight = FontWeight.Bold
+                            val iconTint by animateColorAsState(
+                                targetValue = when {
+                                    isSelected -> Color(0xFFA78BFA)
+                                    isHovered -> Color(0xFFF1F5F9)
+                                    else -> Color(0xFF64748B)
+                                },
+                                animationSpec = tween(
+                                    durationMillis = if (enableAnim) 120 else 0,
+                                    easing = FastOutSlowInEasing
+                                ),
+                                label = "SidebarItemIconColor"
+                            )
+
+                            val pressScale by animateFloatAsState(
+                                targetValue = if (isPressed) 0.985f else 1.0f,
+                                animationSpec = tween(
+                                    durationMillis = if (enableAnim) 60 else 0,
+                                    easing = FastOutSlowInEasing
+                                ),
+                                label = "SidebarItemPressScale"
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(ITEM_HEIGHT_DP.dp)
+                                    .graphicsLayer {
+                                        scaleX = pressScale
+                                        scaleY = pressScale
+                                    }
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .pointerInput(item.screen) {
+                                        awaitPointerEventScope {
+                                            while (true) {
+                                                val event = awaitPointerEvent()
+                                                when (event.type) {
+                                                    PointerEventType.Enter -> {
+                                                        hoveredIndex = index
+                                                        lastKnownHoverIndex = index
+                                                    }
+                                                    PointerEventType.Exit -> {
+                                                        if (hoveredIndex == index) {
+                                                            hoveredIndex = null
+                                                        }
+                                                        if (pressedIndex == index) {
+                                                            pressedIndex = null
+                                                        }
+                                                    }
+                                                    PointerEventType.Press -> {
+                                                        pressedIndex = index
+                                                    }
+                                                    PointerEventType.Release -> {
+                                                        pressedIndex = null
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = {
+                                            EzzAudioService.playSelect()
+                                            onNavigate(item.screen)
+                                        }
                                     )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(start = 12.dp, end = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Fixed optical icon centering container
+                                    Box(
+                                        modifier = Modifier.size(20.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = item.icon,
+                                            contentDescription = item.title,
+                                            tint = iconTint,
+                                            modifier = Modifier.size(17.dp)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(10.dp))
+
+                                    Text(
+                                        text = item.title,
+                                        color = textAndIconColor,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        fontSize = 13.sp,
+                                        maxLines = 1,
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    if (item.badge != null) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(Color(0xFF1E2330))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = item.badge,
+                                                color = Color.White,
+                                                fontSize = 9.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -312,10 +424,10 @@ fun Sidebar(
                     // Animated Account Switcher Popup
                     AnimatedVisibility(
                         visible = showAccountSwitcher,
-                        enter = fadeIn(tween(180, easing = FastOutSlowInEasing)) +
-                                expandVertically(tween(180, easing = FastOutSlowInEasing)),
-                        exit = fadeOut(tween(140, easing = FastOutSlowInEasing)) +
-                                shrinkVertically(tween(140, easing = FastOutSlowInEasing))
+                        enter = fadeIn(tween(if (enableAnim) 180 else 0, easing = FastOutSlowInEasing)) +
+                                expandVertically(tween(if (enableAnim) 180 else 0, easing = FastOutSlowInEasing)),
+                        exit = fadeOut(tween(if (enableAnim) 140 else 0, easing = FastOutSlowInEasing)) +
+                                shrinkVertically(tween(if (enableAnim) 140 else 0, easing = FastOutSlowInEasing))
                     ) {
                         Box(
                             modifier = Modifier
@@ -393,12 +505,12 @@ fun Sidebar(
                                     )
 
                                     otherAccounts.forEach { otherAcc ->
-                                        val otherInteraction = remember { MutableInteractionSource() }
-                                        val isOtherHovered by otherInteraction.collectIsHoveredAsState()
+                                        var isOtherHovered by remember { mutableStateOf(false) }
 
                                         val itemBg by animateColorAsState(
                                             targetValue = if (isOtherHovered) Color(0xFF181C26) else Color.Transparent,
-                                            animationSpec = tween(150, easing = FastOutSlowInEasing)
+                                            animationSpec = tween(if (enableAnim) 140 else 0, easing = FastOutSlowInEasing),
+                                            label = "SidebarOtherAccBg"
                                         )
 
                                         Row(
@@ -408,8 +520,19 @@ fun Sidebar(
                                                 .fillMaxWidth()
                                                 .clip(RoundedCornerShape(6.dp))
                                                 .background(itemBg)
+                                                .pointerInput(otherAcc.id) {
+                                                    awaitPointerEventScope {
+                                                        while (true) {
+                                                            val event = awaitPointerEvent()
+                                                            when (event.type) {
+                                                                PointerEventType.Enter -> isOtherHovered = true
+                                                                PointerEventType.Exit -> isOtherHovered = false
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                                 .clickable(
-                                                    interactionSource = otherInteraction,
+                                                    interactionSource = remember { MutableInteractionSource() },
                                                     indication = null,
                                                     onClick = {
                                                         onSelectAccount?.invoke(otherAcc)
@@ -451,11 +574,11 @@ fun Sidebar(
                                         .background(Color(0xFF1A1F2C))
                                 )
 
-                                val manageInteraction = remember { MutableInteractionSource() }
-                                val isManageHovered by manageInteraction.collectIsHoveredAsState()
+                                var isManageHovered by remember { mutableStateOf(false) }
                                 val manageBg by animateColorAsState(
                                     targetValue = if (isManageHovered) Color(0x1F8B5CF6) else Color.Transparent,
-                                    animationSpec = tween(150, easing = FastOutSlowInEasing)
+                                    animationSpec = tween(if (enableAnim) 140 else 0, easing = FastOutSlowInEasing),
+                                    label = "SidebarManageAccBg"
                                 )
 
                                 Row(
@@ -465,8 +588,19 @@ fun Sidebar(
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(6.dp))
                                         .background(manageBg)
+                                        .pointerInput(Unit) {
+                                            awaitPointerEventScope {
+                                                while (true) {
+                                                    val event = awaitPointerEvent()
+                                                    when (event.type) {
+                                                        PointerEventType.Enter -> isManageHovered = true
+                                                        PointerEventType.Exit -> isManageHovered = false
+                                                    }
+                                                }
+                                            }
+                                        }
                                         .clickable(
-                                            interactionSource = manageInteraction,
+                                            interactionSource = remember { MutableInteractionSource() },
                                             indication = null,
                                             onClick = {
                                                 showAccountSwitcher = false
@@ -493,20 +627,27 @@ fun Sidebar(
                     }
 
                     // Active Account Card (Bottom Left)
-                    val accountInteraction = remember { MutableInteractionSource() }
-                    val isAccountHovered by accountInteraction.collectIsHoveredAsState()
+                    var isAccountHovered by remember { mutableStateOf(false) }
+                    var isAccountPressed by remember { mutableStateOf(false) }
 
                     val accountBg by animateColorAsState(
-                        targetValue = if (isAccountHovered || showAccountSwitcher) Color(0xFF161A24) else Color(0xFF10131A),
-                        animationSpec = tween(180, easing = FastOutSlowInEasing)
+                        targetValue = when {
+                            isAccountPressed -> Color(0xFF1B202D)
+                            isAccountHovered || showAccountSwitcher -> Color(0xFF161A24)
+                            else -> Color(0xFF10131A)
+                        },
+                        animationSpec = tween(if (enableAnim) 150 else 0, easing = FastOutSlowInEasing),
+                        label = "SidebarAccountCardBg"
                     )
                     val accountBorder by animateColorAsState(
                         targetValue = if (isAccountHovered || showAccountSwitcher) Color(0xFF8B5CF6).copy(alpha = 0.5f) else Color(0xFF1B1F2C),
-                        animationSpec = tween(180, easing = FastOutSlowInEasing)
+                        animationSpec = tween(if (enableAnim) 150 else 0, easing = FastOutSlowInEasing),
+                        label = "SidebarAccountCardBorder"
                     )
                     val chevronRotation by animateFloatAsState(
                         targetValue = if (showAccountSwitcher) 180f else 0f,
-                        animationSpec = tween(180, easing = FastOutSlowInEasing)
+                        animationSpec = tween(if (enableAnim) 150 else 0, easing = FastOutSlowInEasing),
+                        label = "SidebarAccountChevron"
                     )
 
                     Box(
@@ -515,8 +656,24 @@ fun Sidebar(
                             .clip(RoundedCornerShape(9.dp))
                             .background(accountBg)
                             .border(1.dp, accountBorder, RoundedCornerShape(9.dp))
+                            .pointerInput(Unit) {
+                                awaitPointerEventScope {
+                                    while (true) {
+                                        val event = awaitPointerEvent()
+                                        when (event.type) {
+                                            PointerEventType.Enter -> isAccountHovered = true
+                                            PointerEventType.Exit -> {
+                                                isAccountHovered = false
+                                                isAccountPressed = false
+                                            }
+                                            PointerEventType.Press -> isAccountPressed = true
+                                            PointerEventType.Release -> isAccountPressed = false
+                                        }
+                                    }
+                                }
+                            }
                             .clickable(
-                                interactionSource = accountInteraction,
+                                interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
                                 onClick = { showAccountSwitcher = !showAccountSwitcher }
                             )
@@ -531,9 +688,9 @@ fun Sidebar(
                         AnimatedContent(
                             targetState = account,
                             transitionSpec = {
-                                (fadeIn(tween(160, easing = FastOutSlowInEasing)) +
-                                 slideInVertically(tween(160, easing = FastOutSlowInEasing)) { 6 })
-                                    .togetherWith(fadeOut(tween(120, easing = FastOutSlowInEasing)))
+                                (fadeIn(tween(if (enableAnim) 160 else 0, easing = FastOutSlowInEasing)) +
+                                 slideInVertically(tween(if (enableAnim) 160 else 0, easing = FastOutSlowInEasing)) { 6 })
+                                    .togetherWith(fadeOut(tween(if (enableAnim) 120 else 0, easing = FastOutSlowInEasing)))
                             },
                             label = "SidebarAccountTransition"
                         ) { currentAcc ->
@@ -612,4 +769,5 @@ fun Sidebar(
         )
     }
 }
+
 
