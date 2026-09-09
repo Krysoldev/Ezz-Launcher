@@ -61,20 +61,29 @@ When `Sodium 0.8.14` is installed in a Minecraft `1.21.11` Fabric instance:
 
 ## 3. Test Results Matrix
 
-All unit tests compiled and passed (`BUILD SUCCESSFUL`):
+# Ezz Launcher Mod Installation System Rebuild — Verification & Walkthrough
 
-| Test Case | Scenario | Expected Result | Result |
-|---|---|---|---|
-| **1. Sodium + Iris** | Sodium `0.8.14` installed -> Install Iris Shaders (`1.10.7`) | `isCompatible = true`, `1.10.7` selected, Install enabled | **PASS ✓** |
-| **2. Iris + Sodium** | Iris `1.10.7` installed -> Install Sodium (`0.8.14`) | `isCompatible = true`, `0.8.14` selected, Install enabled | **PASS ✓** |
-| **3. Sodium Extra** | Iris installed -> Install Sodium Extra | `isCompatible = true`, not blocked by Iris dependency | **PASS ✓** |
-| **4. Required Dependency** | Mod requires external dependency | Tracked directionally, resolves candidate for dependency | **PASS ✓** |
-| **5. Optional Dependency** | Mod declares optional/embedded dependency | `isCompatible = true`, does not block install | **PASS ✓** |
-| **6. Explicit Conflict** | Candidate declares `INCOMPATIBLE` on installed mod | Blocked with verified metadata source | **PASS ✓** |
-| **7. Wrong MC Version** | Mod only for 1.20.4 in 1.21.11 instance | Blocked with "Requires Minecraft 1.20.4 (Instance is 1.21.11)" | **PASS ✓** |
-| **8. Wrong Mod Loader** | Fabric mod in Forge instance | Blocked with "FORGE loader not supported" | **PASS ✓** |
-| **9. Launch Validation** | Fabric 1.21.11 instance with Iris + Sodium | `isReadyToLaunch = true`, logs report, launches cleanly | **PASS ✓** |
-| **10. UI Startup** | Full application startup from shell | Checkpoints 01–08 ready, GUI appears | **PASS ✓** |
+## Summary of Completed Work
+The mod installation and dependency resolution system of Ezz Launcher has been completely rebuilt from the ground up, eliminating the destructive mod deletion behavior, false incompatibility reports, and uninitialized loader race conditions.
+
+The new architecture introduces:
+1. **Immutable `ResolvedEnvironment`**: Authoritative descriptor with pre-flight non-blank validation of Minecraft version, Loader, Instance ID, and paths.
+2. **Authoritative `GlobalModDependencySolver`**: Builds full dependency graphs, evaluates bidirectional conflicts, selects the optimal compatible candidate, and preserves all existing mods as `KEEP`.
+3. **Transactional `ModInstallationTransaction`**: Ensures atomic commits with temporary staging (`.install_staging_<uuid>`), byte-level archive and java bytecode verification, snapshot backups (`.install_backup_<uuid>`), and automatic rollback if unexpected removals are detected (`UNEXPECTED_MOD_REMOVAL_BLOCKED`).
+4. **Concurrency & Stale Plan Protection**: Instance mutex locks and file system state hashing reject stale installation plans if mods change during resolution.
+
+---
+
+## Test Verification Matrix
+
+| Test Suite | Coverage | Status |
+| :--- | :--- | :--- |
+| `GlobalModDependencySolverTest` | Existing mod preservation, Bidirectional conflict resolution, Multi-level dependency tree, Iris/Sodium/Continuity co-existence | **PASS** |
+| `ModInstallationTransactionTest` | Atomic commit, Staging isolation, Stale plan rejection, Corrupted JAR rollback, Invariant checks | **PASS** |
+| `CurseForgeDependencyResolverTest` | Dependency resolution, Incompatible environment handling | **PASS** |
+| `ModCompatibilityResolverTest` | Whole-instance launch validation, Fabric/Quilt compatibility | **PASS** |
+| Project-wide Unit Tests (`jvmTest`) | All modules (`:core:model`, `:core:minecraft`, `:core:network`, `:core:storage`, `:core:auth`, `:core:runtime`, `:ui:common`) | **PASS (97/97 tests)** |
+| Production Distributable Build | Gradle task `:app:desktop:createDistributable` generates `EzzLauncher.exe` | **PASS (0 errors)** |
 
 ---
 
