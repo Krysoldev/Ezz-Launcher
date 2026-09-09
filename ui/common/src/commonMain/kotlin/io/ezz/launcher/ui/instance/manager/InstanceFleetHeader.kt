@@ -15,8 +15,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,8 +22,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,9 +51,9 @@ fun InstanceFleetHeader(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left: Title & Live Stats
+            // Left: Title & Running Status
             Row(
-                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -75,28 +71,8 @@ fun InstanceFleetHeader(
                     )
                 }
 
-                // Stats Pills
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    FleetStatBadge(
-                        label = "Total",
-                        value = totalInstances.toString(),
-                        icon = Icons.Default.Layers
-                    )
-
-                    if (runningCount > 0) {
-                        FleetRunningBadge(runningCount = runningCount)
-                    }
-
-                    if (totalPlaytimeHours > 0) {
-                        FleetStatBadge(
-                            label = "Playtime",
-                            value = "${totalPlaytimeHours}h",
-                            icon = Icons.Default.Schedule
-                        )
-                    }
+                if (runningCount > 0) {
+                    FleetRunningBadge(runningCount = runningCount)
                 }
             }
 
@@ -146,36 +122,6 @@ fun InstanceFleetHeader(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun FleetStatBadge(
-    label: String,
-    value: String,
-    icon: ImageVector
-) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(Color(0xFF10131A))
-            .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(6.dp))
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = Color(0xFF94A3B8),
-            modifier = Modifier.size(13.dp)
-        )
-        Text(
-            text = "$label: $value",
-            color = Color(0xFFCBD5E1),
-            fontSize = 11.sp,
-            fontFamily = FontFamily.Monospace
-        )
     }
 }
 
