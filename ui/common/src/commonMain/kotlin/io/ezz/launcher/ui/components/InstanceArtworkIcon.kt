@@ -31,6 +31,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
@@ -157,11 +158,25 @@ fun InstanceArtworkIcon(
                 filterQuality = FilterQuality.High
             )
         } else {
-            // Isometric Minecraft 3D block rendering
-            IsometricBlockCanvas(
-                loaderType = instance.loaderType,
-                modifier = Modifier.size(size * 0.72f)
-            )
+            val defaultBmp = InstanceArtworkAssets.defaultIcon
+            if (defaultBmp != null) {
+                Image(
+                    bitmap = defaultBmp,
+                    contentDescription = instance.name,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(cornerRadius))
+                        .padding(size * 0.06f),
+                    contentScale = ContentScale.Fit,
+                    filterQuality = FilterQuality.High
+                )
+            } else {
+                // Fallback: Isometric Minecraft 3D block vector canvas rendering
+                IsometricBlockCanvas(
+                    loaderType = instance.loaderType,
+                    modifier = Modifier.size(size * 0.72f)
+                )
+            }
         }
 
         // Hover edit overlay
@@ -373,3 +388,22 @@ fun InstanceMetadataRow(
         }
     }
 }
+
+/**
+ * Cached singleton resources for instance artwork.
+ * Decodes the high-resolution 3D isometric Minecraft grass block default logo once into an ImageBitmap,
+ * delivering instant rendering, zero garbage collection thrashing, and crisp downscaling.
+ */
+internal object InstanceArtworkAssets {
+    val defaultIcon: ImageBitmap? by lazy {
+        try {
+            val stream = InstanceArtworkAssets::class.java.classLoader?.getResourceAsStream("default_instance_icon.png")
+                ?: Thread.currentThread().contextClassLoader?.getResourceAsStream("default_instance_icon.png")
+            val bytes = stream?.use { it.readBytes() }
+            ImageDecoder.decodeBytes(bytes)
+        } catch (_: Throwable) {
+            null
+        }
+    }
+}
+
