@@ -201,7 +201,7 @@ fun InstanceManagerScreen(
                                     viewModel.duplicateInstance(instance.id, "${instance.name} (Copy)")
                                 },
                                 onExport = {
-                                    // Trigger export flow
+                                    viewModel.openExportModpack(instance)
                                 },
                                 onRename = { instanceToRename = instance },
                                 onRepair = { viewModel.repairInstance(instance) },
@@ -232,7 +232,7 @@ fun InstanceManagerScreen(
                                     viewModel.duplicateInstance(instance.id, "${instance.name} (Copy)")
                                 },
                                 onExport = {
-                                    // Trigger export flow
+                                    viewModel.openExportModpack(instance)
                                 },
                                 onRename = { instanceToRename = instance },
                                 onRepair = { viewModel.repairInstance(instance) },
@@ -308,7 +308,7 @@ fun InstanceManagerScreen(
                                     viewModel.duplicateInstance(instance.id, "${instance.name} (Copy)")
                                 },
                                 onExport = {
-                                    // Trigger export flow
+                                    viewModel.openExportModpack(instance)
                                 },
                                 onRename = { instanceToRename = instance },
                                 onRepair = { viewModel.repairInstance(instance) },

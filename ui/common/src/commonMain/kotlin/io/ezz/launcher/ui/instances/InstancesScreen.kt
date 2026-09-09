@@ -265,6 +265,7 @@ private fun LegacyInstancesScreenInternal(
                             onOpenDetails = { viewModel.openInstanceManager(instance) },
                             onEdit = { viewModel.showEditInstanceDialog.value = instance },
                             onDuplicate = { viewModel.duplicateInstance(instance.id, "${instance.name} (Copy)") },
+                            onExport = { viewModel.openExportModpack(instance) },
                             onOpenFolder = { viewModel.openInstanceFolder(instance.id) },
                             onDelete = { instanceToDelete = instance }
                         )
@@ -647,6 +648,7 @@ private fun InstanceCard(
     onOpenDetails: () -> Unit,
     onEdit: () -> Unit,
     onDuplicate: () -> Unit,
+    onExport: () -> Unit = {},
     onOpenFolder: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -858,6 +860,14 @@ private fun InstanceCard(
                                 onClick = {
                                     isMenuOpen = false
                                     onDuplicate()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Export Modpack (.mrpack)", color = Color(0xFFF8FAFC)) },
+                                leadingIcon = { Icon(Icons.Default.FileDownload, null, tint = Color(0xFF94A3B8)) },
+                                onClick = {
+                                    isMenuOpen = false
+                                    onExport()
                                 }
                             )
                             DropdownMenuItem(
