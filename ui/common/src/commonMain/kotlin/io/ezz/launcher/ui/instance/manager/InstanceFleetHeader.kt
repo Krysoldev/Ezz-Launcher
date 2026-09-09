@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.GridView
@@ -73,6 +74,8 @@ fun InstanceFleetHeader(
     onViewModeChange: (InstanceViewMode) -> Unit,
     onCreateInstance: () -> Unit,
     onImportModpack: () -> Unit,
+    activeDownloadsCount: Int = 0,
+    onOpenActivityDrawer: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var sortMenuOpen by remember { mutableStateOf(false) }
@@ -135,11 +138,35 @@ fun InstanceFleetHeader(
                 }
             }
 
-            // Right: Primary CTAs (Create & Import)
+            // Right: Primary CTAs (Create, Import, & Activity Drawer)
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                if (activeDownloadsCount > 0) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF8B5CF6).copy(alpha = 0.15f))
+                            .border(1.dp, Color(0xFF8B5CF6), RoundedCornerShape(8.dp))
+                            .clickable(onClick = onOpenActivityDrawer)
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.Default.FileDownload, contentDescription = null, tint = Color(0xFF8B5CF6), modifier = Modifier.size(16.dp))
+                            Text(
+                                text = "Downloads ($activeDownloadsCount)",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
                 EzzButton(
                     text = "Import Modpack",
                     icon = Icons.Default.FileDownload,
@@ -257,18 +284,34 @@ fun InstanceFleetHeader(
                         expanded = sortMenuOpen,
                         onDismissRequest = { sortMenuOpen = false },
                         modifier = Modifier
-                            .background(Color(0xFF0C0E14))
-                            .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(8.dp))
+                            .background(Color(0xFF10131A))
+                            .border(1.dp, Color(0xFF1E2436), RoundedCornerShape(10.dp))
                     ) {
                         InstanceSortOrder.entries.forEach { sort ->
+                            val isChosen = selectedSort == sort
                             DropdownMenuItem(
                                 text = {
-                                    Text(
-                                        text = sort.label,
-                                        color = if (selectedSort == sort) Color(0xFF8B5CF6) else Color(0xFFE2E8F0),
-                                        fontSize = 13.sp,
-                                        fontWeight = if (selectedSort == sort) FontWeight.SemiBold else FontWeight.Normal
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = sort.label,
+                                            color = if (isChosen) Color(0xFF8B5CF6) else Color(0xFFE2E8F0),
+                                            fontSize = 13.sp,
+                                            fontWeight = if (isChosen) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                        if (isChosen) {
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = Color(0xFF8B5CF6),
+                                                modifier = Modifier.size(15.dp)
+                                            )
+                                        }
+                                    }
                                 },
                                 onClick = {
                                     onSortSelect(sort)

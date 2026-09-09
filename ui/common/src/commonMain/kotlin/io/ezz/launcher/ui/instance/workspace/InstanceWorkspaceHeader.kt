@@ -70,6 +70,8 @@ fun InstanceWorkspaceHeader(
     onExport: () -> Unit,
     onRepair: () -> Unit,
     onDelete: () -> Unit,
+    activeDownloadsCount: Int = 0,
+    onOpenActivityDrawer: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var isMenuOpen by remember { mutableStateOf(false) }
@@ -127,11 +129,39 @@ fun InstanceWorkspaceHeader(
                 )
             }
 
-            // Right Quick Actions: Folder, Context Menu
+            // Right Quick Actions: Activity Drawer, Folder, Context Menu
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                if (activeDownloadsCount > 0) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF8B5CF6).copy(alpha = 0.15f))
+                            .border(1.dp, Color(0xFF8B5CF6).copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                            .clickable { onOpenActivityDrawer() }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                color = Color(0xFF8B5CF6),
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = "$activeDownloadsCount downloading",
+                                color = Color(0xFFC4B5FD),
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+
                 EzzButton(
                     text = "Open Folder",
                     icon = Icons.Default.FolderOpen,

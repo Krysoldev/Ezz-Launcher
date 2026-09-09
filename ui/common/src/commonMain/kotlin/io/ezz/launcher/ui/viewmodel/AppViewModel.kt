@@ -353,6 +353,23 @@ class AppViewModel(
     // Diagnostic Error Dialog State
     val launchErrorDialogData = MutableStateFlow<LaunchErrorData?>(null)
 
+    // Unified Content Installation & Queue Management (V2 Rebuild)
+    val contentInstallationManager: io.ezz.launcher.ui.instance.installation.service.ContentInstallationManager by lazy {
+        io.ezz.launcher.ui.instance.installation.service.ContentInstallationManager(
+            curseForgeService = curseForge,
+            getInstanceDir = { id -> pathProvider.getInstanceDirectory(id).toFile() },
+            getInstalledMods = { _ -> manageMods.value },
+            onContentChanged = { id ->
+                refreshManageData()
+                refreshMods(id)
+            },
+            scope = scope
+        )
+    }
+
+    val activeLocalImportRequest = MutableStateFlow<io.ezz.launcher.ui.instance.installation.model.LocalImportRequest?>(null)
+    val selectedCurseForgeModForDetails = MutableStateFlow<io.ezz.launcher.core.model.curseforge.CurseForgeMod?>(null)
+
     // Authoritative Unified Vault Skin State (Single Source of Truth)
     private val _selectedVaultSkinId = MutableStateFlow<String?>(null)
     val selectedVaultSkinId: StateFlow<String?> = _selectedVaultSkinId.asStateFlow()
@@ -2676,8 +2693,12 @@ class AppViewModel(
     }
 
     // ==========================================================
-    // CONTEXT-SPECIFIC LOCAL IMPORTS
+    // CONTEXT-SPECIFIC LOCAL IMPORTS (V2 VALIDATED DIALOG)
     // ==========================================================
+
+    fun installCurseForgeModV2(instance: Instance, mod: CurseForgeMod, chosenFile: CurseForgeFile? = null) {
+        contentInstallationManager.startCurseForgeModInstall(instance, mod, chosenFile)
+    }
 
     fun importLocalMod(instance: Instance) {
         openFilePicker(
@@ -2686,68 +2707,13 @@ class AppViewModel(
             allowedExtensions = setOf("jar"),
             onFileSelected = { file ->
                 if (file == null) return@openFilePicker
-                scope.launch(Dispatchers.IO) {
-                    if (!file.name.endsWith(".jar", ignoreCase = true) || !file.exists() || !file.isFile || file.length() <= 0) {
-                        withContext(Dispatchers.Main) {
-                            ToastManager.show("Invalid Mod File", "The selected file is not a valid .jar file.", ToastType.ERROR)
-                        }
-                        return@launch
-                    }
-
-                    try {
-                        java.util.zip.ZipFile(file).use {}
-                    } catch (e: Throwable) {
-                        withContext(Dispatchers.Main) {
-                            ToastManager.show("Invalid Mod File", "The selected .jar file is corrupted or unreadable.", ToastType.ERROR)
-                        }
-                        return@launch
-                    }
-
-                    val modsDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("mods").toFile()
-                    modsDir.mkdirs()
-                    val targetFile = java.io.File(modsDir, file.name)
-
-                    if (targetFile.exists()) {
-                        withContext(Dispatchers.Main) {
-                            fileConflictState.value = FileConflictState(
-                                title = "Mod Already Exists",
-                                message = "Mod '${file.name}' already exists in this instance. Do you want to replace it?",
-                                onConfirmReplace = {
-                                    fileConflictState.value = null
-                                    scope.launch(Dispatchers.IO) {
-                                        try {
-                                            file.copyTo(targetFile, overwrite = true)
-                                            withContext(Dispatchers.Main) {
-                                                refreshManageData()
-                                                ToastManager.show("Mod Imported", "Mod imported successfully.", ToastType.SUCCESS)
-                                            }
-                                        } catch (e: Throwable) {
-                                            withContext(Dispatchers.Main) {
-                                                ToastManager.show("Import Failed", e.message ?: "Failed to replace file", ToastType.ERROR)
-                                            }
-                                        }
-                                    }
-                                },
-                                onCancel = {
-                                    fileConflictState.value = null
-                                }
-                            )
-                        }
-                        return@launch
-                    }
-
-                    try {
-                        file.copyTo(targetFile, overwrite = false)
-                        withContext(Dispatchers.Main) {
-                            refreshManageData()
-                            ToastManager.show("Mod Imported", "Mod imported successfully.", ToastType.SUCCESS)
-                        }
-                    } catch (e: Throwable) {
-                        withContext(Dispatchers.Main) {
-                            ToastManager.show("Import Failed", e.message ?: "Failed to copy mod file", ToastType.ERROR)
-                        }
-                    }
-                }
+                val modsDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("mods").toFile()
+                activeLocalImportRequest.value = io.ezz.launcher.ui.instance.installation.model.LocalImportRequest(
+                    file = file,
+                    contentType = io.ezz.launcher.ui.instance.installation.model.ContentType.MOD,
+                    instance = instance,
+                    targetDirectory = modsDir
+                )
             }
         )
     }
@@ -2759,68 +2725,13 @@ class AppViewModel(
             allowedExtensions = setOf("zip"),
             onFileSelected = { file ->
                 if (file == null) return@openFilePicker
-                scope.launch(Dispatchers.IO) {
-                    if (!file.name.endsWith(".zip", ignoreCase = true) || !file.exists() || !file.isFile || file.length() <= 0) {
-                        withContext(Dispatchers.Main) {
-                            ToastManager.show("Invalid Resource Pack", "The selected file is not a valid .zip file.", ToastType.ERROR)
-                        }
-                        return@launch
-                    }
-
-                    try {
-                        java.util.zip.ZipFile(file).use {}
-                    } catch (e: Throwable) {
-                        withContext(Dispatchers.Main) {
-                            ToastManager.show("Invalid Resource Pack", "The selected .zip file is corrupted or unreadable.", ToastType.ERROR)
-                        }
-                        return@launch
-                    }
-
-                    val packsDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("resourcepacks").toFile()
-                    packsDir.mkdirs()
-                    val targetFile = java.io.File(packsDir, file.name)
-
-                    if (targetFile.exists()) {
-                        withContext(Dispatchers.Main) {
-                            fileConflictState.value = FileConflictState(
-                                title = "Resource Pack Already Exists",
-                                message = "Resource pack '${file.name}' already exists in this instance. Do you want to replace it?",
-                                onConfirmReplace = {
-                                    fileConflictState.value = null
-                                    scope.launch(Dispatchers.IO) {
-                                        try {
-                                            file.copyTo(targetFile, overwrite = true)
-                                            withContext(Dispatchers.Main) {
-                                                refreshManageData()
-                                                ToastManager.show("Resource Pack Imported", "Resource pack imported successfully.", ToastType.SUCCESS)
-                                            }
-                                        } catch (e: Throwable) {
-                                            withContext(Dispatchers.Main) {
-                                                ToastManager.show("Import Failed", e.message ?: "Failed to replace file", ToastType.ERROR)
-                                            }
-                                        }
-                                    }
-                                },
-                                onCancel = {
-                                    fileConflictState.value = null
-                                }
-                            )
-                        }
-                        return@launch
-                    }
-
-                    try {
-                        file.copyTo(targetFile, overwrite = false)
-                        withContext(Dispatchers.Main) {
-                            refreshManageData()
-                            ToastManager.show("Resource Pack Imported", "Resource pack imported successfully.", ToastType.SUCCESS)
-                        }
-                    } catch (e: Throwable) {
-                        withContext(Dispatchers.Main) {
-                            ToastManager.show("Import Failed", e.message ?: "Failed to copy resource pack", ToastType.ERROR)
-                        }
-                    }
-                }
+                val packsDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("resourcepacks").toFile()
+                activeLocalImportRequest.value = io.ezz.launcher.ui.instance.installation.model.LocalImportRequest(
+                    file = file,
+                    contentType = io.ezz.launcher.ui.instance.installation.model.ContentType.RESOURCE_PACK,
+                    instance = instance,
+                    targetDirectory = packsDir
+                )
             }
         )
     }
@@ -2832,68 +2743,13 @@ class AppViewModel(
             allowedExtensions = setOf("zip"),
             onFileSelected = { file ->
                 if (file == null) return@openFilePicker
-                scope.launch(Dispatchers.IO) {
-                    if (!file.name.endsWith(".zip", ignoreCase = true) || !file.exists() || !file.isFile || file.length() <= 0) {
-                        withContext(Dispatchers.Main) {
-                            ToastManager.show("Invalid Shader Pack", "The selected file is not a valid .zip file.", ToastType.ERROR)
-                        }
-                        return@launch
-                    }
-
-                    try {
-                        java.util.zip.ZipFile(file).use {}
-                    } catch (e: Throwable) {
-                        withContext(Dispatchers.Main) {
-                            ToastManager.show("Invalid Shader Pack", "The selected .zip file is corrupted or unreadable.", ToastType.ERROR)
-                        }
-                        return@launch
-                    }
-
-                    val shadersDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("shaderpacks").toFile()
-                    shadersDir.mkdirs()
-                    val targetFile = java.io.File(shadersDir, file.name)
-
-                    if (targetFile.exists()) {
-                        withContext(Dispatchers.Main) {
-                            fileConflictState.value = FileConflictState(
-                                title = "Shader Pack Already Exists",
-                                message = "Shader pack '${file.name}' already exists in this instance. Do you want to replace it?",
-                                onConfirmReplace = {
-                                    fileConflictState.value = null
-                                    scope.launch(Dispatchers.IO) {
-                                        try {
-                                            file.copyTo(targetFile, overwrite = true)
-                                            withContext(Dispatchers.Main) {
-                                                refreshManageData()
-                                                ToastManager.show("Shader Imported", "Shader imported successfully.", ToastType.SUCCESS)
-                                            }
-                                        } catch (e: Throwable) {
-                                            withContext(Dispatchers.Main) {
-                                                ToastManager.show("Import Failed", e.message ?: "Failed to replace file", ToastType.ERROR)
-                                            }
-                                        }
-                                    }
-                                },
-                                onCancel = {
-                                    fileConflictState.value = null
-                                }
-                            )
-                        }
-                        return@launch
-                    }
-
-                    try {
-                        file.copyTo(targetFile, overwrite = false)
-                        withContext(Dispatchers.Main) {
-                            refreshManageData()
-                            ToastManager.show("Shader Imported", "Shader imported successfully.", ToastType.SUCCESS)
-                        }
-                    } catch (e: Throwable) {
-                        withContext(Dispatchers.Main) {
-                            ToastManager.show("Import Failed", e.message ?: "Failed to copy shader pack", ToastType.ERROR)
-                        }
-                    }
-                }
+                val shadersDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("shaderpacks").toFile()
+                activeLocalImportRequest.value = io.ezz.launcher.ui.instance.installation.model.LocalImportRequest(
+                    file = file,
+                    contentType = io.ezz.launcher.ui.instance.installation.model.ContentType.SHADER,
+                    instance = instance,
+                    targetDirectory = shadersDir
+                )
             }
         )
     }
@@ -3024,6 +2880,16 @@ class AppViewModel(
                 }
             }
         )
+    }
+
+    fun dismissLocalImport() {
+        activeLocalImportRequest.value = null
+    }
+
+    fun onLocalImportFinished(request: io.ezz.launcher.ui.instance.installation.model.LocalImportRequest) {
+        activeLocalImportRequest.value = null
+        refreshManageData()
+        refreshMods(request.instance.id)
     }
 
     fun searchResourcePacks(

@@ -44,18 +44,18 @@ import io.ezz.launcher.ui.image.ModrinthImageLoader
 @Composable
 fun ModrinthAsyncImage(
     url: String?,
-    imageLoader: ModrinthImageLoader,
+    imageLoader: ModrinthImageLoader? = null,
     modifier: Modifier = Modifier,
     placeholderIcon: ImageVector = Icons.Default.Extension,
     contentDescription: String? = null,
     contentScale: ContentScale = ContentScale.Crop,
     shape: Shape = RoundedCornerShape(8.dp)
 ) {
-    var bitmap by remember(url) { mutableStateOf(imageLoader.getImageBitmap(url)) }
-    var isLoading by remember(url) { mutableStateOf(bitmap == null && !url.isNullOrBlank()) }
+    var bitmap by remember(url, imageLoader) { mutableStateOf(imageLoader?.getImageBitmap(url)) }
+    var isLoading by remember(url, imageLoader) { mutableStateOf(bitmap == null && !url.isNullOrBlank() && imageLoader != null) }
 
-    LaunchedEffect(url) {
-        if (!url.isNullOrBlank() && bitmap == null) {
+    LaunchedEffect(url, imageLoader) {
+        if (!url.isNullOrBlank() && bitmap == null && imageLoader != null) {
             isLoading = true
             val loaded = imageLoader.loadBitmap(url)
             bitmap = loaded

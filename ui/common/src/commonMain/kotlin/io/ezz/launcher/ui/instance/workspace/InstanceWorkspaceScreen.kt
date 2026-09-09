@@ -63,6 +63,9 @@ import io.ezz.launcher.ui.manager.tabs.ResourcePacksTab
 import io.ezz.launcher.ui.manager.tabs.ScreenshotsTab
 import io.ezz.launcher.ui.manager.tabs.ShadersTab
 import io.ezz.launcher.ui.manager.tabs.WorldsTab
+import io.ezz.launcher.ui.instance.installation.ui.ContentInstallationProgressModal
+import io.ezz.launcher.ui.instance.installation.ui.InstallationActivityDrawer
+import io.ezz.launcher.ui.instance.installation.ui.LocalImportValidationDialog
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 import io.ezz.launcher.ui.viewmodel.NavigationScreen
 
@@ -77,6 +80,12 @@ fun InstanceWorkspaceScreen(
     val launchProgress by viewModel.launchProgressState.collectAsState()
     val activeDownload by viewModel.activeDownloadState.collectAsState()
     val launchErrorData by viewModel.launchErrorDialogData.collectAsState()
+
+    // Installation V2 State
+    val focusedInstallItem by viewModel.contentInstallationManager.focusedItem.collectAsState()
+    val activeLocalImport by viewModel.activeLocalImportRequest.collectAsState()
+    val installQueueState by viewModel.contentInstallationManager.queueState.collectAsState()
+    var isActivityDrawerOpen by remember { mutableStateOf(false) }
 
     // Real-time Content Item Counts
     val manageMods by viewModel.manageMods.collectAsState()
@@ -193,7 +202,9 @@ fun InstanceWorkspaceScreen(
                 onDuplicate = { viewModel.showDuplicateInstanceDialog.value = currentInstance },
                 onExport = { viewModel.showExportInstanceDialog.value = currentInstance },
                 onRepair = { viewModel.showRepairDialog.value = true },
-                onDelete = { showDeleteDialog = true }
+                onDelete = { showDeleteDialog = true },
+                activeDownloadsCount = installQueueState.activeItems.size,
+                onOpenActivityDrawer = { isActivityDrawerOpen = true }
             )
 
             // 2. HORIZONTAL TAB NAVIGATION BAR
@@ -396,5 +407,32 @@ fun InstanceWorkspaceScreen(
                 }
             }
         }
+
+        // Installation Progress Modal
+        focusedInstallItem?.let { item ->
+            ContentInstallationProgressModal(
+                item = item,
+                imageLoader = viewModel.imageLoader,
+                onDismiss = { viewModel.contentInstallationManager.dismissFocusedItem() },
+                onCancel = { viewModel.contentInstallationManager.cancelInstallation(item.id) }
+            )
+        }
+
+        // Local Import Validation Stepper Dialog
+        activeLocalImport?.let { req ->
+            LocalImportValidationDialog(
+                request = req,
+                onDismiss = { viewModel.dismissLocalImport() },
+                onCompleted = { viewModel.onLocalImportFinished(req) }
+            )
+        }
+
+        // Global Activity Drawer
+        InstallationActivityDrawer(
+            isOpen = isActivityDrawerOpen,
+            onClose = { isActivityDrawerOpen = false },
+            manager = viewModel.contentInstallationManager,
+            imageLoader = viewModel.imageLoader
+        )
     }
 }

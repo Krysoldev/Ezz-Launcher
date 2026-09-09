@@ -74,10 +74,19 @@ fun InstanceCard(
     val isHovered by interactionSource.collectIsHoveredAsState()
     var isMenuOpen by remember { mutableStateOf(false) }
 
-    val elevationColor = if (isHovered) Color(0xFF161A24) else Color(0xFF0E1118)
+    val artworkScale by animateFloatAsState(
+        targetValue = if (isHovered) 1.035f else 1.0f,
+        animationSpec = tween(140)
+    )
+    val favoriteScale by animateFloatAsState(
+        targetValue = if (instance.isFavorite) 1.2f else 1.0f,
+        animationSpec = tween(150)
+    )
+
+    val elevationColor = if (isHovered) Color(0xFF141824) else Color(0xFF0E1118)
     val borderColor = when {
         isRunning -> Color(0xFF10B981)
-        isHovered -> Color(0xFF2E364F)
+        isHovered -> Color(0xFF8B5CF6).copy(alpha = 0.55f)
         else -> Color(0xFF1B1F2C)
     }
 
@@ -108,8 +117,12 @@ fun InstanceCard(
                         )
                     )
             ) {
-                // Artwork Icon (top left)
-                Box(modifier = Modifier.padding(start = 14.dp, top = 14.dp)) {
+                // Artwork Icon (top left) with micro-hover scale
+                Box(
+                    modifier = Modifier
+                        .padding(start = 14.dp, top = 14.dp)
+                        .scale(artworkScale)
+                ) {
                     InstanceArtworkIcon(
                         instance = instance,
                         size = 52.dp
@@ -136,6 +149,7 @@ fun InstanceCard(
                     Box(
                         modifier = Modifier
                             .size(28.dp)
+                            .scale(favoriteScale)
                             .clip(CircleShape)
                             .background(Color(0x6607080A))
                             .clickable(
@@ -247,8 +261,14 @@ fun InstanceCard(
                 val playInteraction = remember { MutableInteractionSource() }
                 val isPlayHovered by playInteraction.collectIsHoveredAsState()
 
+                val playBtnScale by animateFloatAsState(
+                    targetValue = if (isPlayHovered && !isLaunching) 1.03f else 1.0f,
+                    animationSpec = tween(120)
+                )
+
                 val playBg = when {
                     isRunning -> if (isPlayHovered) Color(0xFFDC2626) else Color(0x26EF4444)
+                    isLaunching -> Color(0xFF6B21A8)
                     else -> if (isPlayHovered) Color(0xFF7C3AED) else Color(0xFF8B5CF6)
                 }
                 val playText = when {
@@ -259,11 +279,13 @@ fun InstanceCard(
 
                 Row(
                     modifier = Modifier
+                        .scale(playBtnScale)
                         .clip(RoundedCornerShape(8.dp))
                         .background(playBg)
                         .clickable(
                             interactionSource = playInteraction,
                             indication = null,
+                            enabled = !isLaunching,
                             onClick = onPlayClick
                         )
                         .padding(horizontal = 14.dp, vertical = 6.dp),

@@ -86,6 +86,7 @@ import io.ezz.launcher.ui.components.EzzButtonSize
 import io.ezz.launcher.ui.components.EzzButtonVariant
 import io.ezz.launcher.ui.components.ModrinthAsyncImage
 import io.ezz.launcher.ui.components.PaginationBar
+import io.ezz.launcher.ui.instance.installation.ui.CurseForgeModDetailsDialog
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 
 private enum class ModsSubTab(val title: String) {
@@ -105,9 +106,9 @@ fun ModsTab(
     val missingDependencies by viewModel.missingDependencies.collectAsState()
     val compatibilityConflicts by viewModel.compatibilityConflicts.collectAsState()
     val curseForgeBrowseState by viewModel.curseForgeModsBrowseState.collectAsState()
-    val downloadingMod by viewModel.curseForgeDownloadingMod.collectAsState()
-    val downloadProgress by viewModel.curseForgeDownloadProgress.collectAsState()
+    val queueState by viewModel.contentInstallationManager.queueState.collectAsState()
 
+    var selectedModForDetails by remember(instance.id) { mutableStateOf<CurseForgeMod?>(null) }
     var localSearch by remember(instance.id) { mutableStateOf("") }
     var localFilter by remember(instance.id) { mutableStateOf("ALL") }
 
@@ -197,14 +198,16 @@ fun ModsTab(
             }
         }
 
-        // Active Download Banner
-        if (downloadingMod != null) {
+        // Active Installation Banner
+        val activeInstall = queueState.activeItems.firstOrNull { it.instanceId == instance.id }
+        if (activeInstall != null) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color(0xFF101318))
-                    .border(1.dp, Color(0xFF10B981).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                    .border(1.dp, Color(0xFF8B5CF6).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                    .clickable { viewModel.contentInstallationManager.setFocusedItem(activeInstall) }
                     .padding(12.dp)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -213,26 +216,36 @@ fun ModsTab(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                color = Color(0xFF8B5CF6),
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = "${activeInstall.stage.label}: ${activeInstall.name}",
+                                color = Color.White,
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                         Text(
-                            text = "Installing $downloadingMod from CurseForge...",
-                            color = Color.White,
-                            fontSize = 12.5.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = "${(downloadProgress * 100).toInt()}%",
-                            color = Color(0xFF10B981),
+                            text = "${activeInstall.progressPercent}%",
+                            color = Color(0xFF8B5CF6),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                     LinearProgressIndicator(
-                        progress = { downloadProgress },
+                        progress = { if (activeInstall.progress < 0f) 0.5f else activeInstall.progress.coerceIn(0f, 1f) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(4.dp)
                             .clip(RoundedCornerShape(2.dp)),
-                        color = Color(0xFF10B981),
+                        color = Color(0xFF8B5CF6),
                         trackColor = Color(0xFF141720)
                     )
                 }
@@ -326,9 +339,23 @@ fun ModsTab(
                     instance = instance,
                     viewModel = viewModel,
                     browseState = curseForgeBrowseState,
-                    onInstall = { mod -> viewModel.installCurseForgeMod(mod) }
+                    onSelectMod = { mod -> selectedModForDetails = mod }
                 )
             }
+        }
+
+        // Selected Mod Details Experience
+        selectedModForDetails?.let { mod ->
+            CurseForgeModDetailsDialog(
+                mod = mod,
+                instance = instance,
+                viewModel = viewModel,
+                onDismiss = { selectedModForDetails = null },
+                onInstallFile = { file ->
+                    viewModel.installCurseForgeModV2(instance, mod, file)
+                    selectedModForDetails = null
+                }
+            )
         }
     }
 }
@@ -839,7 +866,7 @@ private fun BrowseModsView(
     instance: Instance,
     viewModel: AppViewModel,
     browseState: CurseForgeBrowseState,
-    onInstall: (CurseForgeMod) -> Unit
+    onSelectMod: (CurseForgeMod) -> Unit
 ) {
     var searchQuery by remember(instance.id) { mutableStateOf(browseState.searchQuery) }
 
@@ -987,7 +1014,7 @@ private fun BrowseModsView(
                         mod = mod,
                         instance = instance,
                         viewModel = viewModel,
-                        onInstall = { onInstall(mod) }
+                        onSelect = { onSelectMod(mod) }
                     )
                 }
 
@@ -1011,18 +1038,34 @@ private fun CurseForgeModBrowseCard(
     mod: CurseForgeMod,
     instance: Instance,
     viewModel: AppViewModel,
-    onInstall: () -> Unit
+    onSelect: () -> Unit
 ) {
     val isInstalled = viewModel.isCurseForgeModInstalled(mod)
     val authorName = mod.authors.firstOrNull()?.name ?: ""
     val imageUrl = mod.logo?.thumbnailUrl ?: mod.logo?.url
 
+    val cardInteraction = remember { MutableInteractionSource() }
+    val isHovered by cardInteraction.collectIsHoveredAsState()
+    val imgScale by animateFloatAsState(
+        targetValue = if (isHovered) 1.04f else 1.0f,
+        animationSpec = tween(120)
+    )
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(Color(0xFF101318))
-            .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp))
+            .background(if (isHovered) Color(0xFF131722) else Color(0xFF101318))
+            .border(
+                1.dp,
+                if (isHovered) Color(0xFF8B5CF6).copy(alpha = 0.5f) else Color(0xFF1A1D26),
+                RoundedCornerShape(10.dp)
+            )
+            .clickable(
+                interactionSource = cardInteraction,
+                indication = null,
+                onClick = onSelect
+            )
             .padding(14.dp)
     ) {
         Row(
@@ -1035,13 +1078,15 @@ private fun CurseForgeModBrowseCard(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalAlignment = Alignment.Top
             ) {
-                ModrinthAsyncImage(
-                    url = imageUrl,
-                    imageLoader = viewModel.imageLoader,
-                    modifier = Modifier.size(50.dp).clip(RoundedCornerShape(6.dp)),
-                    placeholderIcon = Icons.Default.Extension,
-                    contentScale = ContentScale.Crop
-                )
+                Box(modifier = Modifier.scale(imgScale)) {
+                    ModrinthAsyncImage(
+                        url = imageUrl,
+                        imageLoader = viewModel.imageLoader,
+                        modifier = Modifier.size(50.dp).clip(RoundedCornerShape(6.dp)),
+                        placeholderIcon = Icons.Default.Extension,
+                        contentScale = ContentScale.Crop
+                    )
+                }
 
                 Column(
                     modifier = Modifier.weight(1f),
@@ -1152,10 +1197,22 @@ private fun CurseForgeModBrowseCard(
                             )
                         }
                     }
+                    EzzButton(
+                        text = "Manage",
+                        onClick = onSelect,
+                        variant = EzzButtonVariant.SECONDARY,
+                        size = EzzButtonSize.SMALL
+                    )
                 } else {
                     EzzButton(
+                        text = "Details",
+                        onClick = onSelect,
+                        variant = EzzButtonVariant.SECONDARY,
+                        size = EzzButtonSize.SMALL
+                    )
+                    EzzButton(
                         text = "INSTALL",
-                        onClick = onInstall,
+                        onClick = onSelect,
                         icon = Icons.Default.Download,
                         variant = EzzButtonVariant.PRIMARY,
                         size = EzzButtonSize.SMALL

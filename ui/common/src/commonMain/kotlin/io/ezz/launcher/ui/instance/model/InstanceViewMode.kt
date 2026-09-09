@@ -30,9 +30,7 @@ enum class InstanceFilterChip(val label: String) {
     FAVORITES("Favorites"),
     RUNNING("Running"),
     FABRIC("Fabric"),
-    FORGE("Forge"),
-    NEOFORGE("NeoForge"),
-    QUILT("Quilt"),
+    OPTIFINE("OptiFine"),
     VANILLA("Vanilla")
 }
 

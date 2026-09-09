@@ -49,6 +49,10 @@ fun InstanceManagerScreen(
     val launchProgress by viewModel.launchProgressState.collectAsState()
     val activeLaunchId = launchProgress?.instanceId
 
+    val queueState by viewModel.contentInstallationManager.queueState.collectAsState()
+    val focusedInstallItem by viewModel.contentInstallationManager.focusedItem.collectAsState()
+    val activeLocalImport by viewModel.activeLocalImportRequest.collectAsState()
+
     // UI Controls State
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf(InstanceFilterChip.ALL) }
@@ -82,9 +86,7 @@ fun InstanceManagerScreen(
                 InstanceFilterChip.FAVORITES -> inst.isFavorite
                 InstanceFilterChip.RUNNING -> runningSessions.containsKey(inst.id)
                 InstanceFilterChip.FABRIC -> inst.loaderType == LoaderType.FABRIC
-                InstanceFilterChip.FORGE -> false
-                InstanceFilterChip.NEOFORGE -> false
-                InstanceFilterChip.QUILT -> false
+                InstanceFilterChip.OPTIFINE -> inst.loaderType == LoaderType.OPTIFINE
                 InstanceFilterChip.VANILLA -> inst.loaderType == LoaderType.VANILLA
             }
 
@@ -151,7 +153,9 @@ fun InstanceManagerScreen(
             viewMode = viewMode,
             onViewModeChange = { viewMode = it },
             onCreateInstance = { viewModel.showCreateInstanceDialog.value = true },
-            onImportModpack = { viewModel.openImportModpack() }
+            onImportModpack = { viewModel.openImportModpack() },
+            activeDownloadsCount = queueState.totalActiveCount,
+            onOpenActivityDrawer = { viewModel.contentInstallationManager.openDrawer() }
         )
 
         // MAIN CONTENT AREA
@@ -348,4 +352,46 @@ fun InstanceManagerScreen(
             }
         )
     }
+
+    // INSTALLATION OVERLAYS & DRAWER (V2)
+    val focused = focusedInstallItem
+    if (focused != null) {
+        io.ezz.launcher.ui.instance.installation.ui.ContentInstallationProgressModal(
+            item = focused,
+            imageLoader = viewModel.imageLoader,
+            onCancel = { viewModel.contentInstallationManager.cancelInstallation(focused.id) },
+            onRetry = {
+                val inst = instances.find { it.id == focused.instanceId }
+                val mod = focused.mod
+                if (inst != null && mod != null) {
+                    viewModel.contentInstallationManager.installCurseForgeMod(inst, mod, focused.chosenFile)
+                }
+            },
+            onDismiss = { viewModel.contentInstallationManager.setFocusedItem(null) }
+        )
+    }
+
+    val importRequest = activeLocalImport
+    if (importRequest != null) {
+        io.ezz.launcher.ui.instance.installation.ui.LocalImportValidationDialog(
+            file = importRequest.file,
+            contentType = importRequest.contentType,
+            instance = importRequest.instance,
+            targetDirectory = importRequest.targetDirectory,
+            onImportComplete = {
+                viewModel.refreshManageData()
+                viewModel.refreshMods(importRequest.instance.id)
+            },
+            onDismiss = { viewModel.activeLocalImportRequest.value = null }
+        )
+    }
+
+    io.ezz.launcher.ui.instance.installation.ui.InstallationActivityDrawer(
+        queueState = queueState,
+        imageLoader = viewModel.imageLoader,
+        onClose = { viewModel.contentInstallationManager.closeDrawer() },
+        onSelectItem = { item -> viewModel.contentInstallationManager.setFocusedItem(item) },
+        onCancelItem = { id -> viewModel.contentInstallationManager.cancelInstallation(id) },
+        onClearCompleted = { viewModel.contentInstallationManager.clearCompleted() }
+    )
 }
