@@ -50,11 +50,6 @@ import io.ezz.launcher.core.model.instance.InstanceManagerTab
 fun InstanceWorkspaceTabNav(
     activeTab: InstanceManagerTab,
     onTabSelect: (InstanceManagerTab) -> Unit,
-    modsCount: Int = 0,
-    resourcePacksCount: Int = 0,
-    shadersCount: Int = 0,
-    worldsCount: Int = 0,
-    screenshotsCount: Int = 0,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -69,14 +64,6 @@ fun InstanceWorkspaceTabNav(
     ) {
         InstanceManagerTab.entries.forEach { tab ->
             val isSelected = activeTab == tab
-            val count = when (tab) {
-                InstanceManagerTab.MODS -> modsCount
-                InstanceManagerTab.RESOURCE_PACKS -> resourcePacksCount
-                InstanceManagerTab.SHADERS -> shadersCount
-                InstanceManagerTab.WORLDS -> worldsCount
-                InstanceManagerTab.SCREENSHOTS -> screenshotsCount
-                else -> 0
-            }
 
             val icon = when (tab) {
                 InstanceManagerTab.OVERVIEW -> Icons.Default.Dashboard
@@ -93,7 +80,6 @@ fun InstanceWorkspaceTabNav(
             WorkspaceTabButton(
                 title = tab.title,
                 icon = icon,
-                count = count,
                 isSelected = isSelected,
                 onClick = { onTabSelect(tab) }
             )
@@ -105,7 +91,6 @@ fun InstanceWorkspaceTabNav(
 private fun WorkspaceTabButton(
     title: String,
     icon: ImageVector,
-    count: Int,
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
@@ -164,24 +149,6 @@ private fun WorkspaceTabButton(
                 fontSize = 13.sp,
                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
             )
-
-            if (count > 0) {
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(if (isSelected) Color(0xFF8B5CF6) else Color(0xFF1B1F2C))
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = count.toString(),
-                        color = if (isSelected) Color.White else Color(0xFF94A3B8),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-            }
         }
     }
 }

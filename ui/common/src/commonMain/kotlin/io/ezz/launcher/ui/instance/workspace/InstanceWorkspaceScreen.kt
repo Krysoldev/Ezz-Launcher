@@ -88,11 +88,6 @@ fun InstanceWorkspaceScreen(
     val installQueueState by viewModel.contentInstallationManager.queueState.collectAsState()
     var isActivityDrawerOpen by remember { mutableStateOf(false) }
 
-    // Real-time Content Item Counts
-    val manageMods by viewModel.manageMods.collectAsState()
-    val manageResourcePacks by viewModel.manageResourcePacks.collectAsState()
-    val manageShaders by viewModel.manageShaders.collectAsState()
-    val manageWorlds by viewModel.manageWorlds.collectAsState()
     val manageScreenshots by viewModel.manageScreenshots.collectAsState()
 
     // Modals & Dialog States
@@ -216,12 +211,7 @@ fun InstanceWorkspaceScreen(
             // 2. HORIZONTAL TAB NAVIGATION BAR
             InstanceWorkspaceTabNav(
                 activeTab = activeTab,
-                onTabSelect = { viewModel.setManageTab(it) },
-                modsCount = manageMods.size,
-                resourcePacksCount = manageResourcePacks.size,
-                shadersCount = manageShaders.size,
-                worldsCount = manageWorlds.size,
-                screenshotsCount = manageScreenshots.size
+                onTabSelect = { viewModel.setManageTab(it) }
             )
 
             // 3. TAB CONTENT AREA
