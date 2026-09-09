@@ -1023,8 +1023,15 @@ class LocalInstanceManager(
         val instanceDir = pathProvider.getInstanceDirectory(instanceId).toFile()
         if (!instanceDir.exists()) instanceDir.mkdirs()
 
+        // Clean any existing icon variants
+        listOf("icon.png", "icon.webp", "icon.jpg", "icon.jpeg", "icon.gif").forEach { fname ->
+            val oldFile = File(instanceDir, fname)
+            if (oldFile.exists()) oldFile.delete()
+        }
+
         val targetFile = File(instanceDir, "icon.png")
         sourceFile.copyTo(targetFile, overwrite = true)
+        targetFile.setLastModified(System.currentTimeMillis())
 
         val instance = instanceRepository.getInstance(instanceId) ?: throw IllegalStateException("Instance $instanceId not found")
         val updated = instance.copy(customIconPath = targetFile.absolutePath)
@@ -1035,9 +1042,9 @@ class LocalInstanceManager(
 
     suspend fun removeCustomIcon(instanceId: String): Instance = withContext(dispatcher) {
         val instanceDir = pathProvider.getInstanceDirectory(instanceId).toFile()
-        val targetFile = File(instanceDir, "icon.png")
-        if (targetFile.exists()) {
-            targetFile.delete()
+        listOf("icon.png", "icon.webp", "icon.jpg", "icon.jpeg", "icon.gif").forEach { fname ->
+            val oldFile = File(instanceDir, fname)
+            if (oldFile.exists()) oldFile.delete()
         }
 
         val instance = instanceRepository.getInstance(instanceId) ?: throw IllegalStateException("Instance $instanceId not found")

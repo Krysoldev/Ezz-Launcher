@@ -1,16 +1,28 @@
 package io.ezz.launcher.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LoaderType
+import io.ezz.launcher.core.storage.path.DefaultPathProvider
 import io.ezz.launcher.ui.image.ImageDecoder
 import java.io.File
 
@@ -35,7 +48,7 @@ import java.io.File
  * High-quality Minecraft instance visual icon.
  * - If a custom instance icon exists (locally stored in instance directory), renders it sharp with rounded corners.
  * - Otherwise renders a crisp isometric Minecraft 3D block tailored to the modloader (Fabric, OptiFine, Vanilla).
- * - Displays a subtle version tag badge in the bottom-right corner.
+ * - Supports interactive click-to-edit with hover overlay when isEditable = true.
  */
 @Composable
 fun InstanceArtworkIcon(
@@ -43,7 +56,10 @@ fun InstanceArtworkIcon(
     size: Dp = 48.dp,
     modifier: Modifier = Modifier,
     customFile: File? = null,
-    showBadge: Boolean = false
+    showBadge: Boolean = false,
+    refreshKey: Any? = null,
+    isEditable: Boolean = false,
+    onEditClick: (() -> Unit)? = null
 ) {
     val cornerRadius = when {
         size >= 64.dp -> 12.dp
@@ -52,7 +68,7 @@ fun InstanceArtworkIcon(
     }
 
     // Resolve local custom icon file
-    val iconFile = remember(instance.id, instance.customIconPath, customFile) {
+    val iconFile = remember(instance.id, instance.customIconPath, customFile, refreshKey) {
         if (customFile != null && customFile.exists() && customFile.length() > 0L) {
             customFile
         } else {
@@ -63,9 +79,18 @@ fun InstanceArtworkIcon(
             } else null
 
             primaryFile ?: run {
-                // Fallback: Check standard instance directory locations
+                val instanceDir = try {
+                    DefaultPathProvider.createDefault().getInstanceDirectory(instance.id).toFile()
+                } catch (_: Throwable) {
+                    null
+                }
                 val userHome = System.getProperty("user.home") ?: "."
-                val possibleRoots = listOf(
+
+                val possibleRoots = listOfNotNull(
+                    instanceDir,
+                    instanceDir?.let { File(it, ".minecraft") },
+                    File(userHome, ".ezzlauncher/instances/${instance.id}"),
+                    File(userHome, "AppData/Roaming/.ezzlauncher/instances/${instance.id}"),
                     File(userHome, ".ezz/instances/${instance.id}"),
                     File(userHome, "AppData/Roaming/.ezz/instances/${instance.id}")
                 )
@@ -73,9 +98,11 @@ fun InstanceArtworkIcon(
                 possibleRoots.flatMap { root ->
                     listOf(
                         File(root, "icon.png"),
-                        File(root, "pack.png"),
                         File(root, "icon.webp"),
                         File(root, "icon.jpg"),
+                        File(root, "icon.jpeg"),
+                        File(root, "icon.gif"),
+                        File(root, "pack.png"),
                         File(root, ".minecraft/icon.png"),
                         File(root, ".minecraft/pack.png")
                     )
@@ -85,20 +112,38 @@ fun InstanceArtworkIcon(
     }
 
     // Decode custom bitmap if present
-    val customBitmap = remember(iconFile?.absolutePath, iconFile?.lastModified()) {
+    val customBitmap = remember(iconFile?.absolutePath, iconFile?.lastModified(), iconFile?.length(), refreshKey) {
         ImageDecoder.decodeFile(iconFile)
     }
 
-    Box(
-        modifier = modifier
-            .size(size)
-            .clip(RoundedCornerShape(cornerRadius))
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(Color(0xFF1C1C22), Color(0xFF0F0F13))
-                )
+    val interactionSource = remember { MutableInteractionSource() }
+    val isHovered by interactionSource.collectIsHoveredAsState()
+
+    val boxModifier = modifier
+        .size(size)
+        .clip(RoundedCornerShape(cornerRadius))
+        .background(
+            Brush.verticalGradient(
+                colors = listOf(Color(0xFF1C1C22), Color(0xFF0F0F13))
             )
-            .border(1.dp, Color(0xFF2B2B33), RoundedCornerShape(cornerRadius)),
+        )
+        .border(
+            1.dp,
+            if (isEditable && isHovered) Color(0xFF8B5CF6) else Color(0xFF2B2B33),
+            RoundedCornerShape(cornerRadius)
+        )
+        .then(
+            if (isEditable && onEditClick != null) {
+                Modifier.clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = onEditClick
+                )
+            } else Modifier
+        )
+
+    Box(
+        modifier = boxModifier,
         contentAlignment = Alignment.Center
     ) {
         if (customBitmap != null) {
@@ -117,6 +162,43 @@ fun InstanceArtworkIcon(
                 loaderType = instance.loaderType,
                 modifier = Modifier.size(size * 0.72f)
             )
+        }
+
+        // Hover edit overlay
+        if (isEditable) {
+            AnimatedVisibility(
+                visible = isHovered,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.65f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Change Logo",
+                            tint = Color.White,
+                            modifier = Modifier.size(if (size >= 64.dp) 22.dp else 16.dp)
+                        )
+                        if (size >= 56.dp) {
+                            Text(
+                                text = "Change",
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -2558,8 +2558,10 @@ class AppViewModel(
             try {
                 val updated = instanceManager.setCustomIcon(instanceId, file)
                 _selectedInstance.value = updated
+                ToastManager.show("Logo Updated", "Instance logo has been changed successfully.", ToastType.SUCCESS)
             } catch (e: Throwable) {
                 _errorMessage.value = "Failed to update icon: ${e.message}"
+                ToastManager.show("Error", "Failed to update logo: ${e.message}", ToastType.ERROR)
             }
         }
     }
@@ -2569,8 +2571,10 @@ class AppViewModel(
             try {
                 val updated = instanceManager.removeCustomIcon(instanceId)
                 _selectedInstance.value = updated
+                ToastManager.show("Logo Reset", "Instance logo reset to default Minecraft block.", ToastType.INFO)
             } catch (e: Throwable) {
                 _errorMessage.value = "Failed to remove icon: ${e.message}"
+                ToastManager.show("Error", "Failed to remove logo: ${e.message}", ToastType.ERROR)
             }
         }
     }

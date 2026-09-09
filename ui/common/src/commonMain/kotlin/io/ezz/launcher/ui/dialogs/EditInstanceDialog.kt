@@ -224,7 +224,21 @@ fun EditInstanceDialog(
                                     ) {
                                         io.ezz.launcher.ui.components.InstanceArtworkIcon(
                                             instance = instance.copy(customIconPath = customIconPath),
-                                            size = 52.dp
+                                            size = 56.dp,
+                                            isEditable = true,
+                                            onEditClick = {
+                                                viewModel.openFilePicker(
+                                                    title = "Select Instance Logo",
+                                                    description = "Select an image file (PNG, JPG, JPEG, WEBP, GIF)",
+                                                    allowedExtensions = setOf("png", "jpg", "jpeg", "webp", "gif"),
+                                                    onFileSelected = { file ->
+                                                        if (file != null && file.exists()) {
+                                                            viewModel.changeInstanceCustomIcon(instance.id, file)
+                                                            customIconPath = file.absolutePath
+                                                        }
+                                                    }
+                                                )
+                                            }
                                         )
                                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -232,19 +246,13 @@ fun EditInstanceDialog(
                                                     text = "Choose Custom Icon",
                                                     onClick = {
                                                         viewModel.openFilePicker(
-                                                            title = "Select Instance Icon",
-                                                            description = "Select a PNG, JPG, or WEBP image",
-                                                            allowedExtensions = setOf("png", "jpg", "jpeg", "webp"),
+                                                            title = "Select Instance Logo",
+                                                            description = "Select an image file (PNG, JPG, JPEG, WEBP, GIF)",
+                                                            allowedExtensions = setOf("png", "jpg", "jpeg", "webp", "gif"),
                                                             onFileSelected = { file ->
                                                                 if (file != null && file.exists()) {
-                                                                    val instDirStr = viewModel.pathProvider.getInstanceDirectory(instance.id).toString()
-                                                                    val targetIcon = java.io.File(instDirStr, "icon.png")
-                                                                    try {
-                                                                        file.copyTo(targetIcon, overwrite = true)
-                                                                        customIconPath = targetIcon.absolutePath
-                                                                    } catch (e: Exception) {
-                                                                        customIconPath = file.absolutePath
-                                                                    }
+                                                                    viewModel.changeInstanceCustomIcon(instance.id, file)
+                                                                    customIconPath = file.absolutePath
                                                                 }
                                                             }
                                                         )

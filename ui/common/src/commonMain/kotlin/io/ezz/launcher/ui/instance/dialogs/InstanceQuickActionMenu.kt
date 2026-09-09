@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
@@ -48,7 +49,8 @@ fun InstanceQuickActionMenu(
     onExport: () -> Unit,
     onRename: () -> Unit,
     onRepair: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onEditLogo: (() -> Unit)? = null
 ) {
     DropdownMenu(
         expanded = expanded,
@@ -128,7 +130,20 @@ fun InstanceQuickActionMenu(
             }
         )
 
-        // 7. Repair
+        // 7. Change Logo
+        if (onEditLogo != null) {
+            QuickMenuItem(
+                icon = Icons.Default.Image,
+                label = "Change Logo",
+                tint = Color(0xFF94A3B8),
+                onClick = {
+                    onDismissRequest()
+                    onEditLogo()
+                }
+            )
+        }
+
+        // 8. Repair
         QuickMenuItem(
             icon = Icons.Default.Build,
             label = "Verify & Repair Files",

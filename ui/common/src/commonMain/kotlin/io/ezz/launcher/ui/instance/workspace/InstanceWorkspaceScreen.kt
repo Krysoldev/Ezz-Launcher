@@ -204,6 +204,18 @@ fun InstanceWorkspaceScreen(
                 onExport = { viewModel.showExportInstanceDialog.value = currentInstance },
                 onRepair = { viewModel.showRepairDialog.value = true },
                 onDelete = { showDeleteDialog = true },
+                onEditLogo = {
+                    viewModel.openFilePicker(
+                        title = "Select Instance Logo",
+                        description = "Select an image file (PNG, JPG, JPEG, WEBP, GIF)",
+                        allowedExtensions = setOf("png", "jpg", "jpeg", "webp", "gif"),
+                        onFileSelected = { picked ->
+                            if (picked != null && picked.exists()) {
+                                viewModel.changeInstanceCustomIcon(currentInstance.id, picked)
+                            }
+                        }
+                    )
+                },
                 activeDownloadsCount = installQueueState.activeItems.size,
                 onOpenActivityDrawer = { isActivityDrawerOpen = true }
             )

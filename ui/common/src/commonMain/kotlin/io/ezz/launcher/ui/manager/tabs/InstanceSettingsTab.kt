@@ -25,6 +25,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.Checkbox
@@ -34,6 +36,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -81,6 +84,13 @@ fun InstanceSettingsTab(
     val installedMods by viewModel.installedMods.collectAsState()
 
     var name by remember(instance.id) { mutableStateOf(instance.name) }
+    var customIconPath by remember(instance.id, instance.customIconPath) { mutableStateOf(instance.customIconPath) }
+    var iconUpdateKey by remember(instance.id) { mutableStateOf(0) }
+
+    LaunchedEffect(instance.customIconPath) {
+        customIconPath = instance.customIconPath
+        iconUpdateKey++
+    }
     var minMemoryMb by remember(instance.id) { mutableStateOf(instance.minMemoryMb) }
     var maxMemoryMb by remember(instance.id) { mutableStateOf(instance.maxMemoryMb) }
     var customJvmArgs by remember(instance.id) { mutableStateOf(instance.customJvmArgs.joinToString(" ")) }
@@ -210,6 +220,7 @@ fun InstanceSettingsTab(
                     onClick = {
                         val updated = instance.copy(
                             name = name.trim(),
+                            customIconPath = customIconPath,
                             minMemoryMb = minMemoryMb,
                             maxMemoryMb = maxMemoryMb,
                             customJvmArgs = if (customJvmArgs.isNotBlank()) customJvmArgs.trim().split(" ") else emptyList(),
@@ -310,7 +321,112 @@ fun InstanceSettingsTab(
             }
         }
 
-        // Section 1: SYSTEM HARDWARE & ACTIVE RUNTIME CONTEXT
+        // Section 1: INSTANCE IDENTITY & ARTWORK
+        SettingsCard(title = "INSTANCE IDENTITY & ARTWORK") {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    text = "Configure your Minecraft instance name and visual artwork/logo.",
+                    color = Color(0xFF94A3B8),
+                    fontSize = 12.5.sp
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Logo Preview with Click-to-Edit & Hover effect
+                    Box(contentAlignment = Alignment.Center) {
+                        InstanceArtworkIcon(
+                            instance = instance.copy(name = name, customIconPath = customIconPath),
+                            size = 80.dp,
+                            refreshKey = iconUpdateKey,
+                            isEditable = true,
+                            onEditClick = {
+                                viewModel.openFilePicker(
+                                    title = "Select Instance Logo",
+                                    description = "Select an image file (PNG, JPG, JPEG, WEBP, GIF)",
+                                    allowedExtensions = setOf("png", "jpg", "jpeg", "webp", "gif"),
+                                    onFileSelected = { picked ->
+                                        if (picked != null && picked.exists()) {
+                                            viewModel.changeInstanceCustomIcon(instance.id, picked)
+                                            customIconPath = picked.absolutePath
+                                            iconUpdateKey++
+                                            statusMessage = "Instance logo updated successfully!"
+                                        }
+                                    }
+                                )
+                            }
+                        )
+                    }
+
+                    // Name input & Action Buttons
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Instance Name", color = Color(0xFFCBD5E1), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            EzzTextField(
+                                value = name,
+                                onValueChange = { name = it },
+                                placeholder = "e.g. My Modpack",
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            EzzButton(
+                                text = "Choose Custom Logo",
+                                icon = Icons.Default.Edit,
+                                onClick = {
+                                    viewModel.openFilePicker(
+                                        title = "Select Instance Logo",
+                                        description = "Select an image file (PNG, JPG, JPEG, WEBP, GIF)",
+                                        allowedExtensions = setOf("png", "jpg", "jpeg", "webp", "gif"),
+                                        onFileSelected = { picked ->
+                                            if (picked != null && picked.exists()) {
+                                                viewModel.changeInstanceCustomIcon(instance.id, picked)
+                                                customIconPath = picked.absolutePath
+                                                iconUpdateKey++
+                                                statusMessage = "Instance logo updated successfully!"
+                                            }
+                                        }
+                                    )
+                                },
+                                variant = EzzButtonVariant.SECONDARY,
+                                size = EzzButtonSize.SMALL
+                            )
+
+                            if (!customIconPath.isNullOrBlank()) {
+                                EzzButton(
+                                    text = "Reset to Default Logo",
+                                    onClick = {
+                                        viewModel.removeInstanceCustomIcon(instance.id)
+                                        customIconPath = null
+                                        iconUpdateKey++
+                                        statusMessage = "Reset logo to default Minecraft block."
+                                    },
+                                    variant = EzzButtonVariant.DANGER,
+                                    size = EzzButtonSize.SMALL
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = "Tip: Click the logo directly to change it. Supported formats: PNG, JPG, JPEG, WEBP, GIF.",
+                            color = Color(0xFF64748B),
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        // Section 2: SYSTEM HARDWARE & ACTIVE RUNTIME CONTEXT
         SettingsCard(title = "HARDWARE CONTEXT & DETECTED SPECIFICATIONS") {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(
@@ -874,70 +990,6 @@ fun InstanceSettingsTab(
             }
         }
 
-        // Section 7: INSTANCE IDENTITY & ARTWORK
-        SettingsCard(title = "INSTANCE IDENTITY & ARTWORK") {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Instance Name", color = Color(0xFF94A3B8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    EzzTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Instance Icon / Artwork", color = Color(0xFF94A3B8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(18.dp)
-                    ) {
-                        InstanceArtworkIcon(
-                            instance = instance,
-                            size = 72.dp
-                        )
-
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                EzzButton(
-                                    text = "Upload Custom Icon",
-                                    onClick = {
-                                        viewModel.openFilePicker(
-                                            title = "Select Instance Icon",
-                                            description = "Select a PNG, JPG, or WEBP image",
-                                            allowedExtensions = setOf("png", "jpg", "jpeg", "webp"),
-                                            onFileSelected = { picked ->
-                                                if (picked != null && picked.exists()) {
-                                                    viewModel.changeInstanceCustomIcon(instance.id, picked)
-                                                }
-                                            }
-                                        )
-                                    },
-                                    variant = EzzButtonVariant.SECONDARY,
-                                    size = EzzButtonSize.SMALL
-                                )
-
-                                if (!instance.customIconPath.isNullOrBlank()) {
-                                    EzzButton(
-                                        text = "Reset to Default",
-                                        onClick = { viewModel.removeInstanceCustomIcon(instance.id) },
-                                        variant = EzzButtonVariant.DANGER,
-                                        size = EzzButtonSize.SMALL
-                                    )
-                                }
-                            }
-
-                            Text(
-                                text = "Supported formats: PNG, JPG, JPEG, WEBP. Icon persists offline.",
-                                color = Color(0xFF64748B),
-                                fontSize = 11.sp
-                            )
-                        }
-                    }
-                }
-            }
-        }
 
         // Section 8: GAME WINDOW RESOLUTION
         SettingsCard(title = "GAME WINDOW RESOLUTION") {

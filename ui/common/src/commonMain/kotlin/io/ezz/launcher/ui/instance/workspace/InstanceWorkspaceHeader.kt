@@ -70,6 +70,7 @@ fun InstanceWorkspaceHeader(
     onExport: () -> Unit,
     onRepair: () -> Unit,
     onDelete: () -> Unit,
+    onEditLogo: (() -> Unit)? = null,
     activeDownloadsCount: Int = 0,
     onOpenActivityDrawer: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -206,7 +207,8 @@ fun InstanceWorkspaceHeader(
                         onExport = onExport,
                         onRename = onRename,
                         onRepair = onRepair,
-                        onDelete = onDelete
+                        onDelete = onDelete,
+                        onEditLogo = onEditLogo
                     )
                 }
             }
@@ -225,7 +227,9 @@ fun InstanceWorkspaceHeader(
             ) {
                 InstanceArtworkIcon(
                     instance = instance,
-                    size = 64.dp
+                    size = 64.dp,
+                    isEditable = onEditLogo != null,
+                    onEditClick = onEditLogo
                 )
 
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
