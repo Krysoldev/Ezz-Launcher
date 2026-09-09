@@ -71,6 +71,9 @@ import io.ezz.launcher.ui.components.EzzButtonVariant
 import io.ezz.launcher.ui.components.ModrinthAsyncImage
 import io.ezz.launcher.ui.components.PaginationBar
 import io.ezz.launcher.ui.manager.dialogs.ModInspectDialog
+import io.ezz.launcher.ui.manager.dialogs.PacksMcInspectDialog
+import io.ezz.launcher.core.model.packsmc.PacksMcPack
+import io.ezz.launcher.core.model.packsmc.ResourcePackProvider
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 
 private enum class PacksSubTab(val title: String) {
@@ -88,6 +91,8 @@ fun ResourcePacksTab(
 
     val installedPacks by viewModel.manageResourcePacks.collectAsState()
     val browseState by viewModel.resourcePacksBrowseState.collectAsState()
+    val activeProvider by viewModel.activeResourcePackProvider.collectAsState()
+    val packsMcBrowseState by viewModel.packsMcBrowseState.collectAsState()
     val downloadingProject by viewModel.modrinthDownloadingProject.collectAsState()
     val downloadProgress by viewModel.modrinthDownloadProgress.collectAsState()
 
@@ -95,6 +100,7 @@ fun ResourcePacksTab(
     var localFilter by remember(instance.id) { mutableStateOf("ALL") }
     var selectedPackFiles by remember(instance.id) { mutableStateOf(setOf<String>()) }
     var inspectPackHit by remember(instance.id) { mutableStateOf<ModrinthProjectHit?>(null) }
+    var inspectPacksMcPack by remember(instance.id) { mutableStateOf<PacksMcPack?>(null) }
 
     LaunchedEffect(instance.id) {
         viewModel.contentHydrator.hydrateInstance(instance.id, forceRefresh = false)
@@ -145,8 +151,12 @@ fun ResourcePacksTab(
                             ) {
                                 EzzAudioService.playSelect()
                                 subTab = tab
-                                if (tab == PacksSubTab.BROWSE && browseState.items.isEmpty()) {
-                                    viewModel.searchResourcePacks()
+                                if (tab == PacksSubTab.BROWSE) {
+                                    if (activeProvider == ResourcePackProvider.MODRINTH && browseState.items.isEmpty()) {
+                                        viewModel.searchResourcePacks()
+                                    } else if (activeProvider == ResourcePackProvider.PACKSMC && packsMcBrowseState.items.isEmpty()) {
+                                        viewModel.searchPacksMc()
+                                    }
                                 }
                             }
                             .padding(horizontal = 16.dp, vertical = 7.dp),
@@ -243,23 +253,88 @@ fun ResourcePacksTab(
                     onBulkDelete = { files -> viewModel.bulkDeleteResourcePacks(files) },
                     onBrowseClick = {
                         subTab = PacksSubTab.BROWSE
-                        if (browseState.items.isEmpty()) viewModel.searchResourcePacks()
+                        if (activeProvider == ResourcePackProvider.MODRINTH && browseState.items.isEmpty()) {
+                            viewModel.searchResourcePacks()
+                        } else if (activeProvider == ResourcePackProvider.PACKSMC && packsMcBrowseState.items.isEmpty()) {
+                            viewModel.searchPacksMc()
+                        }
                     }
                 )
             }
             PacksSubTab.BROWSE -> {
-                BrowseResourcePacksView(
-                    instance = instance,
-                    viewModel = viewModel,
-                    browseState = browseState,
-                    onInspect = { hit -> inspectPackHit = hit },
-                    onInstall = { hit -> viewModel.installModrinthProject(hit) }
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Provider Selector: [ Modrinth ] [ PacksMC ]
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF101318))
+                                .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp))
+                                .padding(3.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            listOf(
+                                ResourcePackProvider.MODRINTH to "Modrinth",
+                                ResourcePackProvider.PACKSMC to "PacksMC"
+                            ).forEach { (provider, label) ->
+                                val isSelected = activeProvider == provider
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (isSelected) Color(0xFF1E2433) else Color.Transparent)
+                                        .border(1.dp, if (isSelected) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
+                                        .clickable {
+                                            viewModel.setResourcePackProvider(provider)
+                                        }
+                                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = label,
+                                        color = if (isSelected) Color.White else Color(0xFF94A3B8),
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+
+                        Text(
+                            text = if (activeProvider == ResourcePackProvider.MODRINTH) "Catalog: Modrinth" else "Catalog: PacksMC",
+                            color = Color(0xFF64748B),
+                            fontSize = 11.5.sp
+                        )
+                    }
+
+                    when (activeProvider) {
+                        ResourcePackProvider.MODRINTH -> {
+                            BrowseResourcePacksView(
+                                instance = instance,
+                                viewModel = viewModel,
+                                browseState = browseState,
+                                onInspect = { hit -> inspectPackHit = hit },
+                                onInstall = { hit -> viewModel.installModrinthProject(hit) }
+                            )
+                        }
+                        ResourcePackProvider.PACKSMC -> {
+                            BrowsePacksMcView(
+                                instance = instance,
+                                viewModel = viewModel,
+                                browseState = packsMcBrowseState,
+                                onInspect = { pack -> inspectPacksMcPack = pack },
+                                onDownload = { pack -> viewModel.openPacksMcDownload(pack) }
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 
-    // Inspect Modal
+    // Inspect Modals
     val activeInspectHit = inspectPackHit
     if (activeInspectHit != null) {
         ModInspectDialog(
@@ -267,6 +342,16 @@ fun ResourcePacksTab(
             instance = instance,
             viewModel = viewModel,
             onDismiss = { inspectPackHit = null }
+        )
+    }
+
+    val activePacksMcPack = inspectPacksMcPack
+    if (activePacksMcPack != null) {
+        PacksMcInspectDialog(
+            initialPack = activePacksMcPack,
+            instance = instance,
+            viewModel = viewModel,
+            onDismiss = { inspectPacksMcPack = null }
         )
     }
 }

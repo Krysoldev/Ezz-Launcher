@@ -39,6 +39,7 @@ import io.ezz.launcher.core.minecraft.resolver.AssetResolver
 import io.ezz.launcher.core.minecraft.resolver.LibraryResolver
 import io.ezz.launcher.core.network.client.HttpClientFactory
 import io.ezz.launcher.core.network.curseforge.CurseForgeService
+import io.ezz.launcher.core.network.packsmc.PacksMcService
 import io.ezz.launcher.core.network.downloader.DownloadManager
 import io.ezz.launcher.core.runtime.LaunchEngine
 import io.ezz.launcher.core.runtime.process.DesktopProcessLauncher
@@ -273,6 +274,12 @@ fun main() {
                         val modrinthService = io.ezz.launcher.core.network.modrinth.ModrinthService(httpClient)
                         val localInstanceManager = io.ezz.launcher.core.storage.instance.LocalInstanceManager(pathProvider, instanceRepository, modrinthService = modrinthService)
                         val curseForgeService = CurseForgeService()
+                        val packsMcService = PacksMcService(
+                            client = httpClient,
+                            apiKeyProvider = {
+                                secureVault.getString("packsmc_api_key") ?: System.getenv("PACKSMC_API_KEY")
+                            }
+                        )
 
                         val adminAuthorizationService = io.ezz.launcher.core.auth.admin.AdminAuthorizationService(
                             httpClient = httpClient,
@@ -311,6 +318,7 @@ fun main() {
                             localInstanceManager = localInstanceManager,
                             modrinthService = modrinthService,
                             curseForgeService = curseForgeService,
+                            packsMcService = packsMcService,
                             vaultSkinRepository = vaultSkinRepository,
                             platformBridge = platformBridge,
                             adminAuthorizationService = adminAuthorizationService,
