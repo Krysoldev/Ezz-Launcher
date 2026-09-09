@@ -41,6 +41,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import io.ezz.launcher.ui.components.EzzSearchField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,6 +72,11 @@ fun WorldsTab(
     modifier: Modifier = Modifier
 ) {
     val worlds by viewModel.manageWorlds.collectAsState()
+    val isWorldsLoading by viewModel.isWorldsLoading.collectAsState()
+
+    LaunchedEffect(instance.id) {
+        viewModel.contentHydrator.hydrateInstance(instance.id, forceRefresh = false)
+    }
 
     var worldSearch by remember(instance.id) { mutableStateOf("") }
     var worldToRename by remember { mutableStateOf<LocalWorld?>(null) }
@@ -139,7 +145,41 @@ fun WorldsTab(
             }
         }
 
-        if (filteredWorlds.isEmpty()) {
+        if (isWorldsLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(280.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(32.dp),
+                        color = Color.White,
+                        strokeWidth = 2.5.dp
+                    )
+                    Text(
+                        text = "Scanning Local Worlds...",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        text = "Reading level.dat metadata and world icons from .minecraft/saves",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 12.5.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            }
+        } else if (filteredWorlds.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()

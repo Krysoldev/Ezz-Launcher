@@ -66,6 +66,11 @@ fun ScreenshotsTab(
     modifier: Modifier = Modifier
 ) {
     val screenshots by viewModel.manageScreenshots.collectAsState()
+    val isScreenshotsLoading by viewModel.isScreenshotsLoading.collectAsState()
+
+    LaunchedEffect(instance.id) {
+        viewModel.contentHydrator.hydrateInstance(instance.id, forceRefresh = false)
+    }
     var sortNewestFirst by remember { mutableStateOf(true) }
 
     var searchQuery by remember(instance.id) { mutableStateOf("") }
@@ -159,7 +164,36 @@ fun ScreenshotsTab(
             }
         }
 
-        if (filteredScreenshots.isEmpty()) {
+        if (isScreenshotsLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(280.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(32.dp),
+                        color = Color.White,
+                        strokeWidth = 2.5.dp
+                    )
+                    Text(
+                        text = "Scanning Screenshots...",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Reading captured in-game images from .minecraft/screenshots",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        } else if (filteredScreenshots.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()

@@ -96,6 +96,10 @@ fun ResourcePacksTab(
     var selectedPackFiles by remember(instance.id) { mutableStateOf(setOf<String>()) }
     var inspectPackHit by remember(instance.id) { mutableStateOf<ModrinthProjectHit?>(null) }
 
+    LaunchedEffect(instance.id) {
+        viewModel.contentHydrator.hydrateInstance(instance.id, forceRefresh = false)
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize(),
@@ -418,7 +422,43 @@ private fun InstalledPacksView(
             }
         }
 
-        if (filtered.isEmpty()) {
+        val isResourcePacksLoading by viewModel.isResourcePacksLoading.collectAsState()
+
+        if (isResourcePacksLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(280.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(32.dp),
+                        color = Color.White,
+                        strokeWidth = 2.5.dp
+                    )
+                    Text(
+                        text = "Scanning Resource Packs...",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        text = "Reading pack manifests and previews from .minecraft/resourcepacks",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 12.5.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            }
+        } else if (filtered.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()

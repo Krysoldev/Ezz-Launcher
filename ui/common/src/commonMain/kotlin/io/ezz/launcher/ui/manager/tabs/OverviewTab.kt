@@ -46,6 +46,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -85,6 +86,10 @@ fun OverviewTab(
     val session = runningSessions[instance.id]
 
     val scrollState = rememberScrollState()
+
+    LaunchedEffect(instance.id) {
+        viewModel.contentHydrator.hydrateInstance(instance.id, forceRefresh = false)
+    }
 
     Box(
         modifier = modifier

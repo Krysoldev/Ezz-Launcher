@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -170,6 +171,11 @@ fun InstanceWorkspaceScreen(
         val hours = mins / 60
         if (hours > 0) String.format("%02d:%02d:%02d", hours, mins % 60, secs)
         else String.format("%02d:%02d", mins, secs)
+    }
+
+    // Hydrate instance content authoritatively upon mounting or switching instances
+    LaunchedEffect(currentInstance.id) {
+        viewModel.contentHydrator.hydrateInstance(currentInstance.id, forceRefresh = false)
     }
 
     Box(

@@ -122,8 +122,7 @@ fun InstanceManagerScreen(
 
     // Callbacks
     val onOpenWorkspace: (Instance) -> Unit = { instance ->
-        viewModel.selectInstance(instance)
-        viewModel.navigateTo(NavigationScreen.INSTANCE_MANAGER)
+        viewModel.openInstanceManager(instance)
     }
 
     val onPlayClick: (Instance) -> Unit = { instance ->

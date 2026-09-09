@@ -1,6 +1,9 @@
 package io.ezz.launcher.ui.viewmodel
 
 import io.ezz.launcher.core.auth.AuthManager
+import io.ezz.launcher.ui.instance.content.model.ContentLoadState
+import io.ezz.launcher.ui.instance.content.model.InstanceContentState
+import io.ezz.launcher.ui.instance.content.service.InstanceContentHydrator
 import io.ezz.launcher.core.auth.microsoft.MicrosoftAuthState
 import io.ezz.launcher.core.minecraft.loader.fabric.FabricMetaClient
 import io.ezz.launcher.core.minecraft.loader.optifine.OptiFineCompatibilityValidator
@@ -462,6 +465,84 @@ class AppViewModel(
     val logLoadError = MutableStateFlow<String?>(null)
     val manageRepairReport = MutableStateFlow<InstanceRepairReport?>(null)
 
+    // Centralized Content Hydration States (3-State UI Pipeline)
+    val isContentHydrating = MutableStateFlow(false)
+    val isModsLoading = MutableStateFlow(false)
+    val isResourcePacksLoading = MutableStateFlow(false)
+    val isShadersLoading = MutableStateFlow(false)
+    val isWorldsLoading = MutableStateFlow(false)
+    val isScreenshotsLoading = MutableStateFlow(false)
+    val isStatisticsLoading = MutableStateFlow(false)
+
+    val contentHydrator: InstanceContentHydrator by lazy {
+        InstanceContentHydrator(
+            instanceManager = instanceManager,
+            getInstanceDir = { id -> pathProvider.getInstanceDirectory(id).toFile() },
+            getInstance = { id -> instances.value.firstOrNull { it.id == id } },
+            scope = scope,
+            dispatcher = Dispatchers.IO,
+            mainDispatcher = Dispatchers.Main,
+            onContentUpdated = { state ->
+                isContentHydrating.value = state.isHydrating
+                isModsLoading.value = state.modsState.isLoading
+                isResourcePacksLoading.value = state.resourcePacksState.isLoading
+                isShadersLoading.value = state.shadersState.isLoading
+                isWorldsLoading.value = state.worldsState.isLoading
+                isScreenshotsLoading.value = state.screenshotsState.isLoading
+                isLogLoading.value = state.logsState.isLoading
+                isStatisticsLoading.value = state.statisticsState.isLoading
+
+                if (state.modsState is ContentLoadState.Success) {
+                    manageMods.value = state.modsState.data
+                    _installedMods.value = state.modsState.data.map { mod ->
+                        io.ezz.launcher.core.model.instance.ModMetadata(
+                            id = mod.id,
+                            instanceId = state.instanceId,
+                            name = mod.name,
+                            version = mod.version,
+                            fileName = mod.fileName,
+                            fileHash = null,
+                            loader = mod.loader,
+                            description = mod.description,
+                            authors = mod.author?.let { listOf(it) } ?: emptyList(),
+                            fileSize = mod.fileSize,
+                            enabled = mod.enabled,
+                            dependencies = mod.dependencies,
+                            breaks = mod.breaks,
+                            conflicts = mod.conflicts
+                        )
+                    }
+                }
+                if (state.resourcePacksState is ContentLoadState.Success) {
+                    manageResourcePacks.value = state.resourcePacksState.data
+                }
+                if (state.shadersState is ContentLoadState.Success) {
+                    manageShaders.value = state.shadersState.data
+                }
+                if (state.worldsState is ContentLoadState.Success) {
+                    manageWorlds.value = state.worldsState.data
+                }
+                if (state.screenshotsState is ContentLoadState.Success) {
+                    manageScreenshots.value = state.screenshotsState.data
+                }
+                if (state.logsState is ContentLoadState.Success) {
+                    manageLogs.value = state.logsState.data
+                    val logsList = state.logsState.data
+                    val currentSel = selectedLogFile.value
+                    if (currentSel == null || logsList.none { it.filePath == currentSel.filePath }) {
+                        val latest = logsList.firstOrNull { it.fileName == "latest.log" } ?: logsList.firstOrNull()
+                        loadLogContent(latest)
+                    }
+                }
+                if (state.statisticsState is ContentLoadState.Success) {
+                    manageStatistics.value = state.statisticsState.data
+                }
+                missingDependencies.value = state.missingDependencies
+                compatibilityConflicts.value = state.compatibilityConflicts
+            }
+        )
+    }
+
     // Modrinth Image Caching Engine
     val imageLoader: ModrinthImageLoader = ModrinthImageLoader(pathProvider, modrinth, scope)
 
@@ -565,10 +646,72 @@ class AppViewModel(
                     if (_selectedInstance.value == null || list.none { it.id == _selectedInstance.value?.id }) {
                         _selectedInstance.value = list.firstOrNull()
                     }
-                    _selectedInstance.value?.let { refreshMods(it.id) }
+                    _selectedInstance.value?.let { contentHydrator.hydrateInstance(it.id, forceRefresh = false) }
                 }
             } catch (e: Throwable) {
                 println("Error collecting instances: ${e.message}")
+            }
+        }
+
+        // Active filesystem watcher for external modifications while in Instance Manager
+        scope.launch(Dispatchers.IO) {
+            var lastModsMod = 0L
+            var lastRpMod = 0L
+            var lastSpMod = 0L
+            var lastSavesMod = 0L
+            var lastSsMod = 0L
+            var trackedInstanceId: String? = null
+
+            while (isActive) {
+                delay(2000L)
+                val currentScreen = _currentScreen.value
+                val currentInst = _selectedInstance.value
+
+                if (currentScreen == NavigationScreen.INSTANCE_MANAGER && currentInst != null) {
+                    val instId = currentInst.id
+                    if (trackedInstanceId != instId) {
+                        trackedInstanceId = instId
+                        lastModsMod = 0L
+                        lastRpMod = 0L
+                        lastSpMod = 0L
+                        lastSavesMod = 0L
+                        lastSsMod = 0L
+                    }
+
+                    try {
+                        val baseDir = pathProvider.getInstanceDirectory(instId).resolve(".minecraft").toFile()
+                        val modsDir = java.io.File(baseDir, "mods")
+                        val rpDir = java.io.File(baseDir, "resourcepacks")
+                        val spDir = java.io.File(baseDir, "shaderpacks")
+                        val savesDir = java.io.File(baseDir, "saves")
+                        val ssDir = java.io.File(baseDir, "screenshots")
+
+                        val curModsMod = if (modsDir.exists()) modsDir.lastModified() else 0L
+                        val curRpMod = if (rpDir.exists()) rpDir.lastModified() else 0L
+                        val curSpMod = if (spDir.exists()) spDir.lastModified() else 0L
+                        val curSavesMod = if (savesDir.exists()) savesDir.lastModified() else 0L
+                        val curSsMod = if (ssDir.exists()) ssDir.lastModified() else 0L
+
+                        var hasChanged = false
+                        if (lastModsMod != 0L && curModsMod != lastModsMod) hasChanged = true
+                        if (lastRpMod != 0L && curRpMod != lastRpMod) hasChanged = true
+                        if (lastSpMod != 0L && curSpMod != lastSpMod) hasChanged = true
+                        if (lastSavesMod != 0L && curSavesMod != lastSavesMod) hasChanged = true
+                        if (lastSsMod != 0L && curSsMod != lastSsMod) hasChanged = true
+
+                        lastModsMod = curModsMod
+                        lastRpMod = curRpMod
+                        lastSpMod = curSpMod
+                        lastSavesMod = curSavesMod
+                        lastSsMod = curSsMod
+
+                        if (hasChanged) {
+                            println("[AppViewModel] External filesystem change detected for $instId. Hydrating content...")
+                            contentHydrator.hydrateInstance(instId, forceRefresh = true)
+                        }
+                    } catch (_: Throwable) {
+                    }
+                }
             }
         }
 
@@ -684,16 +827,7 @@ class AppViewModel(
             manageSelectedLogContent.value = null
             manageLogResult.value = null
             logLoadError.value = null
-            manageStatistics.value = null
-            manageMods.value = emptyList()
-            missingDependencies.value = emptyList()
-            compatibilityConflicts.value = emptyList()
-            manageResourcePacks.value = emptyList()
-            manageShaders.value = emptyList()
-            manageWorlds.value = emptyList()
-            manageScreenshots.value = emptyList()
-            manageLogs.value = emptyList()
-            _installedMods.value = emptyList()
+            fileConflictState.value = null
             curseForgeModsBrowseState.value = CurseForgeBrowseState(
                 selectedGameVersion = instance.minecraftVersion,
                 selectedLoader = CurseForgeModLoaderType.fromLoaderName(instance.loaderType.name)
@@ -704,7 +838,6 @@ class AppViewModel(
             shadersBrowseState.value = ModrinthBrowseState(
                 selectedGameVersion = instance.minecraftVersion
             )
-            fileConflictState.value = null
         }
         _selectedInstance.value = instance
         val session = _runningSessions.value[instance.id]
@@ -713,22 +846,12 @@ class AppViewModel(
         } else if (_processState.value is ProcessState.Running) {
             _processState.value = ProcessState.Idle
         }
-        refreshMods(instance.id)
+        contentHydrator.hydrateInstance(instance.id, forceRefresh = false)
     }
 
     fun refreshMods(instanceId: String? = _selectedInstance.value?.id) {
-        if (instanceId == null) {
-            _installedMods.value = emptyList()
-            return
-        }
-        scope.launch {
-            try {
-                val scanned = localModScanner?.scanMods(instanceId) ?: emptyList()
-                _installedMods.value = scanned
-            } catch (e: Throwable) {
-                println("Note: could not scan local mods: ${e.message}")
-            }
-        }
+        val targetId = instanceId ?: _selectedInstance.value?.id ?: return
+        contentHydrator.hydrateInstance(targetId, forceRefresh = true)
     }
 
     fun toggleMod(instanceId: String, fileName: String, enable: Boolean) {
@@ -2021,31 +2144,9 @@ class AppViewModel(
         }
     }
 
-    fun refreshManageData() {
+    fun refreshManageData(forceRefresh: Boolean = true) {
         val instance = _selectedInstance.value ?: return
-        scope.launch {
-            try {
-                manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
-                val mods = instanceManager.getMods(instance.id)
-                manageMods.value = mods
-                refreshMissingDependencies(instance, mods)
-                manageResourcePacks.value = instanceManager.getResourcePacks(instance.id)
-                manageShaders.value = instanceManager.getShaderPacks(instance.id)
-                manageWorlds.value = instanceManager.getWorlds(instance.id)
-                manageScreenshots.value = instanceManager.getScreenshots(instance.id)
-                val logsList = instanceManager.getLogs(instance.id)
-                manageLogs.value = logsList
-
-                // Ensure selected log is consistent with the current instance
-                val currentSel = selectedLogFile.value
-                if (currentSel == null || logsList.none { it.filePath == currentSel.filePath }) {
-                    val latest = logsList.firstOrNull { it.fileName == "latest.log" } ?: logsList.firstOrNull()
-                    loadLogContent(latest)
-                }
-            } catch (e: Throwable) {
-                println("Error refreshing manage data: ${e.message}")
-            }
-        }
+        contentHydrator.hydrateInstance(instance.id, forceRefresh = forceRefresh)
     }
 
     fun refreshMissingDependencies(instance: Instance? = _selectedInstance.value, mods: List<LocalMod>? = null) {

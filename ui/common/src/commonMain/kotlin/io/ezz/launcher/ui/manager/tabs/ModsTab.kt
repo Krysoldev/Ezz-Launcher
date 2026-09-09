@@ -115,6 +115,10 @@ fun ModsTab(
     // Bulk selection state
     var selectedModFiles by remember(instance.id) { mutableStateOf(setOf<String>()) }
 
+    LaunchedEffect(instance.id) {
+        viewModel.contentHydrator.hydrateInstance(instance.id, forceRefresh = false)
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize(),
@@ -518,8 +522,44 @@ private fun InstalledModsView(
             }
         }
 
+        val isModsLoading by viewModel.isModsLoading.collectAsState()
+
         // Mod Rows or Tailored Empty State
-        if (filtered.isEmpty()) {
+        if (isModsLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(280.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF101318))
+                    .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(32.dp),
+                        color = Color.White,
+                        strokeWidth = 2.5.dp
+                    )
+                    Text(
+                        text = "Scanning Installed Mods...",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        text = "Validating mod archives and reading manifests from .minecraft/mods",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 12.5.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            }
+        } else if (filtered.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()

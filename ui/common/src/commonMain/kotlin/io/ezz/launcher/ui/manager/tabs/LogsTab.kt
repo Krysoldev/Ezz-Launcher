@@ -132,6 +132,10 @@ fun LogsTab(
         }
     }
 
+    LaunchedEffect(instance.id) {
+        viewModel.contentHydrator.hydrateInstance(instance.id, forceRefresh = false)
+    }
+
     // Filter lines in memory with zero-cost virtualization
     val currentLines = logResult?.lines ?: emptyList()
     val filteredLines = remember(currentLines, searchQuery, levelFilter) {
