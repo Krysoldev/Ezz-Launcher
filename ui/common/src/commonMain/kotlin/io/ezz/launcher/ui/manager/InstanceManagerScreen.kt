@@ -199,7 +199,7 @@ fun InstanceManagerScreen(
                                 .clickable(
                                     interactionSource = backInteraction,
                                     indication = null,
-                                    onClick = { viewModel.navigateTo(NavigationScreen.HOME) }
+                                    onClick = { viewModel.navigateBackFromManager() }
                                 ),
                             contentAlignment = Alignment.Center
                         ) {

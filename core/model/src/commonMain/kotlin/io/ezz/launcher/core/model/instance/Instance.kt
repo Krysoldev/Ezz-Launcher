@@ -95,7 +95,8 @@ data class Instance(
     val customFpsLimit: Int = 260,
     val ezzSkinEnabled: Boolean = true,
     val knownGoodSnapshot: InstancePerformanceSnapshot? = null,
-    val lastLaunchPreparationMs: Long? = null
+    val lastLaunchPreparationMs: Long? = null,
+    val isFavorite: Boolean = false
 ) {
     /**
      * Creates a snapshot of current performance & runtime parameters.

@@ -1536,6 +1536,11 @@ class AppViewModel(
         }
     }
 
+    fun toggleFavoriteInstance(instance: Instance) {
+        val updated = instance.copy(isFavorite = !instance.isFavorite)
+        updateInstance(updated)
+    }
+
     fun deleteInstance(id: String) {
         scope.launch {
             try {
@@ -1963,11 +1968,20 @@ class AppViewModel(
     // INSTANCE MANAGER ACTIONS
     // ==========================================================
 
+    val previousScreenBeforeManager = MutableStateFlow<NavigationScreen>(NavigationScreen.INSTANCES)
+
     fun openInstanceManager(instance: Instance, initialTab: InstanceManagerTab = InstanceManagerTab.OVERVIEW) {
         selectInstance(instance)
         activeManageTab.value = initialTab
+        if (_currentScreen.value != NavigationScreen.INSTANCE_MANAGER) {
+            previousScreenBeforeManager.value = _currentScreen.value
+        }
         _currentScreen.value = NavigationScreen.INSTANCE_MANAGER
         refreshManageData()
+    }
+
+    fun navigateBackFromManager() {
+        _currentScreen.value = previousScreenBeforeManager.value
     }
 
     fun setManageTab(tab: InstanceManagerTab) {

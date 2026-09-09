@@ -4,17 +4,16 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,32 +23,39 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MenuDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,36 +66,29 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.ezz.launcher.core.model.instance.Instance
-import io.ezz.launcher.ui.audio.EzzAudioService
+import io.ezz.launcher.core.model.instance.LoaderType
 import io.ezz.launcher.ui.components.CompactRuntimeBadge
-import io.ezz.launcher.ui.components.EzzButton
-import io.ezz.launcher.ui.components.EzzButtonSize
-import io.ezz.launcher.ui.components.EzzButtonVariant
-import io.ezz.launcher.ui.components.EzzTextField
 import io.ezz.launcher.ui.components.InstanceArtworkIcon
-import io.ezz.launcher.ui.image.ImageDecoder
 import io.ezz.launcher.ui.viewmodel.AppViewModel
-import io.ezz.launcher.ui.viewmodel.NavigationScreen
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
+/**
+ * Sort options for instances.
+ */
 enum class InstanceSort(val label: String) {
     RECENT("Recently Played"),
     NAME("Name (A–Z)"),
@@ -97,306 +96,163 @@ enum class InstanceSort(val label: String) {
     CREATED("Newest Created")
 }
 
+/**
+ * Loader filter options.
+ */
+enum class LoaderFilter(val label: String, val loaderType: LoaderType?) {
+    ALL("All Loaders", null),
+    FABRIC("Fabric", LoaderType.FABRIC),
+    VANILLA("Vanilla", LoaderType.VANILLA),
+    OPTIFINE("OptiFine", LoaderType.OPTIFINE)
+}
+
+/**
+ * Rebuilt Instance Manager Screen:
+ * - Black + white foundation with high contrast and tonal hierarchy
+ * - Integrated toolbar: Search, Loader filter, Favorites toggle, Sort, Import, Create
+ * - Responsive cards with artwork, favorite toggle, 3-dot overflow menu, spec badges, and isolated 1-click PLAY button
+ * - Empty and zero-result states
+ * - Safe delete confirmation modal
+ */
 @Composable
 fun InstancesScreen(
     viewModel: AppViewModel,
     modifier: Modifier = Modifier
 ) {
     val instances by viewModel.instanceRepository.instances.collectAsState()
-    val selectedInstance by viewModel.selectedInstance.collectAsState()
     val runningSessions by viewModel.runningSessions.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
     var sortOption by remember { mutableStateOf(InstanceSort.RECENT) }
-    var isSortDropdownOpen by remember { mutableStateOf(false) }
+    var loaderFilter by remember { mutableStateOf(LoaderFilter.ALL) }
+    var favoritesOnly by remember { mutableStateOf(false) }
 
+    var isSortDropdownOpen by remember { mutableStateOf(false) }
+    var isLoaderDropdownOpen by remember { mutableStateOf(false) }
     var instanceToDelete by remember { mutableStateOf<Instance?>(null) }
 
-    // Filter & sort instances
-    val filteredInstances = remember(instances, searchQuery, sortOption) {
-        val filtered = if (searchQuery.isBlank()) {
-            instances
-        } else {
-            val q = searchQuery.trim()
-            instances.filter {
-                it.name.contains(q, ignoreCase = true) ||
-                it.minecraftVersion.contains(q, ignoreCase = true) ||
-                it.loaderType.name.contains(q, ignoreCase = true)
+    // Filter and sort instances
+    val filteredInstances = remember(instances, searchQuery, sortOption, loaderFilter, favoritesOnly) {
+        var list = instances
+
+        // Loader filter
+        if (loaderFilter.loaderType != null) {
+            list = list.filter { it.loaderType == loaderFilter.loaderType }
+        }
+
+        // Favorites only filter
+        if (favoritesOnly) {
+            list = list.filter { it.isFavorite }
+        }
+
+        // Search filter
+        if (searchQuery.isNotBlank()) {
+            val q = searchQuery.trim().lowercase()
+            list = list.filter { inst ->
+                inst.name.lowercase().contains(q) ||
+                    inst.minecraftVersion.lowercase().contains(q) ||
+                    inst.loaderType.name.lowercase().contains(q)
             }
         }
 
+        // Sorting
         when (sortOption) {
-            InstanceSort.RECENT -> filtered.sortedByDescending { it.lastPlayedAt ?: 0L }
-            InstanceSort.NAME -> filtered.sortedBy { it.name.lowercase() }
-            InstanceSort.VERSION -> filtered.sortedByDescending { it.minecraftVersion }
-            InstanceSort.CREATED -> filtered.sortedByDescending { it.createdAt }
+            InstanceSort.RECENT -> list.sortedWith(
+                compareByDescending<Instance> { it.isFavorite }
+                    .thenByDescending { it.lastPlayedAt ?: 0L }
+                    .thenByDescending { it.createdAt }
+            )
+            InstanceSort.NAME -> list.sortedWith(
+                compareByDescending<Instance> { it.isFavorite }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+            )
+            InstanceSort.VERSION -> list.sortedWith(
+                compareByDescending<Instance> { it.isFavorite }
+                    .thenByDescending { it.minecraftVersion }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+            )
+            InstanceSort.CREATED -> list.sortedWith(
+                compareByDescending<Instance> { it.isFavorite }
+                    .thenByDescending { it.createdAt }
+            )
         }
     }
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF07080A)),
-        contentAlignment = Alignment.TopCenter
+            .background(Color(0xFF090A0F))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .widthIn(max = 1240.dp)
-                .padding(horizontal = 24.dp, vertical = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 28.dp, vertical = 24.dp)
         ) {
-            // =========================================================
-            // 1. HEADER CARD WITH CONTROLS (SEARCH, SORT, CREATE, IMPORT)
-            // =========================================================
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF10131A))
-                    .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 18.dp, vertical = 14.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Left: Title + Subtitle + Count Badge
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "INSTANCES",
-                                color = Color.White,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 0.6.sp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Color(0xFF161A24))
-                                    .border(1.dp, Color(0xFF222735), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 7.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "${instances.size}",
-                                    color = Color(0xFFA78BFA),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                        Text(
-                            text = "Your Minecraft worlds and installations.",
-                            color = Color(0xFF64748B),
-                            fontSize = 12.sp
-                        )
+            // Header & Unified Toolbar
+            InstancesHeader(
+                totalCount = instances.size,
+                searchQuery = searchQuery,
+                onSearchChange = { searchQuery = it },
+                loaderFilter = loaderFilter,
+                onLoaderFilterChange = { loaderFilter = it },
+                isLoaderDropdownOpen = isLoaderDropdownOpen,
+                onLoaderDropdownOpenChange = { isLoaderDropdownOpen = it },
+                favoritesOnly = favoritesOnly,
+                onFavoritesOnlyToggle = { favoritesOnly = !favoritesOnly },
+                sortOption = sortOption,
+                onSortOptionChange = { sortOption = it },
+                isSortDropdownOpen = isSortDropdownOpen,
+                onSortDropdownOpenChange = { isSortDropdownOpen = it },
+                onImportClick = { viewModel.openImportModpack() },
+                onCreateClick = { viewModel.showCreateInstanceDialog.value = true }
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Main Content Area
+            if (instances.isEmpty()) {
+                EmptyInstancesState(
+                    onCreateClick = { viewModel.showCreateInstanceDialog.value = true },
+                    onImportClick = { viewModel.openImportModpack() }
+                )
+            } else if (filteredInstances.isEmpty()) {
+                NoMatchesState(
+                    searchQuery = searchQuery,
+                    favoritesOnly = favoritesOnly,
+                    onClearFilters = {
+                        searchQuery = ""
+                        loaderFilter = LoaderFilter.ALL
+                        favoritesOnly = false
                     }
-
-                    // Right: Elegant Controls Row (Search, Sort, Create, Import)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        // Search Bar
-                        EzzTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            placeholder = "Search instances...",
-                            leadingIcon = Icons.Default.Search,
-                            modifier = Modifier.width(220.dp),
-                            cornerRadius = 8.dp
-                        )
-
-                        // Sort Dropdown
-                        Box {
-                            val sortInteraction = remember { MutableInteractionSource() }
-                            val isSortHovered by sortInteraction.collectIsHoveredAsState()
-
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSortHovered) Color(0xFF181C28) else Color(0xFF141720))
-                                    .border(1.dp, if (isSortHovered) Color(0xFF323A4E) else Color(0xFF222735), RoundedCornerShape(8.dp))
-                                    .clickable(
-                                        interactionSource = sortInteraction,
-                                        indication = null,
-                                        onClick = {
-                                            EzzAudioService.playClick()
-                                            isSortDropdownOpen = true
-                                        }
-                                    )
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Text(
-                                        text = sortOption.label,
-                                        color = Color(0xFFCBD5E1),
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Default.ArrowDropDown,
-                                        contentDescription = "Sort",
-                                        tint = Color(0xFF94A3B8),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-
-                            DropdownMenu(
-                                expanded = isSortDropdownOpen,
-                                onDismissRequest = { isSortDropdownOpen = false },
-                                modifier = Modifier
-                                    .background(Color(0xFF141720))
-                                    .border(1.dp, Color(0xFF222735), RoundedCornerShape(8.dp))
-                            ) {
-                                InstanceSort.entries.forEach { option ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = option.label,
-                                                color = if (option == sortOption) Color.White else Color(0xFF94A3B8),
-                                                fontSize = 12.5.sp,
-                                                fontWeight = if (option == sortOption) FontWeight.Bold else FontWeight.Normal
-                                            )
-                                        },
-                                        onClick = {
-                                            EzzAudioService.playSelect()
-                                            sortOption = option
-                                            isSortDropdownOpen = false
-                                        },
-                                        colors = MenuDefaults.itemColors(textColor = Color.White)
-                                    )
-                                }
-                            }
-                        }
-
-                        // Create Instance Button
-                        EzzButton(
-                            text = "Create",
-                            onClick = { viewModel.showCreateInstanceDialog.value = true },
-                            icon = Icons.Default.Add,
-                            variant = EzzButtonVariant.PRIMARY,
-                            size = EzzButtonSize.MEDIUM
-                        )
-
-                        // Import Button
-                        EzzButton(
-                            text = "Import",
-                            onClick = { viewModel.openImportModpack() },
-                            icon = Icons.Default.FileDownload,
-                            variant = EzzButtonVariant.SECONDARY,
-                            size = EzzButtonSize.MEDIUM
-                        )
-                    }
-                }
-            }
-
-            // =========================================================
-            // 2. INSTANCES GAME LIBRARY GRID / EMPTY STATE
-            // =========================================================
-            if (filteredInstances.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF10131A))
-                        .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(10.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(14.dp),
-                        modifier = Modifier.padding(24.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(Color(0xFF161A24))
-                                .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(10.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.GridView,
-                                contentDescription = null,
-                                tint = Color(0xFFA78BFA),
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-
-                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = if (searchQuery.isNotBlank()) "No Matching Instances" else "No Instances Yet",
-                                color = Color.White,
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = if (searchQuery.isNotBlank()) "No instances matched '$searchQuery'." else "Create an instance from scratch or import a Modrinth modpack (.mrpack).",
-                                color = Color(0xFF64748B),
-                                fontSize = 12.5.sp
-                            )
-                        }
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            EzzButton(
-                                text = "Create Instance",
-                                onClick = { viewModel.showCreateInstanceDialog.value = true },
-                                icon = Icons.Default.Add,
-                                variant = EzzButtonVariant.PRIMARY,
-                                size = EzzButtonSize.MEDIUM
-                            )
-                            EzzButton(
-                                text = "Import .mrpack",
-                                onClick = { viewModel.openImportModpack() },
-                                icon = Icons.Default.FileDownload,
-                                variant = EzzButtonVariant.SECONDARY,
-                                size = EzzButtonSize.MEDIUM
-                            )
-                        }
-                    }
-                }
+                )
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 340.dp),
+                    columns = GridCells.Adaptive(minSize = 320.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(bottom = 32.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(filteredInstances, key = { it.id }) { instance ->
-                        val instStartedAt = runningSessions[instance.id]?.startedAt
-
-                        InstanceGridCard(
+                    items(
+                        items = filteredInstances,
+                        key = { it.id }
+                    ) { instance ->
+                        val isRunning = runningSessions.containsKey(instance.id)
+                        InstanceCard(
                             instance = instance,
-                            isSelected = instance.id == selectedInstance?.id,
-                            startedAt = instStartedAt,
-                            viewModel = viewModel,
-                            onCardClick = {
-                                EzzAudioService.playSelect()
-                                viewModel.openInstanceManager(instance)
+                            isRunning = isRunning,
+                            onCardClick = { viewModel.openInstanceManager(instance) },
+                            onPlayClick = {
+                                if (isRunning) {
+                                    viewModel.stopInstance(instance.id)
+                                } else {
+                                    viewModel.launchInstance(instance)
+                                }
                             },
-                            onPlay = {
-                                EzzAudioService.playLaunch()
-                                viewModel.selectInstance(instance)
-                                viewModel.launchInstance(instance)
-                                viewModel.navigateTo(NavigationScreen.HOME)
-                            },
-                            onManage = {
-                                EzzAudioService.playSelect()
-                                viewModel.openInstanceManager(instance)
-                            },
+                            onToggleFavorite = { viewModel.toggleFavoriteInstance(instance) },
+                            onOpenDetails = { viewModel.openInstanceManager(instance) },
                             onEdit = { viewModel.showEditInstanceDialog.value = instance },
                             onDuplicate = { viewModel.duplicateInstance(instance.id, "${instance.name} (Copy)") },
-                            onExport = { viewModel.openExportModpack(instance) },
                             onOpenFolder = { viewModel.openInstanceFolder(instance.id) },
                             onDelete = { instanceToDelete = instance }
                         )
@@ -404,59 +260,293 @@ fun InstancesScreen(
                 }
             }
         }
-    }
 
-    // Delete Confirmation Dialog
-    if (instanceToDelete != null) {
-        val target = instanceToDelete!!
-        Dialog(
-            onDismissRequest = { instanceToDelete = null },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
+        // Safe Delete Confirmation Dialog
+        instanceToDelete?.let { target ->
+            DeleteInstanceDialog(
+                instance = target,
+                onDismiss = { instanceToDelete = null },
+                onConfirmDelete = {
+                    viewModel.deleteInstance(target.id)
+                    instanceToDelete = null
+                }
+            )
+        }
+    }
+}
+
+/**
+ * Top Header & Unified Control Toolbar.
+ */
+@Composable
+private fun InstancesHeader(
+    totalCount: Int,
+    searchQuery: String,
+    onSearchChange: (String) -> Unit,
+    loaderFilter: LoaderFilter,
+    onLoaderFilterChange: (LoaderFilter) -> Unit,
+    isLoaderDropdownOpen: Boolean,
+    onLoaderDropdownOpenChange: (Boolean) -> Unit,
+    favoritesOnly: Boolean,
+    onFavoritesOnlyToggle: () -> Unit,
+    sortOption: InstanceSort,
+    onSortOptionChange: (InstanceSort) -> Unit,
+    isSortDropdownOpen: Boolean,
+    onSortDropdownOpenChange: (Boolean) -> Unit,
+    onImportClick: () -> Unit,
+    onCreateClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Left Title & Count
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .width(420.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF10131A))
-                    .border(1.dp, Color(0xFF1B1F2C), RoundedCornerShape(10.dp))
-                    .padding(22.dp)
+            Text(
+                text = "Instances",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFF8FAFC)
+            )
+
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFF161923),
+                border = BorderStroke(1.dp, Color(0xFF2E364A))
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text(
-                        text = "Delete Instance",
-                        color = Color.White,
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Are you sure you want to delete \"${target.name}\"? All worlds, mods, and instance settings will be permanently removed.",
-                        color = Color(0xFF94A3B8),
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp
-                    )
+                Text(
+                    text = "$totalCount ${if (totalCount == 1) "installation" else "installations"}",
+                    color = Color(0xFF94A3B8),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
+        }
+
+        // Right Toolbar
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Search Input
+            SearchBox(
+                query = searchQuery,
+                onQueryChange = onSearchChange,
+                modifier = Modifier.width(220.dp)
+            )
+
+            // Loader Filter Dropdown
+            Box {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (loaderFilter != LoaderFilter.ALL) Color(0xFF1E2332) else Color(0xFF10131B),
+                    border = BorderStroke(1.dp, if (loaderFilter != LoaderFilter.ALL) Color(0xFF8B5CF6) else Color(0xFF2E364A)),
+                    modifier = Modifier
+                        .height(38.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onLoaderDropdownOpenChange(!isLoaderDropdownOpen) }
+                        .pointerHoverIcon(PointerIcon.Hand)
+                ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp)
                     ) {
-                        EzzButton(
-                            text = "Cancel",
-                            onClick = { instanceToDelete = null },
-                            variant = EzzButtonVariant.GHOST,
-                            size = EzzButtonSize.SMALL
+                        Text(
+                            text = loaderFilter.label,
+                            color = if (loaderFilter != LoaderFilter.ALL) Color(0xFFF8FAFC) else Color(0xFF94A3B8),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        EzzButton(
-                            text = "Delete",
-                            onClick = {
-                                val id = target.id
-                                instanceToDelete = null
-                                viewModel.deleteInstance(id)
-                            },
-                            variant = EzzButtonVariant.DANGER,
-                            size = EzzButtonSize.SMALL
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = null,
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(18.dp)
                         )
                     }
+                }
+
+                DropdownMenu(
+                    expanded = isLoaderDropdownOpen,
+                    onDismissRequest = { onLoaderDropdownOpenChange(false) },
+                    modifier = Modifier
+                        .background(Color(0xFF161923))
+                        .border(1.dp, Color(0xFF2E364A), RoundedCornerShape(8.dp))
+                ) {
+                    LoaderFilter.values().forEach { filter ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = filter.label,
+                                    color = if (loaderFilter == filter) Color(0xFF8B5CF6) else Color(0xFFE2E8F0),
+                                    fontSize = 13.sp,
+                                    fontWeight = if (loaderFilter == filter) FontWeight.SemiBold else FontWeight.Normal
+                                )
+                            },
+                            onClick = {
+                                onLoaderFilterChange(filter)
+                                onLoaderDropdownOpenChange(false)
+                            },
+                            colors = MenuDefaults.itemColors(textColor = Color(0xFFE2E8F0))
+                        )
+                    }
+                }
+            }
+
+            // Favorites Filter Button
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (favoritesOnly) Color(0x22F43F5E) else Color(0xFF10131B),
+                border = BorderStroke(1.dp, if (favoritesOnly) Color(0xFFF43F5E) else Color(0xFF2E364A)),
+                modifier = Modifier
+                    .height(38.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onFavoritesOnlyToggle() }
+                    .pointerHoverIcon(PointerIcon.Hand)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp)
+                ) {
+                    Icon(
+                        imageVector = if (favoritesOnly) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = "Favorites",
+                        tint = if (favoritesOnly) Color(0xFFF43F5E) else Color(0xFF94A3B8),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "Favorites",
+                        color = if (favoritesOnly) Color(0xFFF43F5E) else Color(0xFF94A3B8),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            // Sort Dropdown
+            Box {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFF10131B),
+                    border = BorderStroke(1.dp, Color(0xFF2E364A)),
+                    modifier = Modifier
+                        .height(38.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onSortDropdownOpenChange(!isSortDropdownOpen) }
+                        .pointerHoverIcon(PointerIcon.Hand)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    ) {
+                        Text(
+                            text = sortOption.label,
+                            color = Color(0xFFE2E8F0),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = null,
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = isSortDropdownOpen,
+                    onDismissRequest = { onSortDropdownOpenChange(false) },
+                    modifier = Modifier
+                        .background(Color(0xFF161923))
+                        .border(1.dp, Color(0xFF2E364A), RoundedCornerShape(8.dp))
+                ) {
+                    InstanceSort.values().forEach { sort ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = sort.label,
+                                    color = if (sortOption == sort) Color(0xFF8B5CF6) else Color(0xFFE2E8F0),
+                                    fontSize = 13.sp,
+                                    fontWeight = if (sortOption == sort) FontWeight.SemiBold else FontWeight.Normal
+                                )
+                            },
+                            onClick = {
+                                onSortOptionChange(sort)
+                                onSortDropdownOpenChange(false)
+                            },
+                            colors = MenuDefaults.itemColors(textColor = Color(0xFFE2E8F0))
+                        )
+                    }
+                }
+            }
+
+            // Import Button
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = Color(0xFF161923),
+                border = BorderStroke(1.dp, Color(0xFF2E364A)),
+                modifier = Modifier
+                    .height(38.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onImportClick() }
+                    .pointerHoverIcon(PointerIcon.Hand)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FileDownload,
+                        contentDescription = "Import",
+                        tint = Color(0xFFCBD5E1),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "Import",
+                        color = Color(0xFFCBD5E1),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            // Create Instance CTA
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = Color(0xFF8B5CF6),
+                modifier = Modifier
+                    .height(38.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onCreateClick() }
+                    .pointerHoverIcon(PointerIcon.Hand)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "New Instance",
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "New Instance",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         }
@@ -464,281 +554,252 @@ fun InstancesScreen(
 }
 
 /**
- * Premium Instance Card:
- * ┌────────────────────────────────────────┐
- * │                                        │
- * │       INSTANCE IMAGE                   │
- * │                                        │
- * ├────────────────────────────────────────┤
- * │ Survival                               │
- * │ Minecraft 1.21.11 • Fabric             │
- * │                                        │
- * │ 142 Mods              Last played 2h   │
- * │                                        │
- * │ [ PLAY ]                          [...] │
- * └────────────────────────────────────────┘
+ * Modern Search Input Box with clear action.
  */
 @Composable
-private fun InstanceGridCard(
+private fun SearchBox(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = Color(0xFF10131B),
+        border = BorderStroke(1.dp, if (query.isNotEmpty()) Color(0xFF8B5CF6) else Color(0xFF2E364A)),
+        modifier = modifier.height(38.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 10.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = null,
+                tint = Color(0xFF64748B),
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                if (query.isEmpty()) {
+                    Text(
+                        text = "Search instances...",
+                        color = Color(0xFF64748B),
+                        fontSize = 13.sp
+                    )
+                }
+                BasicTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        color = Color(0xFFF8FAFC),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Normal
+                    ),
+                    cursorBrush = SolidColor(Color(0xFF8B5CF6)),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            if (query.isNotEmpty()) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Clear",
+                    tint = Color(0xFF94A3B8),
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .clickable { onQueryChange("") }
+                        .pointerHoverIcon(PointerIcon.Hand)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * High-quality Instance Card:
+ * - Visual artwork header with running badge, favorite button, and 3-dot menu
+ * - Middle spec strip (RAM, Java, Loader, Version)
+ * - Footer with last played status and isolated 1-click PLAY button
+ */
+@Composable
+private fun InstanceCard(
     instance: Instance,
-    isSelected: Boolean,
-    startedAt: Long? = null,
-    viewModel: AppViewModel,
+    isRunning: Boolean,
     onCardClick: () -> Unit,
-    onPlay: () -> Unit,
-    onManage: () -> Unit,
+    onPlayClick: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onOpenDetails: () -> Unit,
     onEdit: () -> Unit,
     onDuplicate: () -> Unit,
-    onExport: () -> Unit,
     onOpenFolder: () -> Unit,
     onDelete: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
-    val isFocused by interactionSource.collectIsFocusedAsState()
-    val isInteractiveActive = isHovered || isFocused
     var isMenuOpen by remember { mutableStateOf(false) }
 
-    // Real mod count dynamically evaluated
-    var modCount by remember(instance.id) { mutableStateOf<Int?>(null) }
-    LaunchedEffect(instance.id) {
-        withContext(Dispatchers.IO) {
-            try {
-                val mods = viewModel.instanceManager.getMods(instance.id)
-                modCount = mods.size
-            } catch (_: Exception) {
-                modCount = 0
-            }
-        }
-    }
-
-    // Audio cue on hover
-    LaunchedEffect(isHovered) {
-        if (isHovered) {
-            EzzAudioService.playHover()
-        }
-    }
-
-    // 2-3px lift without layout jarring bounce (160ms)
-    val cardLift by animateDpAsState(
-        targetValue = if (isInteractiveActive) (-2.5).dp else 0.dp,
-        animationSpec = tween(160)
-    )
-
-    // Subtle surface brightness transition (160ms)
-    val cardBg by animateColorAsState(
+    val borderColor by animateColorAsState(
         targetValue = when {
-            isSelected -> Color(0xFF131122)
-            isInteractiveActive -> Color(0xFF151926)
-            else -> Color(0xFF10131A)
+            isRunning -> Color(0xFF10B981)
+            isHovered -> Color(0xFF6366F1)
+            else -> Color(0xFF1E2332)
         },
-        animationSpec = tween(160)
+        animationSpec = tween(150)
     )
 
-    // Subtle border transition (160ms)
-    val cardBorder by animateColorAsState(
-        targetValue = when {
-            isSelected -> Color(0xFF8B5CF6).copy(alpha = 0.85f)
-            isInteractiveActive -> Color(0xFF8B5CF6).copy(alpha = 0.5f)
-            else -> Color(0xFF1B1F2C)
-        },
-        animationSpec = tween(160)
+    val offsetY by animateDpAsState(
+        targetValue = if (isHovered) (-2).dp else 0.dp,
+        animationSpec = tween(150)
     )
 
-    Box(
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = Color(0xFF10131B),
+        border = BorderStroke(1.dp, borderColor),
         modifier = Modifier
-            .offset(y = cardLift)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(cardBg)
-            .border(
-                1.dp,
-                cardBorder,
-                RoundedCornerShape(10.dp)
-            )
+            .height(236.dp)
+            .offset(y = offsetY)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(interactionSource = interactionSource, indication = null) { onCardClick() }
             .pointerHoverIcon(PointerIcon.Hand)
-            .onKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.Spacebar || event.key == Key.NumPadEnter)) {
-                    onCardClick()
-                    true
-                } else {
-                    false
-                }
-            }
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onCardClick
-            )
     ) {
-        Column {
-            // =========================================================
-            // TOP: INSTANCE IMAGE BANNER (130dp)
-            // =========================================================
+        Column(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            // Top Artwork Banner Area
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(130.dp)
-                    .clip(RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp))
-                    .background(Color(0xFF0C0E14)),
-                contentAlignment = Alignment.Center
+                    .height(108.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xFF1A1F2E),
+                                Color(0xFF131722)
+                            )
+                        )
+                    )
             ) {
-                InstanceBannerVisual(
-                    instance = instance,
-                    isHovered = isInteractiveActive
-                )
-
-                // Vignette gradient overlay into card body
+                // Background subtle gradient overlay
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color(0x5507080A),
-                                    cardBg
-                                )
+                            Brush.radialGradient(
+                                colors = listOf(Color(0x158B5CF6), Color.Transparent),
+                                radius = 240f
                             )
                         )
                 )
 
-                // Top-Left: Active Target Badge
-                if (isSelected) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(10.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(Color(0xCC8B5CF6))
-                            .padding(horizontal = 7.dp, vertical = 2.dp)
+                // Main Artwork Icon centered
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    InstanceArtworkIcon(
+                        instance = instance,
+                        size = 56.dp
+                    )
+                }
+
+                // Top-Left Badges: Running / Loader
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(10.dp)
+                ) {
+                    if (isRunning) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0x3310B981),
+                            border = BorderStroke(1.dp, Color(0xFF10B981))
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .background(Color(0xFF10B981), CircleShape)
+                                )
+                                Text(
+                                    text = "RUNNING",
+                                    color = Color(0xFF10B981),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    // Loader pill
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color(0x55000000),
+                        border = BorderStroke(1.dp, Color(0xFF2E364A))
                     ) {
                         Text(
-                            text = "ACTIVE",
-                            color = Color.White,
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 0.6.sp
+                            text = instance.loaderType.name,
+                            color = Color(0xFFCBD5E1),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
                 }
 
-                // Top-Right: Running Session Pill
-                if (startedAt != null) {
+                // Top-Right Actions: Favorite Toggle & 3-Dot Menu
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                ) {
+                    // Favorite Toggle Button
                     Box(
                         modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(10.dp)
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x66000000))
+                            .clickable { onToggleFavorite() }
+                            .pointerHoverIcon(PointerIcon.Hand),
+                        contentAlignment = Alignment.Center
                     ) {
-                        CompactRuntimeBadge(startedAt = startedAt, onClick = onPlay)
-                    }
-                }
-            }
-
-            // =========================================================
-            // BOTTOM: CARD BODY (METADATA + ACTIONS)
-            // =========================================================
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // Name & Version/Loader
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = instance.name,
-                        color = Color.White,
-                        fontSize = 15.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1
-                    )
-                    Text(
-                        text = "Minecraft ${instance.minecraftVersion} • ${instance.loaderType.name}",
-                        color = Color(0xFFA78BFA),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-
-                // Stats: Real Mod Count & Real Last Played
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val countText = if (modCount != null) {
-                        if (modCount == 1) "1 Mod" else "$modCount Mods"
-                    } else {
-                        "..."
+                        Icon(
+                            imageVector = if (instance.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = "Favorite",
+                            tint = if (instance.isFavorite) Color(0xFFF43F5E) else Color(0xAAFFFFFF),
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
 
-                    Text(
-                        text = countText,
-                        color = Color(0xFFCBD5E1),
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-
-                    val lastPlayed = instance.lastPlayedAt
-                    val lastPlayedStr = if (lastPlayed != null && lastPlayed > 0) {
-                        val diffMs = System.currentTimeMillis() - lastPlayed
-                        val hours = diffMs / (1000 * 60 * 60)
-                        if (hours < 1) "Played recently" else if (hours < 24) "Played ${hours}h ago" else "Played ${hours / 24}d ago"
-                    } else {
-                        "Never played"
-                    }
-
-                    Text(
-                        text = lastPlayedStr,
-                        color = Color(0xFF64748B),
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-
-                // Action Row: [ PLAY ] + [...]
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Left: Play Button
-                    EzzButton(
-                        text = if (startedAt != null) "Running" else "PLAY",
-                        onClick = onPlay,
-                        icon = Icons.Default.PlayArrow,
-                        variant = if (isSelected) EzzButtonVariant.PRIMARY else EzzButtonVariant.SECONDARY,
-                        size = EzzButtonSize.SMALL
-                    )
-
-                    // Right: Context Menu [...]
+                    // 3-Dot Overflow Menu
                     Box {
-                        val moreInteraction = remember { MutableInteractionSource() }
-                        val isMoreHovered by moreInteraction.collectIsHoveredAsState()
-
                         Box(
                             modifier = Modifier
                                 .size(30.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (isMoreHovered) Color(0xFF1E2332) else Color(0xFF141720))
-                                .border(1.dp, if (isMoreHovered) Color(0xFF323A4E) else Color(0xFF1E2332), RoundedCornerShape(6.dp))
-                                .pointerHoverIcon(PointerIcon.Hand)
-                                .clickable(
-                                    interactionSource = moreInteraction,
-                                    indication = null,
-                                    onClick = {
-                                        EzzAudioService.playClick()
-                                        isMenuOpen = true
-                                    }
-                                ),
+                                .clip(CircleShape)
+                                .background(Color(0x66000000))
+                                .clickable { isMenuOpen = true }
+                                .pointerHoverIcon(PointerIcon.Hand),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.MoreVert,
-                                contentDescription = "Options",
-                                tint = if (isMoreHovered) Color.White else Color(0xFF94A3B8),
-                                modifier = Modifier.size(16.dp)
+                                contentDescription = "More Actions",
+                                tint = Color(0xFFCBD5E1),
+                                modifier = Modifier.size(18.dp)
                             )
                         }
 
@@ -746,52 +807,58 @@ private fun InstanceGridCard(
                             expanded = isMenuOpen,
                             onDismissRequest = { isMenuOpen = false },
                             modifier = Modifier
-                                .background(Color(0xFF141720))
-                                .border(1.dp, Color(0xFF222735), RoundedCornerShape(8.dp))
+                                .background(Color(0xFF161923))
+                                .border(1.dp, Color(0xFF2E364A), RoundedCornerShape(8.dp))
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Manage Workspace", color = Color.White, fontSize = 12.5.sp) },
-                                leadingIcon = { Icon(Icons.Default.GridView, contentDescription = null, tint = Color(0xFFA78BFA), modifier = Modifier.size(15.dp)) },
+                                text = { Text(if (isRunning) "Stop Instance" else "Play Instance", color = if (isRunning) Color(0xFFEF4444) else Color(0xFF10B981)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = if (isRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
+                                        contentDescription = null,
+                                        tint = if (isRunning) Color(0xFFEF4444) else Color(0xFF10B981)
+                                    )
+                                },
                                 onClick = {
                                     isMenuOpen = false
-                                    onManage()
+                                    onPlayClick()
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("Edit Configuration", color = Color.White, fontSize = 12.5.sp) },
-                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = Color(0xFFCBD5E1), modifier = Modifier.size(15.dp)) },
+                                text = { Text("Open Details / Workspace", color = Color(0xFFF8FAFC)) },
+                                leadingIcon = { Icon(Icons.Default.GridView, null, tint = Color(0xFF94A3B8)) },
+                                onClick = {
+                                    isMenuOpen = false
+                                    onOpenDetails()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Edit Configuration", color = Color(0xFFF8FAFC)) },
+                                leadingIcon = { Icon(Icons.Default.Edit, null, tint = Color(0xFF94A3B8)) },
                                 onClick = {
                                     isMenuOpen = false
                                     onEdit()
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("Duplicate Instance", color = Color.White, fontSize = 12.5.sp) },
-                                leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null, tint = Color(0xFFCBD5E1), modifier = Modifier.size(15.dp)) },
+                                text = { Text("Duplicate Instance", color = Color(0xFFF8FAFC)) },
+                                leadingIcon = { Icon(Icons.Default.ContentCopy, null, tint = Color(0xFF94A3B8)) },
                                 onClick = {
                                     isMenuOpen = false
                                     onDuplicate()
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("Export (.zip)", color = Color.White, fontSize = 12.5.sp) },
-                                leadingIcon = { Icon(Icons.Default.Upload, contentDescription = null, tint = Color(0xFFCBD5E1), modifier = Modifier.size(15.dp)) },
-                                onClick = {
-                                    isMenuOpen = false
-                                    onExport()
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Open Directory", color = Color.White, fontSize = 12.5.sp) },
-                                leadingIcon = { Icon(Icons.Default.FolderOpen, contentDescription = null, tint = Color(0xFFCBD5E1), modifier = Modifier.size(15.dp)) },
+                                text = { Text("Open Folder", color = Color(0xFFF8FAFC)) },
+                                leadingIcon = { Icon(Icons.Default.FolderOpen, null, tint = Color(0xFF94A3B8)) },
                                 onClick = {
                                     isMenuOpen = false
                                     onOpenFolder()
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("Delete", color = Color(0xFFEF4444), fontSize = 12.5.sp) },
-                                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(15.dp)) },
+                                text = { Text("Delete Instance", color = Color(0xFFEF4444)) },
+                                leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444)) },
                                 onClick = {
                                     isMenuOpen = false
                                     onDelete()
@@ -801,73 +868,497 @@ private fun InstanceGridCard(
                     }
                 }
             }
+
+            // Middle Info & Specs Area
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = instance.name,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFF8FAFC),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(modifier = Modifier.height(3.dp))
+
+                Text(
+                    text = "Minecraft ${instance.minecraftVersion}",
+                    fontSize = 12.sp,
+                    color = Color(0xFF94A3B8)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Specs Strip (RAM & Java)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color(0xFF161923),
+                        border = BorderStroke(1.dp, Color(0xFF242C3E))
+                    ) {
+                        Text(
+                            text = "${instance.maxMemoryMb / 1024} GB RAM",
+                            color = Color(0xFFCBD5E1),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color(0xFF161923),
+                        border = BorderStroke(1.dp, Color(0xFF242C3E))
+                    ) {
+                        Text(
+                            text = if (instance.javaPath.isNullOrBlank()) "Auto Java" else "Custom Java",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Footer: Last played info and isolated PLAY button
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF0D1017))
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Last played status
+                    Text(
+                        text = formatLastPlayed(instance.lastPlayedAt),
+                        color = Color(0xFF64748B),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Normal
+                    )
+
+                    // Dedicated PLAY / STOP Button
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (isRunning) Color(0xFFEF4444) else Color(0xFF8B5CF6),
+                        modifier = Modifier
+                            .height(30.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { onPlayClick() }
+                            .pointerHoverIcon(PointerIcon.Hand)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
+                                contentDescription = if (isRunning) "Stop" else "Play",
+                                tint = Color.White,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = if (isRunning) "STOP" else "PLAY",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
 /**
- * Top Visual for Instance Card: Subtly zooms 1-2% on hover.
+ * Empty state when no instances exist yet.
  */
 @Composable
-private fun InstanceBannerVisual(
-    instance: Instance,
-    isHovered: Boolean
+private fun EmptyInstancesState(
+    onCreateClick: () -> Unit,
+    onImportClick: () -> Unit
 ) {
-    val zoomScale by animateFloatAsState(
-        targetValue = if (isHovered) 1.02f else 1.0f,
-        animationSpec = tween(180)
-    )
-
-    // Resolve local custom icon file
-    val iconFile = remember(instance.id, instance.customIconPath) {
-        val path = instance.customIconPath
-        val primaryFile = if (!path.isNullOrBlank()) {
-            val f = File(path)
-            if (f.exists() && f.length() > 0L) f else null
-        } else null
-
-        primaryFile ?: run {
-            val userHome = System.getProperty("user.home") ?: "."
-            val possibleRoots = listOf(
-                File(userHome, ".ezz/instances/${instance.id}"),
-                File(userHome, "AppData/Roaming/.ezz/instances/${instance.id}")
-            )
-
-            possibleRoots.flatMap { root ->
-                listOf(
-                    File(root, "icon.png"),
-                    File(root, "pack.png"),
-                    File(root, "icon.webp"),
-                    File(root, "icon.jpg")
-                )
-            }.firstOrNull { it.exists() && it.length() > 0L }
-        }
-    }
-
-    val customBitmap = remember(iconFile?.absolutePath, iconFile?.lastModified()) {
-        ImageDecoder.decodeFile(iconFile)
-    }
-
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .scale(zoomScale),
-        contentAlignment = Alignment.Center
+            .padding(top = 80.dp),
+        contentAlignment = Alignment.TopCenter
     ) {
-        if (customBitmap != null) {
-            Image(
-                bitmap = customBitmap,
-                contentDescription = instance.name,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-                filterQuality = FilterQuality.High
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.width(420.dp)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = Color(0xFF161923),
+                border = BorderStroke(1.dp, Color(0xFF2E364A)),
+                modifier = Modifier.size(76.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.GridView,
+                        contentDescription = null,
+                        tint = Color(0xFF8B5CF6),
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(
+                text = "No Minecraft Instances Yet",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFF8FAFC)
             )
-        } else {
-            // Isometric block on deep atmospheric gradient
-            InstanceArtworkIcon(
-                instance = instance,
-                size = 58.dp
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Create a clean Minecraft environment or import an existing modpack (.mrpack) from Modrinth or CurseForge.",
+                fontSize = 13.sp,
+                color = Color(0xFF94A3B8),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                lineHeight = 19.sp
             )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFF161923),
+                    border = BorderStroke(1.dp, Color(0xFF2E364A)),
+                    modifier = Modifier
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onImportClick() }
+                        .pointerHoverIcon(PointerIcon.Hand)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FileDownload,
+                            contentDescription = null,
+                            tint = Color(0xFFCBD5E1),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Import Modpack",
+                            color = Color(0xFFCBD5E1),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFF8B5CF6),
+                    modifier = Modifier
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onCreateClick() }
+                        .pointerHoverIcon(PointerIcon.Hand)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(horizontal = 18.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "Create Instance",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
         }
+    }
+}
+
+/**
+ * State when search or filters return 0 results.
+ */
+@Composable
+private fun NoMatchesState(
+    searchQuery: String,
+    favoritesOnly: Boolean,
+    onClearFilters: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = 80.dp),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.width(360.dp)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = Color(0xFF161923),
+                border = BorderStroke(1.dp, Color(0xFF2E364A)),
+                modifier = Modifier.size(64.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        tint = Color(0xFF64748B),
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            Text(
+                text = "No matching instances found",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFF8FAFC)
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            val reason = when {
+                searchQuery.isNotBlank() && favoritesOnly -> "No favorite instances matched \"$searchQuery\"."
+                searchQuery.isNotBlank() -> "No instances matched \"$searchQuery\"."
+                favoritesOnly -> "You haven't marked any instances as favorites yet."
+                else -> "No instances match the current filters."
+            }
+
+            Text(
+                text = reason,
+                fontSize = 13.sp,
+                color = Color(0xFF94A3B8),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = Color(0xFF161923),
+                border = BorderStroke(1.dp, Color(0xFF2E364A)),
+                modifier = Modifier
+                    .height(36.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onClearFilters() }
+                    .pointerHoverIcon(PointerIcon.Hand)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = null,
+                        tint = Color(0xFF8B5CF6),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Reset All Filters",
+                        color = Color(0xFFF8FAFC),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Safe Delete Instance Confirmation Modal.
+ */
+@Composable
+private fun DeleteInstanceDialog(
+    instance: Instance,
+    onDismiss: () -> Unit,
+    onConfirmDelete: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xAA000000)),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color(0xFF161923),
+                border = BorderStroke(1.dp, Color(0xFF2E364A)),
+                modifier = Modifier
+                    .width(440.dp)
+                    .clip(RoundedCornerShape(16.dp))
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0x22EF4444),
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = Color(0xFFEF4444),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+
+                        Column {
+                            Text(
+                                text = "Delete Instance?",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFF8FAFC)
+                            )
+                            Text(
+                                text = "This action cannot be undone",
+                                fontSize = 12.sp,
+                                color = Color(0xFF94A3B8)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = "Are you sure you want to delete \"${instance.name}\"?",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFE2E8F0)
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "All associated world saves, installed mods, configs, screenshots, and logs will be permanently deleted from your drive.",
+                        fontSize = 13.sp,
+                        color = Color(0xFF64748B),
+                        lineHeight = 18.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFF10131B),
+                            border = BorderStroke(1.dp, Color(0xFF2E364A)),
+                            modifier = Modifier
+                                .height(38.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onDismiss() }
+                                .pointerHoverIcon(PointerIcon.Hand)
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            ) {
+                                Text(
+                                    text = "Cancel",
+                                    color = Color(0xFFCBD5E1),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFFEF4444),
+                            modifier = Modifier
+                                .height(38.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onConfirmDelete() }
+                                .pointerHoverIcon(PointerIcon.Hand)
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            ) {
+                                Text(
+                                    text = "Delete Permanently",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Format timestamp into human-readable relative/date string.
+ */
+private fun formatLastPlayed(timestamp: Long?): String {
+    if (timestamp == null || timestamp <= 0L) return "Never played"
+    val diff = System.currentTimeMillis() - timestamp
+    val seconds = diff / 1000
+    val minutes = seconds / 60
+    val hours = minutes / 60
+    val days = hours / 24
+
+    return when {
+        minutes < 2 -> "Just now"
+        minutes < 60 -> "${minutes}m ago"
+        hours < 24 -> "${hours}h ago"
+        days < 7 -> "${days}d ago"
+        else -> SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(timestamp))
     }
 }
