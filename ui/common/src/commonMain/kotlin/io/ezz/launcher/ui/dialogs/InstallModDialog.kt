@@ -85,14 +85,20 @@ fun InstallModDialog(
     val instances by viewModel.instanceRepository.instances.collectAsState()
     val scope = rememberCoroutineScope()
 
+    val contentType = remember(project) {
+        InstanceContentType.fromModrinthType(project.projectType)
+    }
+
     var activeInstance by remember { mutableStateOf(selectedInstance ?: instances.firstOrNull()) }
     var installedModsForInstance by remember { mutableStateOf<List<io.ezz.launcher.core.model.instance.LocalMod>>(emptyList()) }
 
     // Dynamic Version and Loader metadata
     var availableGameVersions by remember { mutableStateOf<List<String>>(emptyList()) }
-    var selectedGameVersion by remember { mutableStateOf("") }
+    var selectedGameVersion by remember(activeInstance) { mutableStateOf(activeInstance?.minecraftVersion ?: "") }
     var availableLoadersForVersion by remember { mutableStateOf<List<String>>(emptyList()) }
-    var selectedLoader by remember { mutableStateOf("") }
+    var selectedLoader by remember(activeInstance) {
+        mutableStateOf(if (contentType == InstanceContentType.MOD) (activeInstance?.loaderType?.name?.lowercase() ?: "") else "")
+    }
 
     // Versions and Releases
     var compatibleVersions by remember { mutableStateOf<List<ModrinthVersion>>(emptyList()) }
@@ -111,10 +117,6 @@ fun InstallModDialog(
     var installError by remember { mutableStateOf<String?>(null) }
 
     var isVersionDropdownOpen by remember { mutableStateOf(false) }
-
-    val contentType = remember(project) {
-        InstanceContentType.fromModrinthType(project.projectType)
-    }
 
     val installedResourcePacks by viewModel.manageResourcePacks.collectAsState()
     val installedShaders by viewModel.manageShaders.collectAsState()
@@ -218,6 +220,7 @@ fun InstallModDialog(
     // Step 2: Whenever selectedGameVersion, selectedLoader, or installedModsForInstance changes, fetch releases & run Smart Compatibility Resolver
     LaunchedEffect(selectedGameVersion, selectedLoader, installedModsForInstance) {
         if (selectedGameVersion.isBlank()) return@LaunchedEffect
+        if (contentType == InstanceContentType.MOD && selectedLoader.isBlank()) return@LaunchedEffect
         isLoadingVersions = true
         selectedVersion = null
         resolvedDependencies = emptyList()
@@ -236,12 +239,20 @@ fun InstallModDialog(
                 loaders = if (selectedLoader.isNotBlank()) listOf(selectedLoader) else null,
                 gameVersions = listOf(selectedGameVersion)
             )
+            if (versions.isEmpty()) {
+                // Automatic compatible version search: Query broader candidate list and let solver evaluate range/semver compatibility
+                versions = viewModel.modrinth.getProjectVersions(
+                    projectIdOrSlug = project.projectId,
+                    loaders = if (selectedLoader.isNotBlank()) listOf(selectedLoader) else null,
+                    gameVersions = null
+                )
+            }
             if (versions.isEmpty() && contentType != InstanceContentType.MOD) {
                 // Fallback without loader filter for resource packs / shaders
                 versions = viewModel.modrinth.getProjectVersions(
                     projectIdOrSlug = project.projectId,
                     loaders = null,
-                    gameVersions = listOf(selectedGameVersion)
+                    gameVersions = null
                 )
             }
             compatibleVersions = versions

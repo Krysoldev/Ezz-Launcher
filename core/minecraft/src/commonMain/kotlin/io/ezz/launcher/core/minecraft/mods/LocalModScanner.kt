@@ -122,13 +122,15 @@ class LocalModScanner(
             val dependencies = mutableMapOf<String, String>()
             val breaks = mutableMapOf<String, String>()
             val conflicts = mutableMapOf<String, String>()
+            val recommends = mutableMapOf<String, String>()
+            val suggests = mutableMapOf<String, String>()
 
             try {
                 ZipFile(file).use { zip ->
                     // 1. Try fabric.mod.json / quilt.mod.json
                     val fabricEntry = zip.getEntry("fabric.mod.json") ?: zip.getEntry("quilt.mod.json")
                     if (fabricEntry != null) {
-                        loader = "FABRIC"
+                        loader = if (zip.getEntry("quilt.mod.json") != null && zip.getEntry("fabric.mod.json") == null) "QUILT" else "FABRIC"
                         val content = zip.getInputStream(fabricEntry).bufferedReader().use { it.readText() }
                         try {
                             val jsonObj = jsonParser.parseToJsonElement(content).jsonObject
@@ -179,30 +181,85 @@ class LocalModScanner(
                                     }
                                 }
                             }
+                            jsonObj["recommends"]?.let { elem ->
+                                if (elem is kotlinx.serialization.json.JsonObject) {
+                                    elem.forEach { (k, v) ->
+                                        val constraint = when (v) {
+                                            is kotlinx.serialization.json.JsonPrimitive -> v.content
+                                            is kotlinx.serialization.json.JsonArray -> v.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }.joinToString(" ")
+                                            else -> "*"
+                                        }
+                                        recommends[k.lowercase()] = constraint
+                                    }
+                                }
+                            }
+                            jsonObj["suggests"]?.let { elem ->
+                                if (elem is kotlinx.serialization.json.JsonObject) {
+                                    elem.forEach { (k, v) ->
+                                        val constraint = when (v) {
+                                            is kotlinx.serialization.json.JsonPrimitive -> v.content
+                                            is kotlinx.serialization.json.JsonArray -> v.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }.joinToString(" ")
+                                            else -> "*"
+                                        }
+                                        suggests[k.lowercase()] = constraint
+                                    }
+                                }
+                            }
                         } catch (e: Exception) {
                             // Ignore parsing error
                         }
-                        Unit
                     } else {
-                        // 2. Try mcmod.info (Forge legacy)
-                        val mcmodEntry = zip.getEntry("mcmod.info")
-                        if (mcmodEntry != null) {
-                            loader = "FORGE"
-                            val content = zip.getInputStream(mcmodEntry).bufferedReader().use { it.readText() }
-                            try {
-                                val arr = jsonParser.parseToJsonElement(content).jsonArray
-                                val first = arr.firstOrNull()?.jsonObject
-                                if (first != null) {
-                                    modId = first["modid"]?.jsonPrimitive?.content ?: modId
-                                    modName = first["name"]?.jsonPrimitive?.content ?: modName
-                                    version = first["version"]?.jsonPrimitive?.content ?: version
-                                    description = first["description"]?.jsonPrimitive?.content ?: description
+                        // 2. Try META-INF/neoforge.mods.toml or META-INF/mods.toml
+                        val neoForgeEntry = zip.getEntry("META-INF/neoforge.mods.toml")
+                        val forgeEntry = zip.getEntry("META-INF/mods.toml")
+                        val tomlEntry = neoForgeEntry ?: forgeEntry
+                        if (tomlEntry != null) {
+                            loader = if (neoForgeEntry != null) "NEOFORGE" else "FORGE"
+                            val lines = zip.getInputStream(tomlEntry).bufferedReader().use { it.readLines() }
+                            for (line in lines) {
+                                val trimmed = line.trim()
+                                if (trimmed.startsWith("modId=", ignoreCase = true) || trimmed.startsWith("modId =", ignoreCase = true)) {
+                                    val idVal = trimmed.substringAfter('=').trim().trim('"', '\'')
+                                    if (idVal.isNotBlank() && modId == cleanName.lowercase().replace(" ", "-")) {
+                                        modId = idVal
+                                    }
+                                } else if (trimmed.startsWith("displayName=", ignoreCase = true) || trimmed.startsWith("displayName =", ignoreCase = true)) {
+                                    val nameVal = trimmed.substringAfter('=').trim().trim('"', '\'')
+                                    if (nameVal.isNotBlank() && modName == cleanName) {
+                                        modName = nameVal
+                                    }
+                                } else if (trimmed.startsWith("version=", ignoreCase = true) || trimmed.startsWith("version =", ignoreCase = true)) {
+                                    val verVal = trimmed.substringAfter('=').trim().trim('"', '\'')
+                                    if (verVal.isNotBlank() && !verVal.startsWith("\${") && version == "1.0.0") {
+                                        version = verVal
+                                    }
+                                } else if (trimmed.startsWith("description=", ignoreCase = true) || trimmed.startsWith("description =", ignoreCase = true)) {
+                                    val descVal = trimmed.substringAfter('=').trim().trim('"', '\'')
+                                    if (descVal.isNotBlank()) {
+                                        description = descVal
+                                    }
                                 }
-                            } catch (e: Exception) {
-                                // Ignore
+                            }
+                        } else {
+                            // 3. Try mcmod.info (Forge legacy)
+                            val mcmodEntry = zip.getEntry("mcmod.info")
+                            if (mcmodEntry != null) {
+                                loader = "FORGE"
+                                val content = zip.getInputStream(mcmodEntry).bufferedReader().use { it.readText() }
+                                try {
+                                    val arr = jsonParser.parseToJsonElement(content).jsonArray
+                                    val first = arr.firstOrNull()?.jsonObject
+                                    if (first != null) {
+                                        modId = first["modid"]?.jsonPrimitive?.content ?: modId
+                                        modName = first["name"]?.jsonPrimitive?.content ?: modName
+                                        version = first["version"]?.jsonPrimitive?.content ?: version
+                                        description = first["description"]?.jsonPrimitive?.content ?: description
+                                    }
+                                } catch (e: Exception) {
+                                    // Ignore
+                                }
                             }
                         }
-                        Unit
                     }
                     Unit
                 }
@@ -223,7 +280,9 @@ class LocalModScanner(
                 enabled = isEnabled,
                 dependencies = dependencies,
                 breaks = breaks,
-                conflicts = conflicts
+                conflicts = conflicts,
+                recommends = recommends,
+                suggests = suggests
             )
         }
     }

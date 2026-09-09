@@ -35,7 +35,9 @@ data class LocalMod(
     val isModrinthLinked: Boolean = false,
     val dependencies: Map<String, String> = emptyMap(),
     val breaks: Map<String, String> = emptyMap(),
-    val conflicts: Map<String, String> = emptyMap()
+    val conflicts: Map<String, String> = emptyMap(),
+    val recommends: Map<String, String> = emptyMap(),
+    val suggests: Map<String, String> = emptyMap()
 )
 
 /**

@@ -51,6 +51,17 @@ object ModCompatibilityResolver {
     ): LaunchCompatibilityReport {
         val targetMc = minecraftVersion.trim()
         val targetLoader = loader.trim().lowercase()
+
+        if (targetMc.isBlank() || targetLoader.isBlank()) {
+            return LaunchCompatibilityReport(
+                minecraftVersion = targetMc,
+                loader = targetLoader,
+                isReadyToLaunch = false,
+                summaryLine = "Incomplete environment: Minecraft '$targetMc', Loader '$targetLoader'",
+                formattedReport = "Incomplete instance environment. Cannot evaluate launch compatibility."
+            )
+        }
+
         val activeMods = installedMods.filter { it.enabled }
         val explicitConflicts = mutableListOf<ModConflict>()
         val missingDependencies = mutableListOf<String>()
@@ -232,6 +243,21 @@ object ModCompatibilityResolver {
     ): ModResolutionResult {
         val targetLoader = loader.trim().lowercase()
         val targetMc = minecraftVersion.trim()
+
+        if (targetMc.isBlank() || targetLoader.isBlank()) {
+            println("[MOD-RESOLVER] ABORTED: Incomplete environment (Minecraft: '$minecraftVersion', Loader: '$loader'). Resolver must not run.")
+            return ModResolutionResult(
+                recommendedVersion = null,
+                latestVersion = null,
+                isLatestCompatible = false,
+                selectionReason = "Incomplete environment (Minecraft: '$minecraftVersion', Loader: '$loader'). Waiting for authoritative environment.",
+                candidateEvaluations = emptyMap(),
+                hasCompatibleVersion = false,
+                primaryConflict = null,
+                coUpgradeOption = null
+            )
+        }
+
         val targetModSlug = project.slug.trim().lowercase()
         val targetProjectId = project.projectId.trim().lowercase()
         val targetTitle = project.title.trim().lowercase()

@@ -99,6 +99,12 @@ import io.ezz.launcher.core.model.curseforge.CurseForgeFile
 import io.ezz.launcher.core.model.curseforge.CurseForgeSortField
 import io.ezz.launcher.core.model.curseforge.CurseForgeModLoaderType
 import io.ezz.launcher.core.minecraft.mods.CurseForgeDependencyResolver
+import io.ezz.launcher.core.minecraft.mods.ModInstallationTransaction
+import io.ezz.launcher.core.minecraft.mods.GlobalModDependencySolver
+import io.ezz.launcher.core.model.instance.InstallationPlan
+import io.ezz.launcher.core.model.instance.PlanActionType
+import io.ezz.launcher.core.model.instance.PlanItem
+import io.ezz.launcher.core.model.instance.ResolvedEnvironment
 
 data class FileConflictState(
     val title: String,
@@ -3260,6 +3266,29 @@ class AppViewModel(
         }
     }
 
+    fun getResolvedEnvironment(instanceId: String): ResolvedEnvironment? {
+        val instance = instanceRepository.instances.value.find { it.id == instanceId }
+            ?: _selectedInstance.value?.takeIf { it.id == instanceId }
+            ?: return null
+        val mcVer = instance.minecraftVersion.trim()
+        val loaderName = instance.loaderType.name.trim()
+        if (mcVer.isBlank() || loaderName.isBlank()) {
+            return null
+        }
+        val gameDir = pathProvider.getInstanceGameDirectory(instance.id).toFile()
+        return try {
+            ResolvedEnvironment(
+                instanceId = instance.id,
+                minecraftVersion = mcVer,
+                loader = loaderName,
+                loaderVersion = null,
+                minecraftDirectoryPath = gameDir.absolutePath
+            )
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     suspend fun installContentWithDependencies(
         instance: Instance,
         project: ModrinthProjectHit,
@@ -3271,140 +3300,200 @@ class AppViewModel(
         val targetDir = destinationResolver.resolveContentDirectory(instance.id, contentType)
         val gameDir = pathProvider.getInstanceGameDirectory(instance.id).toFile()
 
+        // 1. Transactional Mod Installation Flow (MODS)
+        if (contentType == InstanceContentType.MOD) {
+            val env = getResolvedEnvironment(instance.id)
+                ?: throw IllegalStateException("Cannot install mod: Incomplete instance environment for '${instance.name}' (Minecraft: ${instance.minecraftVersion}, Loader: ${instance.loaderType})")
+
+            val planItems = mutableListOf<PlanItem>()
+            val initialMods = instanceManager.getMods(instance.id)
+
+            // HARD SAFETY RULE: All currently installed mods are preserved as KEEP
+            for (m in initialMods) {
+                planItems.add(
+                    PlanItem(
+                        action = PlanActionType.KEEP,
+                        modId = m.id,
+                        modName = m.name,
+                        currentVersion = m.version,
+                        targetVersion = m.version,
+                        fileName = m.fileName,
+                        reason = "Existing installed mod preserved"
+                    )
+                )
+            }
+
+            val primaryFile = mainVersion.files.firstOrNull { it.primary } ?: mainVersion.files.firstOrNull()
+                ?: throw IllegalStateException("No download files available for ${project.title} (v${mainVersion.versionNumber})")
+
+            planItems.add(
+                PlanItem(
+                    action = PlanActionType.INSTALL,
+                    modId = project.projectId,
+                    modName = project.title,
+                    targetVersion = mainVersion.versionNumber,
+                    fileName = primaryFile.filename,
+                    downloadUrl = primaryFile.url,
+                    fileSize = primaryFile.size,
+                    isPrimary = true,
+                    reason = "User requested mod installation"
+                )
+            )
+
+            selectedDependencies.filter { it.selectedToInstall && it.version != null }.forEach { dep ->
+                val depVer = dep.version!!
+                val depFile = depVer.files.firstOrNull { it.primary } ?: depVer.files.firstOrNull() ?: return@forEach
+                val depTitle = dep.project?.title ?: depVer.name
+                planItems.add(
+                    PlanItem(
+                        action = PlanActionType.INSTALL,
+                        modId = dep.project?.projectId ?: depVer.projectId,
+                        modName = depTitle,
+                        targetVersion = depVer.versionNumber,
+                        fileName = depFile.filename,
+                        downloadUrl = depFile.url,
+                        fileSize = depFile.size,
+                        isPrimary = false,
+                        reason = "Required dependency for ${project.title}"
+                    )
+                )
+            }
+
+            val initialFiles = env.modsDirectory.listFiles { f ->
+                f.isFile && (f.name.endsWith(".jar", ignoreCase = true) || f.name.endsWith(".jar.disabled", ignoreCase = true))
+            }?.map { it.name }?.toSet() ?: emptySet()
+
+            val expectedFinal = initialFiles + planItems.filter { it.action == PlanActionType.INSTALL }.map { it.fileName }.toSet()
+
+            val plan = InstallationPlan(
+                environment = env,
+                targetModId = project.projectId,
+                targetModName = project.title,
+                selectedVersionNumber = mainVersion.versionNumber,
+                items = planItems,
+                initialModFileNames = initialFiles,
+                expectedFinalModFileNames = expectedFinal
+            )
+
+            val javaVer = io.ezz.launcher.core.runtime.detector.JavaRuntimeDetector.getRequiredJavaMajorVersion(instance.minecraftVersion)
+
+            val txResult = ModInstallationTransaction.execute(
+                plan = plan,
+                javaMajorVersion = javaVer,
+                downloader = { url, targetFile, progressCb ->
+                    modrinth.downloadContent(url, targetFile, progressCb)
+                },
+                onProgress = onProgress
+            )
+
+            if (txResult.isFailure) {
+                val err = txResult.exceptionOrNull() ?: IllegalStateException("Mod installation failed")
+                return@withContext Result.failure(err)
+            }
+
+            // Save metadata sidecar
+            try {
+                val metaFile = java.io.File(targetDir, ".modrinth_${primaryFile.filename}.json")
+                metaFile.writeText("""{"projectId":"${project.projectId}","slug":"${project.slug}","title":"${project.title.replace("\"", "\\\"")}"}""")
+            } catch (_: Throwable) {}
+
+            // Save sidecar icon if available
+            val iconUrl = project.iconUrl
+            if (!iconUrl.isNullOrBlank()) {
+                try {
+                    val iconSideFile = java.io.File(targetDir, ".icon_${primaryFile.filename}.png")
+                    val cleanName = primaryFile.filename.removeSuffix(".jar").removeSuffix(".disabled")
+                    val iconCacheDir = pathProvider.cacheDirectory.resolve("icons").resolve("mods").toFile().apply { mkdirs() }
+                    val iconCacheFile = java.io.File(iconCacheDir, "${cleanName}.png")
+                    modrinth.downloadContent(iconUrl, iconSideFile) { _, _ -> }
+                    if (iconSideFile.exists() && iconSideFile.length() > 0) {
+                        iconSideFile.copyTo(iconCacheFile, overwrite = true)
+                    }
+                } catch (_: Throwable) {}
+            }
+
+            refreshContent(instance.id, contentType)
+            ToastManager.show(
+                title = "Mod Installed",
+                description = "${project.title} (v${mainVersion.versionNumber}) installed to ${instance.name}",
+                type = ToastType.SUCCESS
+            )
+            return@withContext Result.success(Unit)
+        }
+
+        // 2. Safe Staged Installation for Non-Mod Content (Resource Packs & Shaders)
         val timeStamp = System.currentTimeMillis()
         val stagingDir = java.io.File(gameDir, ".install_staging_$timeStamp")
-        val backupDir = java.io.File(gameDir, ".install_backup_$timeStamp")
         stagingDir.mkdirs()
 
         val newlyAddedFiles = mutableListOf<java.io.File>()
-        val backedUpOldFiles = mutableListOf<Pair<java.io.File, java.io.File>>() // original -> backup
 
         try {
-            val filesToDownload = mutableListOf<Pair<String, ModrinthVersion>>()
-            filesToDownload.add(project.title to mainVersion)
-            selectedDependencies.filter { it.selectedToInstall && it.version != null }.forEach { dep ->
-                val depTitle = dep.project?.title ?: dep.version!!.name
-                filesToDownload.add(depTitle to dep.version!!)
-            }
+            val primaryFile = mainVersion.files.firstOrNull { it.primary } ?: mainVersion.files.firstOrNull()
+                ?: throw IllegalStateException("No download files available for ${project.title} (v${mainVersion.versionNumber})")
+            val stagedFile = java.io.File(stagingDir, primaryFile.filename)
 
-            val totalCount = filesToDownload.size
-            for ((index, item) in filesToDownload.withIndex()) {
-                val (title, ver) = item
-                val primaryFile = ver.files.firstOrNull { it.primary } ?: ver.files.firstOrNull()
-                    ?: throw IllegalStateException("No download files available for $title (v${ver.versionNumber})")
-                val stagedFile = java.io.File(stagingDir, primaryFile.filename)
-
-                onProgress("Downloading $title (v${ver.versionNumber})...", index.toFloat() / totalCount.toFloat())
-                val ok = modrinth.downloadContent(
-                    url = primaryFile.url,
-                    targetFile = stagedFile,
-                    onProgress = { downloaded, total ->
-                        if (total > 0) {
-                            val fileFraction = downloaded.toFloat() / total.toFloat()
-                            val overallProgress = (index.toFloat() + fileFraction) / totalCount.toFloat()
-                            onProgress("Downloading $title (${(fileFraction * 100).toInt()}%)...", overallProgress)
-                        }
-                    }
-                )
-
-                if (!ok || !stagedFile.exists() || stagedFile.length() == 0L) {
-                    throw IllegalStateException("Failed to download $title file ${primaryFile.filename}")
-                }
-
-                // 2. Validate Bytecode & Integrity ONLY for MODS (.jar)
-                if (contentType == InstanceContentType.MOD && primaryFile.filename.endsWith(".jar", ignoreCase = true)) {
-                    onProgress("Validating bytecode: $title...", (index.toFloat() + 0.8f) / totalCount.toFloat())
-                    val javaVer = io.ezz.launcher.core.runtime.detector.JavaRuntimeDetector.getRequiredJavaMajorVersion(instance.minecraftVersion)
-                    val validation = io.ezz.launcher.core.minecraft.mod.ModBytecodeValidator.validateJarFile(stagedFile, javaVer)
-                    if (validation is io.ezz.launcher.core.minecraft.mod.ModCompatibilityResult.Incompatible) {
-                        throw IllegalStateException("Bytecode incompatibility: ${validation.errorMessage}")
+            onProgress("Downloading ${project.title} (v${mainVersion.versionNumber})...", 0.20f)
+            val ok = modrinth.downloadContent(
+                url = primaryFile.url,
+                targetFile = stagedFile,
+                onProgress = { downloaded, total ->
+                    if (total > 0) {
+                        val fileFraction = downloaded.toFloat() / total.toFloat()
+                        onProgress("Downloading ${project.title} (${(fileFraction * 100).toInt()}%)...", 0.20f + fileFraction * 0.60f)
                     }
                 }
+            )
+
+            if (!ok || !stagedFile.exists() || stagedFile.length() == 0L) {
+                throw IllegalStateException("Failed to download ${project.title} file ${primaryFile.filename}")
             }
 
-            // 3. Stage old version backup (Duplicate protection)
-            onProgress("Preparing file installation...", 0.90f)
-            backupDir.mkdirs()
-            val existingFiles = targetDir.listFiles() ?: emptyArray()
+            onProgress("Installing ${contentType.displayName.lowercase()}...", 0.85f)
+            val finalTarget = java.io.File(targetDir, primaryFile.filename)
+            destinationResolver.validateDestination(instance.id, contentType, finalTarget)
 
-            for ((_, ver) in filesToDownload) {
-                val primaryFile = ver.files.firstOrNull { it.primary } ?: ver.files.firstOrNull() ?: continue
-                val cleanPrefix = primaryFile.filename.substringBefore('-').lowercase()
-                if (cleanPrefix.isNotBlank() && !cleanPrefix.startsWith("ezz-skin-mod")) {
-                    existingFiles.forEach { oldFile ->
-                        val oldName = oldFile.name.lowercase()
-                        if ((oldName.startsWith(cleanPrefix) || oldName.contains(cleanPrefix)) && oldFile.name != primaryFile.filename) {
-                            val backupTarget = java.io.File(backupDir, oldFile.name)
-                            if (oldFile.renameTo(backupTarget)) {
-                                backedUpOldFiles.add(oldFile to backupTarget)
-                            }
-                        }
+            if (finalTarget.exists()) {
+                finalTarget.delete()
+            }
+            if (!stagedFile.renameTo(finalTarget)) {
+                stagedFile.copyTo(finalTarget, overwrite = true)
+                stagedFile.delete()
+            }
+
+            if (!finalTarget.exists() || finalTarget.length() == 0L) {
+                throw IllegalStateException("Installation verification failed: $finalTarget does not exist or is empty")
+            }
+            newlyAddedFiles.add(finalTarget)
+
+            // Save sidecar icon if available
+            val iconUrl = project.iconUrl
+            if (!iconUrl.isNullOrBlank()) {
+                try {
+                    val iconSideFile = java.io.File(targetDir, ".icon_${primaryFile.filename}.png")
+                    val cleanName = primaryFile.filename.removeSuffix(".jar").removeSuffix(".zip").removeSuffix(".disabled")
+                    val iconCategory = when (contentType) {
+                        InstanceContentType.RESOURCE_PACK -> "resourcepacks"
+                        InstanceContentType.SHADER -> "shaders"
+                        else -> "mods"
                     }
-                }
-            }
-
-            // 4. Atomically move staged files into target directory with explicit destination validation
-            for ((_, ver) in filesToDownload) {
-                val primaryFile = ver.files.firstOrNull { it.primary } ?: ver.files.firstOrNull() ?: continue
-                val stagedFile = java.io.File(stagingDir, primaryFile.filename)
-                val finalTarget = java.io.File(targetDir, primaryFile.filename)
-
-                // Authoritative destination validation before writing:
-                destinationResolver.validateDestination(instance.id, contentType, finalTarget)
-
-                if (finalTarget.exists()) {
-                    finalTarget.delete()
-                }
-                if (!stagedFile.renameTo(finalTarget)) {
-                    // Fallback copy
-                    stagedFile.copyTo(finalTarget, overwrite = true)
-                    stagedFile.delete()
-                }
-
-                // Verify file exists on disk and is non-empty
-                if (!finalTarget.exists() || finalTarget.length() == 0L) {
-                    throw IllegalStateException("Installation verification failed: $finalTarget does not exist or is empty")
-                }
-                newlyAddedFiles.add(finalTarget)
-
-                // If this is the main version and project has an iconUrl, download and save it alongside the file & in cache
-                if (ver == mainVersion) {
-                    val iconUrl = project.iconUrl
-                    if (!iconUrl.isNullOrBlank()) {
-                        try {
-                            val iconSideFile = java.io.File(targetDir, ".icon_${primaryFile.filename}.png")
-                            val cleanName = primaryFile.filename.removeSuffix(".jar").removeSuffix(".zip").removeSuffix(".disabled")
-                            val iconCategory = when (contentType) {
-                                InstanceContentType.RESOURCE_PACK -> "resourcepacks"
-                                InstanceContentType.SHADER -> "shaders"
-                                else -> "mods"
-                            }
-                            val iconCacheDir = pathProvider.cacheDirectory.resolve("icons").resolve(iconCategory).toFile().apply { mkdirs() }
-                            val iconCacheFile = java.io.File(iconCacheDir, "${cleanName}.png")
-
-                            modrinth.downloadContent(iconUrl, iconSideFile) { _, _ -> }
-                            if (iconSideFile.exists() && iconSideFile.length() > 0) {
-                                iconSideFile.copyTo(iconCacheFile, overwrite = true)
-                            }
-                        } catch (iconEx: Throwable) {
-                            println("[ContentInstaller] Non-fatal: failed to download icon for ${primaryFile.filename}: ${iconEx.message}")
-                        }
+                    val iconCacheDir = pathProvider.cacheDirectory.resolve("icons").resolve(iconCategory).toFile().apply { mkdirs() }
+                    val iconCacheFile = java.io.File(iconCacheDir, "${cleanName}.png")
+                    modrinth.downloadContent(iconUrl, iconSideFile) { _, _ -> }
+                    if (iconSideFile.exists() && iconSideFile.length() > 0) {
+                        iconSideFile.copyTo(iconCacheFile, overwrite = true)
                     }
-
-                    try {
-                        val metaFile = java.io.File(targetDir, ".modrinth_${primaryFile.filename}.json")
-                        metaFile.writeText("""{"projectId":"${project.projectId}","slug":"${project.slug}","title":"${project.title.replace("\"", "\\\"")}"}""")
-                    } catch (_: Throwable) {}
-                }
+                } catch (_: Throwable) {}
             }
 
-            // 5. Post-installation Verification & Selective Hydration
+            try {
+                val metaFile = java.io.File(targetDir, ".modrinth_${primaryFile.filename}.json")
+                metaFile.writeText("""{"projectId":"${project.projectId}","slug":"${project.slug}","title":"${project.title.replace("\"", "\\\"")}"}""")
+            } catch (_: Throwable) {}
+
             onProgress("Verifying instance ${contentType.displayName.lowercase()}...", 0.95f)
             refreshContent(instance.id, contentType)
-
-            // Clean up temporary directories
             stagingDir.deleteRecursively()
-            backupDir.deleteRecursively()
 
             onProgress("Installed successfully", 1f)
             ToastManager.show(
@@ -3414,25 +3503,14 @@ class AppViewModel(
             )
             Result.success(Unit)
         } catch (e: Throwable) {
-            // ROLLBACK: Undo changes on failure
-            println("[ContentInstaller] Installation failed, rolling back: ${e.message}")
+            println("[ContentInstaller] Non-mod installation failed, rolling back: ${e.message}")
             try {
-                // Delete newly added files
                 newlyAddedFiles.forEach { file ->
                     if (file.exists()) file.delete()
                 }
-                // Restore old files from backup
-                backedUpOldFiles.forEach { (originalFile, backupFile) ->
-                    if (backupFile.exists()) {
-                        backupFile.renameTo(originalFile)
-                    }
-                }
                 stagingDir.deleteRecursively()
-                backupDir.deleteRecursively()
                 refreshContent(instance.id, contentType)
-            } catch (rollbackEx: Throwable) {
-                println("[ContentInstaller] Rollback encountered error: ${rollbackEx.message}")
-            }
+            } catch (_: Throwable) {}
             Result.failure(e)
         }
     }

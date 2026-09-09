@@ -17,7 +17,9 @@ data class ModMetadata(
     val enabled: Boolean = true,
     val dependencies: Map<String, String> = emptyMap(),
     val breaks: Map<String, String> = emptyMap(),
-    val conflicts: Map<String, String> = emptyMap()
+    val conflicts: Map<String, String> = emptyMap(),
+    val recommends: Map<String, String> = emptyMap(),
+    val suggests: Map<String, String> = emptyMap()
 )
 
 fun ModMetadata.toLocalMod(): LocalMod = LocalMod(
@@ -32,6 +34,8 @@ fun ModMetadata.toLocalMod(): LocalMod = LocalMod(
     description = description,
     dependencies = dependencies,
     breaks = breaks,
-    conflicts = conflicts
+    conflicts = conflicts,
+    recommends = recommends,
+    suggests = suggests
 )
 

@@ -37,6 +37,21 @@ object CurseForgeDependencyResolver {
         candidateFiles: List<CurseForgeFile>
     ): CurseForgeResolutionResult {
         val targetMc = minecraftVersion.trim()
+        val targetLoader = loader.trim().lowercase()
+
+        if (targetMc.isBlank() || targetLoader.isBlank()) {
+            println("[CurseForge] ABORTED: Incomplete environment (Minecraft: '$minecraftVersion', Loader: '$loader'). Resolver must not run.")
+            return CurseForgeResolutionResult(
+                recommendedFile = null,
+                latestFile = null,
+                isLatestCompatible = false,
+                selectionReason = "Incomplete environment (Minecraft: '$minecraftVersion', Loader: '$loader'). Waiting for authoritative environment.",
+                candidateEvaluations = emptyMap(),
+                hasCompatibleVersion = false,
+                primaryConflictText = null
+            )
+        }
+
         val targetLoaderType = CurseForgeModLoaderType.fromLoaderName(loader)
         val targetIdentity = ModIdentity(
             source = "curseforge",
