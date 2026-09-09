@@ -1,6 +1,7 @@
 package io.ezz.launcher.ui.dialogs
 
 import androidx.compose.animation.AnimatedVisibility
+import io.ezz.launcher.core.model.instance.InstanceContentType
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -111,13 +112,19 @@ fun InstallModDialog(
 
     var isVersionDropdownOpen by remember { mutableStateOf(false) }
 
+    val contentType = remember(project) {
+        InstanceContentType.fromModrinthType(project.projectType)
+    }
+
+    val installedResourcePacks by viewModel.manageResourcePacks.collectAsState()
+    val installedShaders by viewModel.manageShaders.collectAsState()
+
     // Load instance-specific mods whenever activeInstance changes
     LaunchedEffect(activeInstance?.id) {
         val inst = activeInstance ?: return@LaunchedEffect
         installedModsForInstance = viewModel.instanceManager.getMods(inst.id)
     }
 
-    // Check if mod is already installed in target instance
     val installedMod = remember(activeInstance, project, installedModsForInstance) {
         val slug = project.slug.lowercase()
         val pId = project.projectId.lowercase()
@@ -128,6 +135,33 @@ fun InstallModDialog(
             m.name.equals(title, ignoreCase = true) ||
             m.fileName.lowercase().contains(slug) ||
             m.fileName.lowercase().contains(pId)
+        }
+    }
+
+    val installedResourcePack = remember(project, installedResourcePacks) {
+        val slug = project.slug.lowercase()
+        val title = project.title.lowercase()
+        installedResourcePacks.firstOrNull { p ->
+            p.fileName.lowercase().contains(slug) ||
+            p.name.lowercase().contains(title)
+        }
+    }
+
+    val installedShader = remember(project, installedShaders) {
+        val slug = project.slug.lowercase()
+        val title = project.title.lowercase()
+        installedShaders.firstOrNull { s ->
+            s.fileName.lowercase().contains(slug) ||
+            s.name.lowercase().contains(title)
+        }
+    }
+
+    // Check if item is already installed in target instance
+    val isItemAlreadyInstalled = remember(contentType, installedMod, installedResourcePack, installedShader) {
+        when (contentType) {
+            InstanceContentType.RESOURCE_PACK -> installedResourcePack != null
+            InstanceContentType.SHADER -> installedShader != null
+            else -> installedMod != null
         }
     }
 
@@ -152,18 +186,21 @@ fun InstallModDialog(
             val supportedLoaders = viewModel.modrinth.getProjectSupportedLoadersForVersion(project.projectId, initialVersion)
             availableLoadersForVersion = supportedLoaders
 
-            // Smart Default: Pick active instance loader if supported, otherwise first available
-            val instLoader = activeInstance?.loaderType?.name?.lowercase() ?: "fabric"
-            val initialLoader = when {
-                supportedLoaders.contains(instLoader) -> instLoader
-                supportedLoaders.isNotEmpty() -> supportedLoaders.first()
-                else -> "fabric"
+            val initialLoader = if (contentType == InstanceContentType.MOD) {
+                val instLoader = activeInstance?.loaderType?.name?.lowercase() ?: "fabric"
+                when {
+                    supportedLoaders.contains(instLoader) -> instLoader
+                    supportedLoaders.isNotEmpty() -> supportedLoaders.first()
+                    else -> "fabric"
+                }
+            } else {
+                supportedLoaders.firstOrNull() ?: ""
             }
             selectedLoader = initialLoader
 
             isLoadingMetadata = false
         } catch (e: Throwable) {
-            installError = "Failed to load mod metadata from Modrinth: ${e.message}"
+            installError = "Failed to load metadata from Modrinth: ${e.message}"
             isLoadingMetadata = false
         }
     }
@@ -184,24 +221,41 @@ fun InstallModDialog(
                 selectedLoader = loaders.first()
             }
 
-            val versions = viewModel.modrinth.getProjectVersions(
+            var versions = viewModel.modrinth.getProjectVersions(
                 projectIdOrSlug = project.projectId,
                 loaders = if (selectedLoader.isNotBlank()) listOf(selectedLoader) else null,
                 gameVersions = listOf(selectedGameVersion)
             )
+            if (versions.isEmpty() && contentType != InstanceContentType.MOD) {
+                // Fallback without loader filter for resource packs / shaders
+                versions = viewModel.modrinth.getProjectVersions(
+                    projectIdOrSlug = project.projectId,
+                    loaders = null,
+                    gameVersions = listOf(selectedGameVersion)
+                )
+            }
             compatibleVersions = versions
 
-            // Run authoritative whole-instance compatibility resolution against installed mods
-            val res = io.ezz.launcher.core.minecraft.mods.ModCompatibilityResolver.resolve(
-                minecraftVersion = selectedGameVersion,
-                loader = selectedLoader,
-                installedMods = installedModsForInstance,
-                project = project,
-                candidateVersions = versions
-            )
+            val res = if (contentType == InstanceContentType.MOD) {
+                io.ezz.launcher.core.minecraft.mods.ModCompatibilityResolver.resolve(
+                    minecraftVersion = selectedGameVersion,
+                    loader = selectedLoader,
+                    installedMods = installedModsForInstance,
+                    project = project,
+                    candidateVersions = versions
+                )
+            } else {
+                val firstVer = versions.firstOrNull()
+                io.ezz.launcher.core.model.modrinth.ModResolutionResult(
+                    recommendedVersion = firstVer,
+                    latestVersion = firstVer,
+                    isLatestCompatible = versions.isNotEmpty(),
+                    selectionReason = if (versions.isNotEmpty()) "Release available for Minecraft $selectedGameVersion" else "No releases found for this version",
+                    candidateEvaluations = emptyMap(),
+                    hasCompatibleVersion = versions.isNotEmpty()
+                )
+            }
             resolutionResult = res
-
-            // Smartly select the recommended compatible version (or fallback to first matching)
             selectedVersion = res.recommendedVersion ?: versions.firstOrNull()
 
             isLoadingVersions = false
@@ -986,9 +1040,16 @@ fun InstallModDialog(
                                 // -------------------------------------------------------------
                                 // D. ALREADY INSTALLED WARNING / UPDATE NOTIFICATION
                                 // -------------------------------------------------------------
-                                if (installedMod != null) {
+                                if (isItemAlreadyInstalled) {
                                     val isInstalledVersionOlder = selectedVersion != null &&
+                                            installedMod != null &&
                                             selectedVersion!!.versionNumber != installedMod.version
+
+                                    val installedName = when (contentType) {
+                                        InstanceContentType.RESOURCE_PACK -> installedResourcePack?.name ?: installedResourcePack?.fileName ?: project.title
+                                        InstanceContentType.SHADER -> installedShader?.name ?: installedShader?.fileName ?: project.title
+                                        else -> installedMod?.fileName ?: project.title
+                                    }
 
                                     Box(
                                         modifier = Modifier
@@ -1011,10 +1072,10 @@ fun InstallModDialog(
                                                     fontWeight = FontWeight.Bold
                                                 )
                                                 Text(
-                                                    text = if (isInstalledVersionOlder) {
+                                                    text = if (isInstalledVersionOlder && installedMod != null) {
                                                         "Installed: v${installedMod.version} → Selected: v${selectedVersion?.versionNumber}. Installing will update to the selected version."
                                                     } else {
-                                                        "This mod is already present in ${activeInstance?.name ?: "the instance"} (${installedMod.fileName})."
+                                                        "This ${contentType.displayName.lowercase()} is already present in ${activeInstance?.name ?: "the instance"} ($installedName)."
                                                     },
                                                     color = Color(0xFF93C5FD),
                                                     fontSize = 11.5.sp
@@ -1111,8 +1172,8 @@ fun InstallModDialog(
                             )
                         } else {
                             val currentEval = selectedVersion?.let { resolutionResult?.candidateEvaluations?.get(it.id) }
-                            val isSelectedCompatible = currentEval?.isCompatible == true
-                            val hasAnyCompatible = resolutionResult?.hasCompatibleVersion == true
+                            val isSelectedCompatible = if (contentType == InstanceContentType.MOD) currentEval?.isCompatible == true else selectedVersion != null
+                            val hasAnyCompatible = if (contentType == InstanceContentType.MOD) resolutionResult?.hasCompatibleVersion == true else compatibleVersions.isNotEmpty()
                             val hasUnresolvedRequiredDep = resolvedDependencies.any { it.isRequired && !it.isAlreadyInstalled && (it.version == null || it.failureReason != null) }
                             val totalModsToInstall = 1 + resolvedDependencies.count { it.selectedToInstall && it.version != null }
                             val canInstall = activeInstance != null &&
@@ -1128,8 +1189,10 @@ fun InstallModDialog(
                                     hasUnresolvedRequiredDep -> "Required Dependency Missing"
                                     !hasAnyCompatible -> "No Compatible Version"
                                     !isSelectedCompatible -> "Incompatible with Instance"
-                                    totalModsToInstall > 1 -> "Install $totalModsToInstall Mods"
-                                    installedMod != null -> "Reinstall / Update"
+                                    totalModsToInstall > 1 -> "Install $totalModsToInstall Items"
+                                    isItemAlreadyInstalled -> "Reinstall / Update"
+                                    contentType == InstanceContentType.RESOURCE_PACK -> "Install Resource Pack"
+                                    contentType == InstanceContentType.SHADER -> "Install Shader Pack"
                                     else -> "Install Mod"
                                 },
                                 onClick = {
@@ -1143,11 +1206,12 @@ fun InstallModDialog(
                                     installError = null
 
                                     scope.launch {
-                                        val result = viewModel.installModWithDependencies(
+                                        val result = viewModel.installContentWithDependencies(
                                             instance = targetInst,
                                             project = project,
                                             mainVersion = targetVer,
                                             selectedDependencies = resolvedDependencies,
+                                            contentType = contentType,
                                             onProgress = { stage, progress ->
                                                 installStage = stage
                                                 installProgress = progress

@@ -76,6 +76,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import okio.Path.Companion.toPath
 import io.ezz.launcher.core.model.instance.Instance
+import io.ezz.launcher.core.model.instance.InstanceContentType
 import io.ezz.launcher.core.model.instance.LocalMod
 import io.ezz.launcher.core.model.modrinth.ModrinthBrowseState
 import io.ezz.launcher.core.model.modrinth.ModrinthProjectHit
@@ -1081,7 +1082,12 @@ private fun ModrinthModBrowseCard(
     onInspect: () -> Unit,
     onInstall: () -> Unit
 ) {
-    val isInstalled = viewModel.isModInstalled(hit)
+    val contentType = remember(hit) { InstanceContentType.fromModrinthType(hit.projectType) }
+    val isInstalled = when (contentType) {
+        InstanceContentType.RESOURCE_PACK -> viewModel.isResourcePackInstalled(hit)
+        InstanceContentType.SHADER -> viewModel.isShaderInstalled(hit)
+        else -> viewModel.isModInstalled(hit)
+    }
 
     val cardInteraction = remember { MutableInteractionSource() }
     val isHovered by cardInteraction.collectIsHoveredAsState()

@@ -75,6 +75,8 @@ import io.ezz.launcher.core.model.modrinth.ModrinthProjectHit
 import io.ezz.launcher.core.model.modrinth.ModrinthVersion
 import io.ezz.launcher.core.model.modrinth.ModUpdateCandidate
 import io.ezz.launcher.core.model.modrinth.ModrinthBrowseState
+import io.ezz.launcher.core.model.instance.InstanceContentType
+import io.ezz.launcher.core.storage.instance.InstanceContentDestinationResolver
 import io.ezz.launcher.core.storage.instance.LocalInstanceManager
 import io.ezz.launcher.core.network.modrinth.ModrinthService
 import io.ezz.launcher.ui.image.ModrinthImageLoader
@@ -214,6 +216,9 @@ class AppViewModel(
 
     val instanceManager: LocalInstanceManager =
         localInstanceManager ?: LocalInstanceManager(pathProvider, instanceRepository)
+
+    val destinationResolver: InstanceContentDestinationResolver =
+        InstanceContentDestinationResolver(pathProvider)
 
     val modrinth: ModrinthService =
         modrinthService ?: ModrinthService()
@@ -857,7 +862,32 @@ class AppViewModel(
 
     fun refreshMods(instanceId: String? = _selectedInstance.value?.id) {
         val targetId = instanceId ?: _selectedInstance.value?.id ?: return
-        contentHydrator.hydrateInstance(targetId, forceRefresh = true)
+        contentHydrator.hydrateCategory(targetId, InstanceContentType.MOD)
+    }
+
+    fun refreshResourcePacks(instanceId: String? = _selectedInstance.value?.id) {
+        val targetId = instanceId ?: _selectedInstance.value?.id ?: return
+        contentHydrator.hydrateCategory(targetId, InstanceContentType.RESOURCE_PACK)
+    }
+
+    fun refreshShaders(instanceId: String? = _selectedInstance.value?.id) {
+        val targetId = instanceId ?: _selectedInstance.value?.id ?: return
+        contentHydrator.hydrateCategory(targetId, InstanceContentType.SHADER)
+    }
+
+    fun refreshWorlds(instanceId: String? = _selectedInstance.value?.id) {
+        val targetId = instanceId ?: _selectedInstance.value?.id ?: return
+        contentHydrator.hydrateCategory(targetId, InstanceContentType.WORLD)
+    }
+
+    fun refreshScreenshots(instanceId: String? = _selectedInstance.value?.id) {
+        val targetId = instanceId ?: _selectedInstance.value?.id ?: return
+        contentHydrator.hydrateCategory(targetId, InstanceContentType.SCREENSHOT)
+    }
+
+    fun refreshContent(instanceId: String? = _selectedInstance.value?.id, contentType: InstanceContentType) {
+        val targetId = instanceId ?: _selectedInstance.value?.id ?: return
+        contentHydrator.hydrateCategory(targetId, contentType)
     }
 
     fun toggleMod(instanceId: String, fileName: String, enable: Boolean) {
@@ -894,25 +924,31 @@ class AppViewModel(
 
     fun openModsFolder(instanceId: String? = _selectedInstance.value?.id) {
         val targetId = instanceId ?: return
-        val path = pathProvider.getInstanceDirectory(targetId).resolve(".minecraft").resolve("mods")
+        val path = destinationResolver.resolveContentPath(targetId, InstanceContentType.MOD)
         platformBridge.openFolder(path)
     }
 
     fun openResourcePacksFolder(instanceId: String? = _selectedInstance.value?.id) {
         val targetId = instanceId ?: return
-        val path = pathProvider.getInstanceDirectory(targetId).resolve(".minecraft").resolve("resourcepacks")
+        val path = destinationResolver.resolveContentPath(targetId, InstanceContentType.RESOURCE_PACK)
         platformBridge.openFolder(path)
     }
 
     fun openShadersFolder(instanceId: String? = _selectedInstance.value?.id) {
         val targetId = instanceId ?: return
-        val path = pathProvider.getInstanceDirectory(targetId).resolve(".minecraft").resolve("shaderpacks")
+        val path = destinationResolver.resolveContentPath(targetId, InstanceContentType.SHADER)
         platformBridge.openFolder(path)
     }
 
     fun openSavesFolder(instanceId: String? = _selectedInstance.value?.id) {
         val targetId = instanceId ?: return
-        val path = pathProvider.getInstanceDirectory(targetId).resolve(".minecraft").resolve("saves")
+        val path = destinationResolver.resolveContentPath(targetId, InstanceContentType.WORLD)
+        platformBridge.openFolder(path)
+    }
+
+    fun openScreenshotsFolder(instanceId: String? = _selectedInstance.value?.id) {
+        val targetId = instanceId ?: return
+        val path = destinationResolver.resolveContentPath(targetId, InstanceContentType.SCREENSHOT)
         platformBridge.openFolder(path)
     }
 
@@ -2240,6 +2276,7 @@ class AppViewModel(
             instanceManager.toggleResourcePack(instance.id, fileName, enable)
             manageResourcePacks.value = instanceManager.getResourcePacks(instance.id)
             manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+            refreshResourcePacks(instance.id)
         }
     }
 
@@ -2251,6 +2288,7 @@ class AppViewModel(
             }
             manageResourcePacks.value = instanceManager.getResourcePacks(instance.id)
             manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+            refreshResourcePacks(instance.id)
         }
     }
 
@@ -2260,6 +2298,7 @@ class AppViewModel(
             instanceManager.deleteResourcePack(instance.id, fileName)
             manageResourcePacks.value = instanceManager.getResourcePacks(instance.id)
             manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+            refreshResourcePacks(instance.id)
         }
     }
 
@@ -2271,6 +2310,7 @@ class AppViewModel(
             }
             manageResourcePacks.value = instanceManager.getResourcePacks(instance.id)
             manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+            refreshResourcePacks(instance.id)
         }
     }
 
@@ -2281,6 +2321,7 @@ class AppViewModel(
             instanceManager.toggleShaderPack(instance.id, fileName, enable)
             manageShaders.value = instanceManager.getShaderPacks(instance.id)
             manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+            refreshShaders(instance.id)
         }
     }
 
@@ -2292,6 +2333,7 @@ class AppViewModel(
             }
             manageShaders.value = instanceManager.getShaderPacks(instance.id)
             manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+            refreshShaders(instance.id)
         }
     }
 
@@ -2301,6 +2343,7 @@ class AppViewModel(
             instanceManager.deleteShaderPack(instance.id, fileName)
             manageShaders.value = instanceManager.getShaderPacks(instance.id)
             manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+            refreshShaders(instance.id)
         }
     }
 
@@ -2312,6 +2355,7 @@ class AppViewModel(
             }
             manageShaders.value = instanceManager.getShaderPacks(instance.id)
             manageStatistics.value = instanceManager.getInstanceStatistics(instance.id)
+            refreshShaders(instance.id)
         }
     }
 
@@ -2818,7 +2862,7 @@ class AppViewModel(
             allowedExtensions = setOf("jar"),
             onFileSelected = { file ->
                 if (file == null) return@openFilePicker
-                val modsDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("mods").toFile()
+                val modsDir = destinationResolver.resolveContentDirectory(instance.id, InstanceContentType.MOD)
                 activeLocalImportRequest.value = io.ezz.launcher.ui.instance.installation.model.LocalImportRequest(
                     file = file,
                     contentType = io.ezz.launcher.ui.instance.installation.model.ContentType.MOD,
@@ -2836,7 +2880,7 @@ class AppViewModel(
             allowedExtensions = setOf("zip"),
             onFileSelected = { file ->
                 if (file == null) return@openFilePicker
-                val packsDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("resourcepacks").toFile()
+                val packsDir = destinationResolver.resolveContentDirectory(instance.id, InstanceContentType.RESOURCE_PACK)
                 activeLocalImportRequest.value = io.ezz.launcher.ui.instance.installation.model.LocalImportRequest(
                     file = file,
                     contentType = io.ezz.launcher.ui.instance.installation.model.ContentType.RESOURCE_PACK,
@@ -2854,7 +2898,7 @@ class AppViewModel(
             allowedExtensions = setOf("zip"),
             onFileSelected = { file ->
                 if (file == null) return@openFilePicker
-                val shadersDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("shaderpacks").toFile()
+                val shadersDir = destinationResolver.resolveContentDirectory(instance.id, InstanceContentType.SHADER)
                 activeLocalImportRequest.value = io.ezz.launcher.ui.instance.installation.model.LocalImportRequest(
                     file = file,
                     contentType = io.ezz.launcher.ui.instance.installation.model.ContentType.SHADER,
@@ -2907,8 +2951,7 @@ class AppViewModel(
                         return@launch
                     }
 
-                    val savesDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").resolve("saves").toFile()
-                    savesDir.mkdirs()
+                    val savesDir = destinationResolver.resolveContentDirectory(instance.id, InstanceContentType.WORLD)
 
                     val parts = levelDatEntryPath!!.split('/')
                     val (prefixToStrip, worldFolderName) = if (parts.size > 1) {
@@ -2919,6 +2962,7 @@ class AppViewModel(
                     }
 
                     val targetWorldDir = java.io.File(savesDir, worldFolderName)
+                    destinationResolver.validateDestination(instance.id, InstanceContentType.WORLD, targetWorldDir)
 
                     fun extractWorld() {
                         scope.launch(Dispatchers.IO) {
@@ -2936,7 +2980,7 @@ class AppViewModel(
                                         if (entryName.contains("..")) continue // Prevent zip slip
 
                                         val relativePath = if (prefixToStrip.isNotEmpty() && entryName.startsWith(prefixToStrip)) {
-                                            entryName.removePrefix(prefixToStrip)
+                                             entryName.removePrefix(prefixToStrip)
                                         } else if (prefixToStrip.isEmpty()) {
                                             entryName
                                         } else {
@@ -2960,7 +3004,7 @@ class AppViewModel(
                                 }
 
                                 withContext(Dispatchers.Main) {
-                                    refreshManageData()
+                                    refreshWorlds(instance.id)
                                     ToastManager.show("World Imported", "World '$worldFolderName' imported successfully.", ToastType.SUCCESS)
                                 }
                             } catch (e: Throwable) {
@@ -2999,8 +3043,13 @@ class AppViewModel(
 
     fun onLocalImportFinished(request: io.ezz.launcher.ui.instance.installation.model.LocalImportRequest) {
         activeLocalImportRequest.value = null
-        refreshManageData()
-        refreshMods(request.instance.id)
+        val contentType = when (request.contentType) {
+            io.ezz.launcher.ui.instance.installation.model.ContentType.MOD -> InstanceContentType.MOD
+            io.ezz.launcher.ui.instance.installation.model.ContentType.RESOURCE_PACK -> InstanceContentType.RESOURCE_PACK
+            io.ezz.launcher.ui.instance.installation.model.ContentType.SHADER -> InstanceContentType.SHADER
+            io.ezz.launcher.ui.instance.installation.model.ContentType.WORLD -> InstanceContentType.WORLD
+        }
+        refreshContent(request.instance.id, contentType)
     }
 
     fun searchResourcePacks(
@@ -3211,23 +3260,23 @@ class AppViewModel(
         }
     }
 
-    suspend fun installModWithDependencies(
+    suspend fun installContentWithDependencies(
         instance: Instance,
         project: ModrinthProjectHit,
         mainVersion: ModrinthVersion,
         selectedDependencies: List<io.ezz.launcher.core.model.modrinth.ResolvedModDependency>,
+        contentType: InstanceContentType = InstanceContentType.fromModrinthType(project.projectType),
         onProgress: (stage: String, progress: Float) -> Unit
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        val gameDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").toFile()
-        val modsDir = java.io.File(gameDir, "mods")
-        modsDir.mkdirs()
+        val targetDir = destinationResolver.resolveContentDirectory(instance.id, contentType)
+        val gameDir = pathProvider.getInstanceGameDirectory(instance.id).toFile()
 
         val timeStamp = System.currentTimeMillis()
         val stagingDir = java.io.File(gameDir, ".install_staging_$timeStamp")
         val backupDir = java.io.File(gameDir, ".install_backup_$timeStamp")
         stagingDir.mkdirs()
 
-        val newlyAddedModFiles = mutableListOf<java.io.File>()
+        val newlyAddedFiles = mutableListOf<java.io.File>()
         val backedUpOldFiles = mutableListOf<Pair<java.io.File, java.io.File>>() // original -> backup
 
         try {
@@ -3262,41 +3311,47 @@ class AppViewModel(
                     throw IllegalStateException("Failed to download $title file ${primaryFile.filename}")
                 }
 
-                // 2. Validate Bytecode & Integrity
-                onProgress("Validating bytecode: $title...", (index.toFloat() + 0.8f) / totalCount.toFloat())
-                val javaVer = io.ezz.launcher.core.runtime.detector.JavaRuntimeDetector.getRequiredJavaMajorVersion(instance.minecraftVersion)
-                val validation = io.ezz.launcher.core.minecraft.mod.ModBytecodeValidator.validateJarFile(stagedFile, javaVer)
-                if (validation is io.ezz.launcher.core.minecraft.mod.ModCompatibilityResult.Incompatible) {
-                    throw IllegalStateException("Bytecode incompatibility: ${validation.errorMessage}")
+                // 2. Validate Bytecode & Integrity ONLY for MODS (.jar)
+                if (contentType == InstanceContentType.MOD && primaryFile.filename.endsWith(".jar", ignoreCase = true)) {
+                    onProgress("Validating bytecode: $title...", (index.toFloat() + 0.8f) / totalCount.toFloat())
+                    val javaVer = io.ezz.launcher.core.runtime.detector.JavaRuntimeDetector.getRequiredJavaMajorVersion(instance.minecraftVersion)
+                    val validation = io.ezz.launcher.core.minecraft.mod.ModBytecodeValidator.validateJarFile(stagedFile, javaVer)
+                    if (validation is io.ezz.launcher.core.minecraft.mod.ModCompatibilityResult.Incompatible) {
+                        throw IllegalStateException("Bytecode incompatibility: ${validation.errorMessage}")
+                    }
                 }
             }
 
-            // 3. Stage old version backup (Duplicate mod protection - never leave 2 versions of same mod)
+            // 3. Stage old version backup (Duplicate protection)
             onProgress("Preparing file installation...", 0.90f)
             backupDir.mkdirs()
-            val existingMods = modsDir.listFiles { _, name -> name.endsWith(".jar") || name.endsWith(".jar.disabled") } ?: emptyArray()
+            val existingFiles = targetDir.listFiles() ?: emptyArray()
 
-            for ((title, ver) in filesToDownload) {
+            for ((_, ver) in filesToDownload) {
                 val primaryFile = ver.files.firstOrNull { it.primary } ?: ver.files.firstOrNull() ?: continue
                 val cleanPrefix = primaryFile.filename.substringBefore('-').lowercase()
                 if (cleanPrefix.isNotBlank() && !cleanPrefix.startsWith("ezz-skin-mod")) {
-                    existingMods.forEach { oldJar ->
-                        val oldName = oldJar.name.lowercase()
-                        if ((oldName.startsWith(cleanPrefix) || oldName.contains(cleanPrefix)) && oldJar.name != primaryFile.filename) {
-                            val backupTarget = java.io.File(backupDir, oldJar.name)
-                            if (oldJar.renameTo(backupTarget)) {
-                                backedUpOldFiles.add(oldJar to backupTarget)
+                    existingFiles.forEach { oldFile ->
+                        val oldName = oldFile.name.lowercase()
+                        if ((oldName.startsWith(cleanPrefix) || oldName.contains(cleanPrefix)) && oldFile.name != primaryFile.filename) {
+                            val backupTarget = java.io.File(backupDir, oldFile.name)
+                            if (oldFile.renameTo(backupTarget)) {
+                                backedUpOldFiles.add(oldFile to backupTarget)
                             }
                         }
                     }
                 }
             }
 
-            // 4. Atomically move staged files into mods/
+            // 4. Atomically move staged files into target directory with explicit destination validation
             for ((_, ver) in filesToDownload) {
                 val primaryFile = ver.files.firstOrNull { it.primary } ?: ver.files.firstOrNull() ?: continue
                 val stagedFile = java.io.File(stagingDir, primaryFile.filename)
-                val finalTarget = java.io.File(modsDir, primaryFile.filename)
+                val finalTarget = java.io.File(targetDir, primaryFile.filename)
+
+                // Authoritative destination validation before writing:
+                destinationResolver.validateDestination(instance.id, contentType, finalTarget)
+
                 if (finalTarget.exists()) {
                     finalTarget.delete()
                 }
@@ -3305,13 +3360,17 @@ class AppViewModel(
                     stagedFile.copyTo(finalTarget, overwrite = true)
                     stagedFile.delete()
                 }
-                newlyAddedModFiles.add(finalTarget)
+
+                // Verify file exists on disk and is non-empty
+                if (!finalTarget.exists() || finalTarget.length() == 0L) {
+                    throw IllegalStateException("Installation verification failed: $finalTarget does not exist or is empty")
+                }
+                newlyAddedFiles.add(finalTarget)
             }
 
-            // 5. Post-installation Verification
-            onProgress("Verifying instance mods...", 0.95f)
-            refreshManageData()
-            refreshMods(instance.id)
+            // 5. Post-installation Verification & Selective Hydration
+            onProgress("Verifying instance ${contentType.displayName.lowercase()}...", 0.95f)
+            refreshContent(instance.id, contentType)
 
             // Clean up temporary directories
             stagingDir.deleteRecursively()
@@ -3319,20 +3378,20 @@ class AppViewModel(
 
             onProgress("Installed successfully", 1f)
             ToastManager.show(
-                title = "Mod Installed",
+                title = "${contentType.displayName} Installed",
                 description = "${project.title} (v${mainVersion.versionNumber}) installed to ${instance.name}",
                 type = ToastType.SUCCESS
             )
             Result.success(Unit)
         } catch (e: Throwable) {
             // ROLLBACK: Undo changes on failure
-            println("[ModInstaller] Installation failed, rolling back: ${e.message}")
+            println("[ContentInstaller] Installation failed, rolling back: ${e.message}")
             try {
-                // Delete newly added jars
-                newlyAddedModFiles.forEach { file ->
+                // Delete newly added files
+                newlyAddedFiles.forEach { file ->
                     if (file.exists()) file.delete()
                 }
-                // Restore old jars from backup
+                // Restore old files from backup
                 backedUpOldFiles.forEach { (originalFile, backupFile) ->
                     if (backupFile.exists()) {
                         backupFile.renameTo(originalFile)
@@ -3340,19 +3399,38 @@ class AppViewModel(
                 }
                 stagingDir.deleteRecursively()
                 backupDir.deleteRecursively()
-                refreshMods(instance.id)
+                refreshContent(instance.id, contentType)
             } catch (rollbackEx: Throwable) {
-                println("[ModInstaller] Rollback encountered error: ${rollbackEx.message}")
+                println("[ContentInstaller] Rollback encountered error: ${rollbackEx.message}")
             }
             Result.failure(e)
         }
     }
 
+    suspend fun installModWithDependencies(
+        instance: Instance,
+        project: ModrinthProjectHit,
+        mainVersion: ModrinthVersion,
+        selectedDependencies: List<io.ezz.launcher.core.model.modrinth.ResolvedModDependency>,
+        onProgress: (stage: String, progress: Float) -> Unit
+    ): Result<Unit> = installContentWithDependencies(
+        instance = instance,
+        project = project,
+        mainVersion = mainVersion,
+        selectedDependencies = selectedDependencies,
+        contentType = InstanceContentType.fromModrinthType(project.projectType),
+        onProgress = onProgress
+    )
+
     fun installModrinthProject(hit: ModrinthProjectHit) {
         openModInstaller(hit)
     }
 
-    fun installModrinthVersion(projectTitle: String, version: ModrinthVersion) {
+    fun installModrinthVersion(
+        projectTitle: String,
+        version: ModrinthVersion,
+        contentType: InstanceContentType = InstanceContentType.MOD
+    ) {
         val instance = _selectedInstance.value ?: return
         scope.launch {
             modrinthDownloadingProject.value = projectTitle
@@ -3360,10 +3438,9 @@ class AppViewModel(
             try {
                 if (version.files.isNotEmpty()) {
                     val primaryFile = version.files.firstOrNull { it.primary } ?: version.files.first()
-                    val gameDir = pathProvider.getInstanceDirectory(instance.id).resolve(".minecraft").toFile()
-                    val targetDir = java.io.File(gameDir, "mods")
-                    targetDir.mkdirs()
+                    val targetDir = destinationResolver.resolveContentDirectory(instance.id, contentType)
                     val targetFile = java.io.File(targetDir, primaryFile.filename)
+                    destinationResolver.validateDestination(instance.id, contentType, targetFile)
 
                     modrinth.downloadContent(
                         url = primaryFile.url,
@@ -3374,8 +3451,10 @@ class AppViewModel(
                             }
                         }
                     )
-                    refreshManageData()
-                    refreshMods(instance.id)
+                    if (!targetFile.exists() || targetFile.length() == 0L) {
+                        throw IllegalStateException("Failed to verify downloaded file: ${targetFile.absolutePath}")
+                    }
+                    refreshContent(instance.id, contentType)
                 }
             } catch (e: Throwable) {
                 println("Error installing specific version: ${e.message}")

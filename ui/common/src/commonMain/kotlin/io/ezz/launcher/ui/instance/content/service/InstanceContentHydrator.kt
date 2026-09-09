@@ -2,6 +2,7 @@ package io.ezz.launcher.ui.instance.content.service
 
 import io.ezz.launcher.core.minecraft.mods.ModCompatibilityResolver
 import io.ezz.launcher.core.model.instance.Instance
+import io.ezz.launcher.core.model.instance.InstanceContentType
 import io.ezz.launcher.core.storage.instance.LocalInstanceManager
 import io.ezz.launcher.ui.instance.content.model.ContentLoadState
 import io.ezz.launcher.ui.instance.content.model.InstanceContentState
@@ -252,6 +253,82 @@ class InstanceContentHydrator(
      */
     fun invalidate(instanceId: String) {
         cache.remove(instanceId)
+    }
+
+    /**
+     * Selectively re-scans only the specified [contentType] for [instanceId],
+     * updating the cache and UI state without clearing or invalidating unrelated categories.
+     */
+    fun hydrateCategory(instanceId: String, contentType: InstanceContentType): Job {
+        return scope.launch(dispatcher) {
+            try {
+                val currentState = cache[instanceId] ?: _contentState.value?.takeIf { it.instanceId == instanceId }
+                    ?: InstanceContentState(instanceId = instanceId, isHydrating = false)
+
+                val updatedState = when (contentType) {
+                    InstanceContentType.MOD -> {
+                        val mods = instanceManager.getMods(instanceId)
+                        val instance = getInstance(instanceId)
+                        val (missingDeps, conflicts) = if (instance != null && mods.isNotEmpty()) {
+                            try {
+                                val report = ModCompatibilityResolver.validateLaunchCompatibility(
+                                    minecraftVersion = instance.minecraftVersion,
+                                    loader = instance.loaderType.name,
+                                    installedMods = mods
+                                )
+                                Pair(report.missingDependencies, report.explicitConflicts)
+                            } catch (_: Throwable) {
+                                Pair(emptyList(), emptyList())
+                            }
+                        } else {
+                            Pair(emptyList(), emptyList())
+                        }
+                        currentState.copy(
+                            modsState = ContentLoadState.Success(mods),
+                            missingDependencies = missingDeps,
+                            compatibilityConflicts = conflicts,
+                            lastHydratedAt = System.currentTimeMillis()
+                        )
+                    }
+                    InstanceContentType.RESOURCE_PACK -> {
+                        val rp = instanceManager.getResourcePacks(instanceId)
+                        currentState.copy(
+                            resourcePacksState = ContentLoadState.Success(rp),
+                            lastHydratedAt = System.currentTimeMillis()
+                        )
+                    }
+                    InstanceContentType.SHADER -> {
+                        val shaders = instanceManager.getShaderPacks(instanceId)
+                        currentState.copy(
+                            shadersState = ContentLoadState.Success(shaders),
+                            lastHydratedAt = System.currentTimeMillis()
+                        )
+                    }
+                    InstanceContentType.WORLD -> {
+                        val worlds = instanceManager.getWorlds(instanceId)
+                        currentState.copy(
+                            worldsState = ContentLoadState.Success(worlds),
+                            lastHydratedAt = System.currentTimeMillis()
+                        )
+                    }
+                    InstanceContentType.SCREENSHOT -> {
+                        val ss = instanceManager.getScreenshots(instanceId)
+                        currentState.copy(
+                            screenshotsState = ContentLoadState.Success(ss),
+                            lastHydratedAt = System.currentTimeMillis()
+                        )
+                    }
+                }
+
+                cache[instanceId] = updatedState
+                if (_contentState.value?.instanceId == instanceId) {
+                    _contentState.value = updatedState
+                    dispatchUpdate(updatedState)
+                }
+            } catch (e: Throwable) {
+                println("[InstanceContentHydrator] Selective hydration failed for $contentType in $instanceId: ${e.message}")
+            }
+        }
     }
 
     /**

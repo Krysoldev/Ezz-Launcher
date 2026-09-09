@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import io.ezz.launcher.core.model.instance.Instance
+import io.ezz.launcher.core.model.instance.InstanceContentType
 import io.ezz.launcher.core.model.instance.LoaderType
 import io.ezz.launcher.core.model.modrinth.ModrinthProjectHit
 import io.ezz.launcher.core.model.modrinth.ModrinthVersion
@@ -86,12 +87,19 @@ fun ModInspectDialog(
     var versions by remember { mutableStateOf<List<ModrinthVersion>>(emptyList()) }
     var isLoadingVersions by remember { mutableStateOf(true) }
 
+    val contentType = remember(projectHit) { InstanceContentType.fromModrinthType(projectHit.projectType) }
     val downloadingProject by viewModel.modrinthDownloadingProject.collectAsState()
-    val isInstalled = viewModel.isModInstalled(projectHit)
+    val isInstalled = when (contentType) {
+        InstanceContentType.RESOURCE_PACK -> viewModel.isResourcePackInstalled(projectHit)
+        InstanceContentType.SHADER -> viewModel.isShaderInstalled(projectHit)
+        else -> viewModel.isModInstalled(projectHit)
+    }
 
     LaunchedEffect(projectHit.projectId) {
         isLoadingVersions = true
-        val loaders = if (instance.loaderType != LoaderType.VANILLA) listOf(instance.loaderType.name.lowercase()) else null
+        val loaders = if (contentType == InstanceContentType.MOD && instance.loaderType != LoaderType.VANILLA) {
+            listOf(instance.loaderType.name.lowercase())
+        } else null
         val gameVersions = listOf(instance.minecraftVersion)
         versions = viewModel.modrinth.getProjectVersions(projectHit.projectId, loaders, gameVersions)
         if (versions.isEmpty()) {
@@ -425,8 +433,14 @@ fun ModInspectDialog(
                             }
                         } else {
                             val isDownloading = downloadingProject == projectHit.title
+                            val buttonText = when {
+                                isDownloading -> "INSTALLING..."
+                                contentType == InstanceContentType.RESOURCE_PACK -> "INSTALL RESOURCE PACK"
+                                contentType == InstanceContentType.SHADER -> "INSTALL SHADER"
+                                else -> "INSTALL MOD"
+                            }
                             EzzButton(
-                                text = if (isDownloading) "INSTALLING..." else "INSTALL MOD",
+                                text = buttonText,
                                 onClick = {
                                     showInstaller = true
                                 },
