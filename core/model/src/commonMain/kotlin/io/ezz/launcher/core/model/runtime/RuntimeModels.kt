@@ -131,6 +131,7 @@ data class LauncherSettings(
         "-XX:G1HeapRegionSize=32M"
     ),
     val closeLauncherOnLaunch: Boolean = false,
+    val hideLauncherWhileRunning: Boolean = true,
     val darkTheme: Boolean = true,
     val selectedInstanceId: String? = null,
     val selectedAccountId: String? = null,

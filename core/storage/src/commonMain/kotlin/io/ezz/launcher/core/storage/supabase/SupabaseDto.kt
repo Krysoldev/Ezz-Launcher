@@ -153,6 +153,7 @@ data class SupabaseUserSettingsDto(
         "-XX:G1HeapRegionSize=32M"
     ),
     @SerialName("close_launcher_on_launch") val closeLauncherOnLaunch: Boolean = false,
+    @SerialName("hide_launcher_while_running") val hideLauncherWhileRunning: Boolean = true,
     @SerialName("dark_theme") val darkTheme: Boolean = true,
     @SerialName("selected_instance_id") val selectedInstanceId: String? = null,
     @SerialName("selected_account_id") val selectedAccountId: String? = null,
@@ -165,6 +166,7 @@ data class SupabaseUserSettingsDto(
             defaultJavaPath = defaultJavaPath,
             globalJvmArgs = globalJvmArgs,
             closeLauncherOnLaunch = closeLauncherOnLaunch,
+            hideLauncherWhileRunning = hideLauncherWhileRunning,
             darkTheme = darkTheme,
             selectedInstanceId = selectedInstanceId,
             selectedAccountId = selectedAccountId
@@ -180,6 +182,7 @@ data class SupabaseUserSettingsDto(
                 defaultJavaPath = settings.defaultJavaPath,
                 globalJvmArgs = settings.globalJvmArgs,
                 closeLauncherOnLaunch = settings.closeLauncherOnLaunch,
+                hideLauncherWhileRunning = settings.hideLauncherWhileRunning,
                 darkTheme = settings.darkTheme,
                 selectedInstanceId = settings.selectedInstanceId,
                 selectedAccountId = settings.selectedAccountId

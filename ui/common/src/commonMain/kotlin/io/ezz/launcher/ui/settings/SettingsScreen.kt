@@ -685,7 +685,74 @@ fun SettingsScreen(
                     }
 
                     // =========================================================
-                    // SECTION 3: DISCORD
+                    // SECTION 3: LAUNCHER BEHAVIOR
+                    // =========================================================
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        SettingsSectionHeader("LAUNCHER BEHAVIOR")
+
+                        EzzCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            cornerRadius = 10.dp,
+                            backgroundColor = Color(0xFF10131A),
+                            borderColor = Color(0xFF1B1F2C)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(18.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(end = 20.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "Hide Launcher While Minecraft Is Running",
+                                            color = Color.White,
+                                            fontSize = 13.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .background(
+                                                    if (settings.hideLauncherWhileRunning) Color(0xFF22C55E).copy(alpha = 0.15f)
+                                                    else Color(0xFF64748B).copy(alpha = 0.15f),
+                                                    shape = RoundedCornerShape(4.dp)
+                                                )
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = if (settings.hideLauncherWhileRunning) "ON" else "OFF",
+                                                color = if (settings.hideLauncherWhileRunning) Color(0xFF22C55E) else Color(0xFF94A3B8),
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = "Automatically hide Ezz Launcher while Minecraft is running and show it again when Minecraft closes.",
+                                        color = Color(0xFF64748B),
+                                        fontSize = 11.5.sp
+                                    )
+                                }
+
+                                EzzToggle(
+                                    checked = settings.hideLauncherWhileRunning,
+                                    onCheckedChange = { viewModel.updateHideLauncherWhileRunning(it) }
+                                )
+                            }
+                        }
+                    }
+
+                    // =========================================================
+                    // SECTION 4: DISCORD
                     // =========================================================
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         SettingsSectionHeader("DISCORD")

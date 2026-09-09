@@ -260,6 +260,20 @@ class AppViewModel(
     private val _runningSessions = MutableStateFlow<Map<String, io.ezz.launcher.core.model.runtime.InstanceRuntimeSession>>(emptyMap())
     val runningSessions: StateFlow<Map<String, io.ezz.launcher.core.model.runtime.InstanceRuntimeSession>> = _runningSessions.asStateFlow()
 
+    // Desktop Window Visibility & Minecraft process-driven hiding/restoring
+    val isWindowVisible = MutableStateFlow(true)
+    var windowVisibilityController: io.ezz.launcher.ui.platform.WindowVisibilityController? = null
+    private val operationsThatHidLauncher = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+    fun setLauncherWindowVisible(visible: Boolean) {
+        isWindowVisible.value = visible
+        try {
+            windowVisibilityController?.setVisible(visible)
+        } catch (e: Throwable) {
+            println("[AppViewModel] Notice setting window visibility ($visible): ${e.message}")
+        }
+    }
+
     // High-performance 1-second UI clock ticker
     private val _tickerTime = MutableStateFlow(System.currentTimeMillis())
     val tickerTime: StateFlow<Long> = _tickerTime.asStateFlow()
@@ -976,6 +990,16 @@ class AppViewModel(
         }
     }
 
+    fun updateHideLauncherWhileRunning(hide: Boolean) {
+        scope.launch {
+            try {
+                settingsRepository.updateSettings { it.copy(hideLauncherWhileRunning = hide) }
+            } catch (e: Exception) {
+                println("Failed to update hideLauncherWhileRunning: ${e.message}")
+            }
+        }
+    }
+
     fun updateMemorySettings(minMb: Int, maxMb: Int) {
         scope.launch {
             try {
@@ -1391,6 +1415,29 @@ class AppViewModel(
             return
         }
 
+        // Requirement 16: Multiple Launch Protection - prevent launching if instance is already running
+        if (_runningSessions.value.containsKey(targetInstance.id)) {
+            val runningSession = _runningSessions.value[targetInstance.id]
+            val runningPid = runningSession?.processId ?: 0L
+            _logs.value = _logs.value + ConsoleLogEntry(
+                message = "Instance '${targetInstance.name}' is already running${if (runningPid > 0) " (PID: $runningPid)" else ""}.",
+                isError = false
+            )
+            println("[LIFECYCLE] LAUNCH_IGNORED: Instance '${targetInstance.name}' is already running (PID: $runningPid)")
+            return
+        }
+
+        // Requirement 16: Multiple Launch Protection - prevent duplicate clicks while preparation is in progress
+        val activeProgress = launchProgressState.value
+        if (activeProgress != null && activeProgress.error == null && activeProgress.progress < 1.0f) {
+            _logs.value = _logs.value + ConsoleLogEntry(
+                message = "Launch in progress (${activeProgress.stage}). Please wait.",
+                isError = false
+            )
+            println("[LIFECYCLE] LAUNCH_IGNORED: Duplicate launch requested while active operation ${activeProgress.operationId} is in progress")
+            return
+        }
+
         var account = accountRepository.selectedAccount.value
         if (account == null) {
             account = accountRepository.accounts.value.firstOrNull()
@@ -1410,6 +1457,10 @@ class AppViewModel(
         activeLaunchJob?.cancel()
         val operationId = java.util.UUID.randomUUID().toString()
         activeLaunchOperationId = operationId
+
+        val hideLauncherSetting = settingsRepository.settings.value.hideLauncherWhileRunning
+        println("[LIFECYCLE] LAUNCH_REQUESTED (operationId=$operationId, instanceId=${targetInstance.id}, instanceName='${targetInstance.name}', hideLauncherSetting=$hideLauncherSetting)")
+        println("[LIFECYCLE] LAUNCH_PROGRESS_STARTED (operationId=$operationId)")
 
         val initialProgressState = io.ezz.launcher.core.model.runtime.LaunchProgressState(
             operationId = operationId,
@@ -1552,6 +1603,20 @@ class AppViewModel(
                                     }
                                     _logs.value = _logs.value + ConsoleLogEntry(message = "=== Process started (PID: ${state.processId}) ===")
 
+                                    println("[LIFECYCLE] MINECRAFT_PROCESS_SPAWNED (operationId=$operationId, pid=${state.processId})")
+                                    println("[LIFECYCLE] MINECRAFT_RUNNING (operationId=$operationId, pid=${state.processId})")
+                                    println("[LIFECYCLE] LAUNCH_PROGRESS_100 (operationId=$operationId)")
+
+                                    val hideSetting = settingsRepository.settings.value.hideLauncherWhileRunning
+                                    if (hideSetting) {
+                                        println("[LIFECYCLE] LAUNCHER_HIDE_REQUESTED (operationId=$operationId, pid=${state.processId}, hideLauncherSetting=true)")
+                                        operationsThatHidLauncher.add(operationId)
+                                        setLauncherWindowVisible(false)
+                                        println("[LIFECYCLE] LAUNCHER_HIDDEN (operationId=$operationId, pid=${state.processId})")
+                                    } else {
+                                        println("[LIFECYCLE] LAUNCHER_HIDE_SKIPPED (operationId=$operationId, pid=${state.processId}, hideLauncherSetting=false)")
+                                    }
+
                                     // Asynchronously update Discord RPC without blocking or delaying launch sequence
                                     val rpcEnabled = settingsRepository.settings.value.enableDiscordRpc
                                     val currentAccount = accountRepository.selectedAccount.value
@@ -1584,6 +1649,14 @@ class AppViewModel(
                                         sessionTracker.unregisterSession(targetInstance.id)
                                     }
                                     _logs.value = _logs.value + ConsoleLogEntry(message = "=== Process exited with code ${state.exitCode} ===")
+
+                                    println("[LIFECYCLE] MINECRAFT_PROCESS_EXITED (operationId=$operationId, exitCode=${state.exitCode})")
+                                    if (operationsThatHidLauncher.remove(operationId)) {
+                                        println("[LIFECYCLE] LAUNCHER_SHOW_REQUESTED (operationId=$operationId, reason=\"Minecraft process exited with code ${state.exitCode}\")")
+                                        setLauncherWindowVisible(true)
+                                        println("[LIFECYCLE] LAUNCHER_SHOWN (operationId=$operationId)")
+                                    }
+
                                     val rpcEnabled = settingsRepository.settings.value.enableDiscordRpc
                                     val currentAccount = accountRepository.selectedAccount.value
                                     discordRpcService?.onMinecraftExited()
@@ -1602,6 +1675,13 @@ class AppViewModel(
                                     scope.launch(Dispatchers.IO) {
                                         sessionTracker.unregisterSession(targetInstance.id)
                                     }
+
+                                    println("[LIFECYCLE] LAUNCH_FAILED (operationId=$operationId, error=${state.error.message})")
+                                    if (operationsThatHidLauncher.remove(operationId)) {
+                                        setLauncherWindowVisible(true)
+                                        println("[LIFECYCLE] LAUNCHER_SHOWN (operationId=$operationId, after failure)")
+                                    }
+
                                     val rpcEnabled = settingsRepository.settings.value.enableDiscordRpc
                                     val currentAccount = accountRepository.selectedAccount.value
                                     discordRpcService?.onMinecraftExited()
@@ -1632,6 +1712,10 @@ class AppViewModel(
                     }
                 }
             } catch (e: Exception) {
+                if (operationsThatHidLauncher.remove(operationId)) {
+                    setLauncherWindowVisible(true)
+                    println("[LIFECYCLE] LAUNCHER_SHOWN (operationId=$operationId, after exception)")
+                }
                 val rpcEnabled = settingsRepository.settings.value.enableDiscordRpc
                 val currentAccount = accountRepository.selectedAccount.value
                 discordRpcService?.onMinecraftExited()

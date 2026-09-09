@@ -160,13 +160,14 @@ fun main() {
             width = 1180.dp,
             height = 760.dp
         )
+        val isWindowVisible = remember { mutableStateOf(true) }
 
         Window(
             onCloseRequest = ::exitApplication,
             title = "Ezz Launcher",
             icon = painterResource("icon.png"),
             state = windowState,
-            visible = true
+            visible = isWindowVisible.value
         ) {
             val viewModelState = remember { mutableStateOf<AppViewModel?>(null) }
             val startupErrorState = remember { mutableStateOf<String?>(null) }
@@ -323,6 +324,52 @@ fun main() {
                             WindowsHwndResolver.resolve(window, "Ezz Launcher")
                         }
 
+                        // Attach desktop window visibility controller
+                        var savedBounds: java.awt.Rectangle? = null
+                        var savedExtendedState: Int = java.awt.Frame.NORMAL
+
+                        vm.windowVisibilityController = object : io.ezz.launcher.ui.platform.WindowVisibilityController {
+                            override fun setVisible(visible: Boolean) {
+                                javax.swing.SwingUtilities.invokeLater {
+                                    try {
+                                        if (!visible) {
+                                            if (!window.isVisible && !isWindowVisible.value) return@invokeLater
+                                            println("[WINDOW LIFECYCLE] LAUNCHER_HIDE_REQUESTED: Saving state (bounds=${window.bounds}, state=${window.extendedState})")
+                                            savedBounds = window.bounds
+                                            savedExtendedState = window.extendedState
+                                            isWindowVisible.value = false
+                                            window.isVisible = false
+                                            println("[WINDOW LIFECYCLE] LAUNCHER_HIDDEN")
+                                        } else {
+                                            if (window.isVisible && isWindowVisible.value) {
+                                                window.toFront()
+                                                window.requestFocus()
+                                                return@invokeLater
+                                            }
+                                            println("[WINDOW LIFECYCLE] LAUNCHER_SHOW_REQUESTED: Restoring launcher window")
+                                            isWindowVisible.value = true
+                                            window.isVisible = true
+                                            savedBounds?.let { b ->
+                                                window.bounds = b
+                                            }
+                                            val targetState = savedExtendedState and java.awt.Frame.ICONIFIED.inv()
+                                            window.extendedState = targetState
+                                            window.toFront()
+                                            window.repaint()
+                                            window.requestFocus()
+                                            println("[WINDOW LIFECYCLE] LAUNCHER_SHOWN")
+                                        }
+                                    } catch (t: Throwable) {
+                                        System.err.println("[WINDOW LIFECYCLE ERROR] Visibility change failed: ${t.message}")
+                                    }
+                                }
+                            }
+
+                            override fun isVisible(): Boolean {
+                                return isWindowVisible.value && window.isVisible
+                            }
+                        }
+
                         LocalMinecraftAccountRepository.isStartupPhase = false
                         println("-> Startup complete")
                         viewModelState.value = vm
@@ -335,6 +382,13 @@ fun main() {
             }
 
             val currentVm = viewModelState.value
+            LaunchedEffect(currentVm) {
+                currentVm?.isWindowVisible?.collect { vis ->
+                    if (isWindowVisible.value != vis) {
+                        currentVm.windowVisibilityController?.setVisible(vis)
+                    }
+                }
+            }
             if (currentVm != null) {
                 MainScreen(viewModel = currentVm)
             } else {
