@@ -83,21 +83,14 @@ import io.ezz.launcher.ui.image.ModrinthImageLoader
 import io.ezz.launcher.ui.platform.PlatformBridge
 import io.ezz.launcher.ui.platform.DefaultPlatformBridge
 import io.ezz.launcher.ui.platform.WindowsModernFilePicker
-import io.ezz.launcher.ui.platform.FileSelectionMode
 import io.ezz.launcher.core.model.skin.SkinModelType
 import io.ezz.launcher.core.model.skin.VaultManifest
 import io.ezz.launcher.core.model.skin.VaultSkin
 import io.ezz.launcher.core.storage.repository.VaultSkinRepository
 import io.ezz.launcher.core.storage.repository.LocalVaultSkinRepository
 import io.ezz.launcher.ui.components.ToastManager
+import io.ezz.launcher.ui.platform.FileSelectionMode
 import io.ezz.launcher.ui.components.ToastType
-import io.ezz.launcher.core.model.packsmc.PacksMcBrowseState
-import io.ezz.launcher.core.model.packsmc.PacksMcIdentityResponse
-import io.ezz.launcher.core.model.packsmc.PacksMcPack
-import io.ezz.launcher.core.model.packsmc.PacksMcStatus
-import io.ezz.launcher.core.model.packsmc.ResourcePackProvider
-import io.ezz.launcher.core.network.packsmc.PacksMcException
-import io.ezz.launcher.core.network.packsmc.PacksMcService
 import io.ktor.client.request.get
 import io.ktor.client.call.body
 import io.ezz.launcher.core.model.curseforge.CurseForgeBrowseState
@@ -214,7 +207,6 @@ class AppViewModel(
     val localInstanceManager: LocalInstanceManager? = null,
     val modrinthService: ModrinthService? = null,
     val curseForgeService: io.ezz.launcher.core.network.curseforge.CurseForgeService? = null,
-    val packsMcService: PacksMcService? = null,
     val vaultSkinRepository: VaultSkinRepository? = null,
     val platformBridge: PlatformBridge = DefaultPlatformBridge(),
     val adminAuthorizationService: AdminAuthorizationService? = null,
@@ -230,11 +222,6 @@ class AppViewModel(
 
     val modrinth: ModrinthService =
         modrinthService ?: ModrinthService()
-
-    val packsMc: PacksMcService =
-        packsMcService ?: PacksMcService {
-            secureVault?.getString("packsmc_api_key") ?: System.getenv("PACKSMC_API_KEY")
-        }
 
     val instanceManager: LocalInstanceManager =
         localInstanceManager ?: LocalInstanceManager(pathProvider, instanceRepository, modrinthService = modrinth)
@@ -611,16 +598,8 @@ class AppViewModel(
     private var resourcePacksSearchSeq = 0L
     private var searchShadersJob: Job? = null
     private var shadersSearchSeq = 0L
-    private var searchPacksMcJob: Job? = null
-    private var packsMcSearchSeq = 0L
     private var loadLogJob: Job? = null
     private var liveLogJob: Job? = null
-
-    // Resource Pack Provider & PacksMC Browsing
-    val activeResourcePackProvider = MutableStateFlow(ResourcePackProvider.MODRINTH)
-    val packsMcBrowseState = MutableStateFlow(PacksMcBrowseState())
-    val selectedPacksMcPackForDetails = MutableStateFlow<PacksMcPack?>(null)
-    val packsMcApiKey = MutableStateFlow<String?>(null)
 
     // Instance Manager Modals & Dialogs
     val selectedScreenshotForViewer = MutableStateFlow<LocalScreenshot?>(null)
@@ -682,15 +661,6 @@ class AppViewModel(
 
                 // Load Public Supabase Tables
                 loadPublicData()
-
-                // Load PacksMC API Key from SecureVault / Environment
-                val savedPacksMcKey = secureVault?.getString("packsmc_api_key") ?: System.getenv("PACKSMC_API_KEY")
-                packsMcApiKey.value = savedPacksMcKey
-                if (!savedPacksMcKey.isNullOrBlank()) {
-                    packsMc.getIdentity(savedPacksMcKey)
-                } else {
-                    packsMcBrowseState.value = packsMcBrowseState.value.copy(status = PacksMcStatus.NO_API_KEY)
-                }
             } catch (e: Throwable) {
                 _errorMessage.value = "Background service note: ${e.message}"
             }
@@ -3254,222 +3224,6 @@ class AppViewModel(
     fun setResourcePacksPage(page: Int) {
         if (page < 1 || page > resourcePacksBrowseState.value.totalPages) return
         searchResourcePacks(page = page)
-    }
-
-    // =========================================================================
-    // PACKSMC RESOURCE PACK PROVIDER INTEGRATION
-    // =========================================================================
-
-    fun setResourcePackProvider(provider: ResourcePackProvider) {
-        activeResourcePackProvider.value = provider
-        if (provider == ResourcePackProvider.PACKSMC && packsMcBrowseState.value.items.isEmpty() && !packsMcBrowseState.value.isLoading) {
-            searchPacksMc()
-        }
-    }
-
-    fun searchPacksMc(
-        query: String? = null,
-        sort: String? = null,
-        resolution: String? = null,
-        filterMinecraftVersion: Boolean? = null,
-        resetPagination: Boolean = false,
-        debounceMs: Long = 0L
-    ) {
-        val current = packsMcBrowseState.value
-        val rawQuery = query ?: current.searchQuery
-        val newSort = sort ?: current.selectedSort
-        val newResolution = if (resolution == "ALL") null else (resolution ?: current.selectedResolution)
-        val newFilterMc = filterMinecraftVersion ?: current.filterMinecraftVersion
-
-        packsMcBrowseState.value = current.copy(
-            searchQuery = rawQuery,
-            selectedSort = newSort,
-            selectedResolution = newResolution,
-            filterMinecraftVersion = newFilterMc,
-            isLoading = true,
-            error = null
-        )
-
-        val reqId = ++packsMcSearchSeq
-        searchPacksMcJob?.cancel()
-        searchPacksMcJob = scope.launch {
-            if (debounceMs > 0) delay(debounceMs)
-            if (reqId != packsMcSearchSeq) return@launch
-
-            val result = withContext(Dispatchers.IO) {
-                packsMc.getPacks(
-                    query = rawQuery.trim().takeIf { it.length >= 2 },
-                    resolution = newResolution,
-                    sort = newSort,
-                    limit = 25,
-                    cursor = null
-                )
-            }
-
-            if (reqId != packsMcSearchSeq) return@launch
-
-            if (result.isSuccess) {
-                val res = result.getOrThrow()
-                packsMcBrowseState.value = packsMcBrowseState.value.copy(
-                    items = res.data,
-                    nextCursor = res.nextCursor,
-                    hasMore = res.nextCursor != null && newSort == "recent",
-                    isLoading = false,
-                    error = null,
-                    errorCode = null,
-                    status = PacksMcStatus.READY
-                )
-            } else {
-                val err = result.exceptionOrNull()
-                val statusCode = if (err is PacksMcException) err.statusCode else 0
-                val errorCode = if (err is PacksMcException) err.code else "error"
-                val errorMsg = when {
-                    statusCode == 401 -> "PacksMC API key is missing or invalid. Please configure your key."
-                    statusCode == 429 -> "PacksMC rate limit reached. Please wait a moment."
-                    err !is PacksMcException -> "Unable to reach PacksMC. Please check your internet connection."
-                    else -> err.message ?: "Failed to fetch PacksMC catalog."
-                }
-                val newStatus = when (statusCode) {
-                    401 -> if (packsMcApiKey.value.isNullOrBlank()) PacksMcStatus.NO_API_KEY else PacksMcStatus.INVALID_KEY
-                    429 -> PacksMcStatus.RATE_LIMITED
-                    else -> if (err !is PacksMcException) PacksMcStatus.OFFLINE else PacksMcStatus.ERROR
-                }
-                packsMcBrowseState.value = packsMcBrowseState.value.copy(
-                    isLoading = false,
-                    error = errorMsg,
-                    errorCode = errorCode,
-                    status = newStatus,
-                    retryAfterSeconds = if (err is PacksMcException) err.retryAfterSeconds else null
-                )
-            }
-        }
-    }
-
-    fun loadMorePacksMc() {
-        val current = packsMcBrowseState.value
-        val cursor = current.nextCursor
-        if (current.isLoadingMore || !current.hasMore || cursor.isNullOrBlank() || current.selectedSort != "recent") return
-
-        packsMcBrowseState.value = current.copy(isLoadingMore = true)
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                packsMc.getPacks(
-                    query = current.searchQuery.trim().takeIf { it.length >= 2 },
-                    resolution = current.selectedResolution,
-                    sort = current.selectedSort,
-                    limit = 25,
-                    cursor = cursor
-                )
-            }
-
-            if (result.isSuccess) {
-                val res = result.getOrThrow()
-                packsMcBrowseState.value = packsMcBrowseState.value.copy(
-                    items = packsMcBrowseState.value.items + res.data,
-                    nextCursor = res.nextCursor,
-                    hasMore = res.nextCursor != null,
-                    isLoadingMore = false
-                )
-            } else {
-                packsMcBrowseState.value = packsMcBrowseState.value.copy(isLoadingMore = false)
-            }
-        }
-    }
-
-    fun inspectPacksMcPack(pack: PacksMcPack?) {
-        selectedPacksMcPackForDetails.value = pack
-        if (pack != null && (pack.description == null || pack.versions.isEmpty())) {
-            scope.launch {
-                val detailRes = withContext(Dispatchers.IO) {
-                    packsMc.getPackDetails(pack.slug.ifBlank { pack.id })
-                }
-                detailRes.onSuccess { detailed ->
-                    if (selectedPacksMcPackForDetails.value?.id == pack.id) {
-                        selectedPacksMcPackForDetails.value = detailed
-                    }
-                }
-            }
-        }
-    }
-
-    suspend fun fetchPacksMcPackDetails(idOrSlug: String): PacksMcPack? {
-        return withContext(Dispatchers.IO) {
-            packsMc.getPackDetails(idOrSlug).getOrNull()
-        }
-    }
-
-    fun openPacksMcDownload(pack: PacksMcPack) {
-        scope.launch {
-            val dlRes = withContext(Dispatchers.IO) {
-                packsMc.getPackDownloadPage(pack.slug.ifBlank { pack.id })
-            }
-            val targetUrl = dlRes.getOrNull()?.downloadUrl
-                ?: pack.downloadUrl
-                ?: "https://packsmc.com/pack/${pack.slug}"
-
-            platformBridge.openUrl(targetUrl)
-            ToastManager.show(
-                title = "PacksMC Download Page Opened",
-                description = "Downloads are handled by PacksMC. Once downloaded, use 'Import Resource Pack' to add it to your instance.",
-                type = ToastType.INFO
-            )
-        }
-    }
-
-    fun savePacksMcApiKey(apiKey: String, onResult: (Boolean, String?) -> Unit) {
-        val trimmed = apiKey.trim()
-        if (trimmed.isBlank()) {
-            onResult(false, "API key cannot be blank")
-            return
-        }
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                packsMc.getIdentity(trimmed)
-            }
-            if (result.isSuccess) {
-                secureVault?.putString("packsmc_api_key", trimmed)
-                packsMcApiKey.value = trimmed
-                packsMc.clearCache()
-                searchPacksMc(resetPagination = true)
-                onResult(true, null)
-            } else {
-                val err = result.exceptionOrNull()
-                val msg = if (err is PacksMcException && err.statusCode == 401) {
-                    "Invalid API key: unauthorized by PacksMC"
-                } else {
-                    err?.message ?: "Failed to verify key with PacksMC"
-                }
-                onResult(false, msg)
-            }
-        }
-    }
-
-    fun removePacksMcApiKey() {
-        scope.launch {
-            secureVault?.remove("packsmc_api_key")
-            packsMcApiKey.value = null
-            packsMc.clearCache()
-            packsMcBrowseState.value = PacksMcBrowseState(status = PacksMcStatus.NO_API_KEY)
-        }
-    }
-
-    fun testPacksMcConnection(apiKey: String, onResult: (Boolean, PacksMcIdentityResponse?, String?) -> Unit) {
-        scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                packsMc.getIdentity(apiKey.trim())
-            }
-            if (result.isSuccess) {
-                onResult(true, result.getOrNull(), null)
-            } else {
-                val err = result.exceptionOrNull()
-                val msg = if (err is PacksMcException && err.statusCode == 401) {
-                    "Invalid API key: unauthorized by PacksMC"
-                } else {
-                    err?.message ?: "Connection failed"
-                }
-                onResult(false, null, msg)
-            }
-        }
     }
 
     fun searchShaders(

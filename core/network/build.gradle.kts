@@ -24,7 +24,6 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
-            implementation("io.ktor:ktor-client-mock:$ktorVersion")
         }
     }
 }
