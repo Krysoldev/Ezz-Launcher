@@ -568,6 +568,7 @@ class AppViewModel(
     val isCheckingModUpdates = MutableStateFlow(false)
 
     private var searchModsJob: Job? = null
+    private var modsSearchSeq = 0L
     private var searchResourcePacksJob: Job? = null
     private var resourcePacksSearchSeq = 0L
     private var searchShadersJob: Job? = null
@@ -828,6 +829,11 @@ class AppViewModel(
             manageLogResult.value = null
             logLoadError.value = null
             fileConflictState.value = null
+            modsBrowseState.value = ModrinthBrowseState(
+                contentType = ModrinthContentType.MOD,
+                selectedGameVersion = instance.minecraftVersion,
+                selectedLoader = if (instance.loaderType != LoaderType.VANILLA) instance.loaderType.name.lowercase() else null
+            )
             curseForgeModsBrowseState.value = CurseForgeBrowseState(
                 selectedGameVersion = instance.minecraftVersion,
                 selectedLoader = CurseForgeModLoaderType.fromLoaderName(instance.loaderType.name)
@@ -2130,8 +2136,8 @@ class AppViewModel(
         if (prevTab == InstanceManagerTab.LOGS && tab != InstanceManagerTab.LOGS) {
             stopLiveLogWatching()
         }
-        if (tab == InstanceManagerTab.MODS && curseForgeModsBrowseState.value.items.isEmpty()) {
-            searchCurseForgeMods()
+        if (tab == InstanceManagerTab.MODS && modsBrowseState.value.items.isEmpty()) {
+            searchMods()
         } else if (tab == InstanceManagerTab.RESOURCE_PACKS && resourcePacksBrowseState.value.items.isEmpty()) {
             searchResourcePacks()
         } else if (tab == InstanceManagerTab.SHADERS && shadersBrowseState.value.items.isEmpty()) {
@@ -2552,9 +2558,11 @@ class AppViewModel(
             error = null
         )
 
+        val reqId = ++modsSearchSeq
         searchModsJob?.cancel()
         searchModsJob = scope.launch {
             if (debounceMs > 0) delay(debounceMs)
+            if (reqId != modsSearchSeq) return@launch
             try {
                 val loaders = if (!newLoader.isNullOrBlank()) listOf(newLoader) else null
                 val versions = if (!newVersion.isNullOrBlank()) listOf(newVersion) else null
@@ -2570,6 +2578,7 @@ class AppViewModel(
                     offset = offset,
                     limit = current.pageSize
                 )
+                if (reqId != modsSearchSeq) return@launch
 
                 val validHits = res.hits.filter { it.projectType.equals("mod", ignoreCase = true) }
                 val totalPages = maxOf(1, kotlin.math.ceil(res.totalHits.toDouble() / current.pageSize).toInt())
@@ -2583,6 +2592,7 @@ class AppViewModel(
                 )
             } catch (e: Throwable) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
+                if (reqId != modsSearchSeq) return@launch
                 modsBrowseState.value = modsBrowseState.value.copy(
                     isLoading = false,
                     error = "Failed to load mods from Modrinth: ${e.message}"

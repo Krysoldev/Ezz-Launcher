@@ -77,16 +77,15 @@ import androidx.compose.ui.unit.sp
 import okio.Path.Companion.toPath
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LocalMod
-import io.ezz.launcher.core.model.curseforge.CurseForgeMod
-import io.ezz.launcher.core.model.curseforge.CurseForgeBrowseState
-import io.ezz.launcher.core.model.curseforge.CurseForgeSortField
+import io.ezz.launcher.core.model.modrinth.ModrinthBrowseState
+import io.ezz.launcher.core.model.modrinth.ModrinthProjectHit
 import io.ezz.launcher.ui.audio.EzzAudioService
 import io.ezz.launcher.ui.components.EzzButton
 import io.ezz.launcher.ui.components.EzzButtonSize
 import io.ezz.launcher.ui.components.EzzButtonVariant
 import io.ezz.launcher.ui.components.ModrinthAsyncImage
 import io.ezz.launcher.ui.components.PaginationBar
-import io.ezz.launcher.ui.instance.installation.ui.CurseForgeModDetailsDialog
+import io.ezz.launcher.ui.manager.dialogs.ModInspectDialog
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 
 private enum class ModsSubTab(val title: String) {
@@ -105,10 +104,10 @@ fun ModsTab(
     val installedMods by viewModel.manageMods.collectAsState()
     val missingDependencies by viewModel.missingDependencies.collectAsState()
     val compatibilityConflicts by viewModel.compatibilityConflicts.collectAsState()
-    val curseForgeBrowseState by viewModel.curseForgeModsBrowseState.collectAsState()
+    val browseState by viewModel.modsBrowseState.collectAsState()
     val queueState by viewModel.contentInstallationManager.queueState.collectAsState()
 
-    var selectedModForDetails by remember(instance.id) { mutableStateOf<CurseForgeMod?>(null) }
+    var inspectModHit by remember(instance.id) { mutableStateOf<ModrinthProjectHit?>(null) }
     var localSearch by remember(instance.id) { mutableStateOf("") }
     var localFilter by remember(instance.id) { mutableStateOf("ALL") }
 
@@ -165,8 +164,8 @@ fun ModsTab(
                             ) {
                                 EzzAudioService.playSelect()
                                 subTab = tab
-                                if (tab == ModsSubTab.BROWSE && curseForgeBrowseState.items.isEmpty()) {
-                                    viewModel.searchCurseForgeMods()
+                                if (tab == ModsSubTab.BROWSE && browseState.items.isEmpty()) {
+                                    viewModel.searchMods()
                                 }
                             }
                             .padding(horizontal = 16.dp, vertical = 7.dp),
@@ -333,7 +332,7 @@ fun ModsTab(
                         onBulkDelete = { files -> viewModel.bulkDeleteMods(files) },
                         onBrowseClick = {
                             subTab = ModsSubTab.BROWSE
-                            if (curseForgeBrowseState.items.isEmpty()) viewModel.searchCurseForgeMods()
+                            if (browseState.items.isEmpty()) viewModel.searchMods()
                         }
                     )
                 }
@@ -342,23 +341,21 @@ fun ModsTab(
                 BrowseModsView(
                     instance = instance,
                     viewModel = viewModel,
-                    browseState = curseForgeBrowseState,
-                    onSelectMod = { mod -> selectedModForDetails = mod }
+                    browseState = browseState,
+                    onInspect = { hit -> inspectModHit = hit },
+                    onInstall = { hit -> viewModel.openModInstaller(hit) }
                 )
             }
         }
 
-        // Selected Mod Details Experience
-        selectedModForDetails?.let { mod ->
-            CurseForgeModDetailsDialog(
-                mod = mod,
+        // Mod Details / Inspect Dialog
+        val activeInspectHit = inspectModHit
+        if (activeInspectHit != null) {
+            ModInspectDialog(
+                projectHit = activeInspectHit,
                 instance = instance,
                 viewModel = viewModel,
-                onDismiss = { selectedModForDetails = null },
-                onInstallFile = { file ->
-                    viewModel.installCurseForgeModV2(instance, mod, file)
-                    selectedModForDetails = null
-                }
+                onDismiss = { inspectModHit = null }
             )
         }
     }
@@ -597,7 +594,7 @@ private fun InstalledModsView(
                     )
                     Text(
                         text = if (installedMods.isEmpty())
-                            "Install mods from CurseForge or import .jar files into your mods folder."
+                            "Install mods from Modrinth or import .jar files into your mods folder."
                         else
                             "Try searching with a different name or clearing your active filters.",
                         color = Color(0xFF94A3B8),
@@ -905,8 +902,9 @@ private fun InstalledModRow(
 private fun BrowseModsView(
     instance: Instance,
     viewModel: AppViewModel,
-    browseState: CurseForgeBrowseState,
-    onSelectMod: (CurseForgeMod) -> Unit
+    browseState: ModrinthBrowseState,
+    onInspect: (ModrinthProjectHit) -> Unit,
+    onInstall: (ModrinthProjectHit) -> Unit
 ) {
     var searchQuery by remember(instance.id) { mutableStateOf(browseState.searchQuery) }
 
@@ -921,13 +919,13 @@ private fun BrowseModsView(
                 value = searchQuery,
                 onValueChange = {
                     searchQuery = it
-                    viewModel.searchCurseForgeMods(query = it, debounceMs = 350L)
+                    viewModel.searchMods(query = it, debounceMs = 350L)
                 },
-                placeholder = "Search CurseForge mods...",
+                placeholder = "Search Modrinth mods...",
                 modifier = Modifier.weight(1f),
                 onClear = {
                     searchQuery = ""
-                    viewModel.searchCurseForgeMods(query = "")
+                    viewModel.searchMods(query = "")
                 }
             )
 
@@ -941,18 +939,19 @@ private fun BrowseModsView(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 listOf(
-                    CurseForgeSortField.POPULARITY to "Popularity",
-                    CurseForgeSortField.TOTAL_DOWNLOADS to "Downloads",
-                    CurseForgeSortField.LAST_UPDATED to "Updated",
-                    CurseForgeSortField.NAME to "Name"
-                ).forEach { (sortField, sortLabel) ->
-                    val isSelected = browseState.selectedSort == sortField
+                    "relevance" to "Relevance",
+                    "downloads" to "Downloads",
+                    "follows" to "Follows",
+                    "newest" to "Newest",
+                    "updated" to "Updated"
+                ).forEach { (sortKey, sortLabel) ->
+                    val isSelected = browseState.selectedSort == sortKey
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
                             .background(if (isSelected) Color(0xFF1A1E29) else Color.Transparent)
                             .border(1.dp, if (isSelected) Color.White else Color.Transparent, RoundedCornerShape(6.dp))
-                            .clickable { viewModel.searchCurseForgeMods(sort = sortField) }
+                            .clickable { viewModel.searchMods(sort = sortKey) }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
@@ -974,7 +973,7 @@ private fun BrowseModsView(
             Text("Filtered for:", color = Color(0xFF94A3B8), fontSize = 11.5.sp)
             FilterBadge(text = "MC ${instance.minecraftVersion}", color = Color.White)
             FilterBadge(text = instance.loaderType.name, color = Color(0xFF10B981))
-            FilterBadge(text = "CurseForge Only", color = Color(0xFFA78BFA))
+            FilterBadge(text = "Modrinth", color = Color(0xFF1BD96A))
         }
 
         // Results Container
@@ -1002,10 +1001,10 @@ private fun BrowseModsView(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(36.dp))
-                    Text(browseState.error ?: "Error fetching mods from CurseForge", color = Color(0xFF94A3B8), fontSize = 13.sp)
+                    Text(browseState.error ?: "Error fetching mods from Modrinth", color = Color(0xFF94A3B8), fontSize = 13.sp)
                     EzzButton(
                         text = "Retry",
-                        onClick = { viewModel.searchCurseForgeMods() },
+                        onClick = { viewModel.searchMods() },
                         variant = EzzButtonVariant.SECONDARY,
                         size = EzzButtonSize.SMALL
                     )
@@ -1035,7 +1034,7 @@ private fun BrowseModsView(
                             text = "Clear Search",
                             onClick = {
                                 searchQuery = ""
-                                viewModel.searchCurseForgeMods(query = "")
+                                viewModel.searchMods(query = "")
                             },
                             icon = Icons.Default.Clear,
                             variant = EzzButtonVariant.SECONDARY,
@@ -1049,12 +1048,13 @@ private fun BrowseModsView(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(browseState.items, key = { it.id }) { mod ->
-                    CurseForgeModBrowseCard(
-                        mod = mod,
+                items(browseState.items, key = { it.projectId }) { hit ->
+                    ModrinthModBrowseCard(
+                        hit = hit,
                         instance = instance,
                         viewModel = viewModel,
-                        onSelect = { onSelectMod(mod) }
+                        onInspect = { onInspect(hit) },
+                        onInstall = { onInstall(hit) }
                     )
                 }
 
@@ -1062,10 +1062,10 @@ private fun BrowseModsView(
                     PaginationBar(
                         currentPage = browseState.page,
                         totalPages = browseState.totalPages,
-                        totalHits = browseState.totalHits.toInt(),
+                        totalHits = browseState.totalHits,
                         isLoading = browseState.isLoading,
-                        onPrevious = { viewModel.setCurseForgeModsPage(browseState.page - 1) },
-                        onNext = { viewModel.setCurseForgeModsPage(browseState.page + 1) }
+                        onPrevious = { viewModel.setModsPage(browseState.page - 1) },
+                        onNext = { viewModel.setModsPage(browseState.page + 1) }
                     )
                 }
             }
@@ -1074,15 +1074,14 @@ private fun BrowseModsView(
 }
 
 @Composable
-private fun CurseForgeModBrowseCard(
-    mod: CurseForgeMod,
+private fun ModrinthModBrowseCard(
+    hit: ModrinthProjectHit,
     instance: Instance,
     viewModel: AppViewModel,
-    onSelect: () -> Unit
+    onInspect: () -> Unit,
+    onInstall: () -> Unit
 ) {
-    val isInstalled = viewModel.isCurseForgeModInstalled(mod)
-    val authorName = mod.authors.firstOrNull()?.name ?: ""
-    val imageUrl = mod.logo?.thumbnailUrl ?: mod.logo?.url
+    val isInstalled = viewModel.isModInstalled(hit)
 
     val cardInteraction = remember { MutableInteractionSource() }
     val isHovered by cardInteraction.collectIsHoveredAsState()
@@ -1104,7 +1103,7 @@ private fun CurseForgeModBrowseCard(
             .clickable(
                 interactionSource = cardInteraction,
                 indication = null,
-                onClick = onSelect
+                onClick = onInspect
             )
             .padding(14.dp)
     ) {
@@ -1120,7 +1119,7 @@ private fun CurseForgeModBrowseCard(
             ) {
                 Box(modifier = Modifier.scale(imgScale)) {
                     ModrinthAsyncImage(
-                        url = imageUrl,
+                        url = hit.previewImageUrl,
                         imageLoader = viewModel.imageLoader,
                         modifier = Modifier.size(50.dp).clip(RoundedCornerShape(6.dp)),
                         placeholderIcon = Icons.Default.Extension,
@@ -1137,14 +1136,14 @@ private fun CurseForgeModBrowseCard(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = mod.name,
+                            text = hit.title,
                             color = Color.White,
                             fontSize = 14.5.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        if (authorName.isNotBlank()) {
+                        if (hit.author.isNotBlank()) {
                             Text(
-                                text = "by $authorName",
+                                text = "by ${hit.author}",
                                 color = Color(0xFF94A3B8),
                                 fontSize = 11.5.sp
                             )
@@ -1152,7 +1151,7 @@ private fun CurseForgeModBrowseCard(
                     }
 
                     Text(
-                        text = mod.summary,
+                        text = hit.description,
                         color = Color(0xFFCBD5E1),
                         fontSize = 12.5.sp,
                         maxLines = 2,
@@ -1165,7 +1164,7 @@ private fun CurseForgeModBrowseCard(
                         modifier = Modifier.padding(top = 2.dp)
                     ) {
                         Text(
-                            text = "${formatDownloads(mod.downloadCount.toLong())} downloads",
+                            text = "${formatDownloads(hit.downloads)} downloads",
                             color = Color(0xFF94A3B8),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium
@@ -1174,7 +1173,7 @@ private fun CurseForgeModBrowseCard(
                         FilterBadge(text = "MC ${instance.minecraftVersion}", color = Color(0xFF10B981))
                         FilterBadge(text = instance.loaderType.name, color = Color(0xFFA78BFA))
 
-                        mod.categories.take(2).forEach { cat ->
+                        hit.categories.take(2).forEach { cat ->
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
@@ -1183,7 +1182,7 @@ private fun CurseForgeModBrowseCard(
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = cat.name,
+                                    text = cat,
                                     color = Color(0xFFCBD5E1),
                                     fontSize = 10.sp
                                 )
@@ -1200,10 +1199,10 @@ private fun CurseForgeModBrowseCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val websiteUrl = mod.links?.websiteUrl ?: if (mod.slug.isNotBlank()) "https://www.curseforge.com/minecraft/mc-mods/${mod.slug}" else null
+                val websiteUrl = if (hit.slug.isNotBlank()) "https://modrinth.com/mod/${hit.slug}" else null
                 if (!websiteUrl.isNullOrBlank()) {
                     EzzButton(
-                        text = "CurseForge",
+                        text = "Modrinth",
                         onClick = { viewModel.platformBridge.openUrl(websiteUrl) },
                         variant = EzzButtonVariant.SECONDARY,
                         size = EzzButtonSize.SMALL
@@ -1238,21 +1237,21 @@ private fun CurseForgeModBrowseCard(
                         }
                     }
                     EzzButton(
-                        text = "Manage",
-                        onClick = onSelect,
+                        text = "Inspect",
+                        onClick = onInspect,
                         variant = EzzButtonVariant.SECONDARY,
                         size = EzzButtonSize.SMALL
                     )
                 } else {
                     EzzButton(
-                        text = "Details",
-                        onClick = onSelect,
+                        text = "Inspect",
+                        onClick = onInspect,
                         variant = EzzButtonVariant.SECONDARY,
                         size = EzzButtonSize.SMALL
                     )
                     EzzButton(
                         text = "INSTALL",
-                        onClick = onSelect,
+                        onClick = onInstall,
                         icon = Icons.Default.Download,
                         variant = EzzButtonVariant.PRIMARY,
                         size = EzzButtonSize.SMALL
