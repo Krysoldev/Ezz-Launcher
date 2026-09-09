@@ -6,10 +6,14 @@ import io.ezz.launcher.core.storage.path.DefaultPathProvider
 import io.ezz.launcher.core.storage.repository.LocalInstanceRepository
 import kotlinx.coroutines.runBlocking
 import okio.Path.Companion.toPath
+import java.awt.Color
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import javax.imageio.ImageIO
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -547,6 +551,228 @@ class MrpackManagerTest {
         assertTrue(entryNames.contains("overrides/config/client.json"), "Must contain config override")
         assertTrue(entryNames.contains("overrides/saves/SurvivalWorld/level.dat"), "Must contain world save override")
         assertTrue(entryNames.contains("overrides/mods/sodium-fabric-0.5.jar"), "Unhosted mod must fall back to overrides")
+    }
+
+    @Test
+    fun testExportMrpackWithCustomPngIconRetainsExactBytes(): Unit = runBlocking {
+        val instance = repository.createInstance(
+            name = "Pack With PNG Icon",
+            minecraftVersion = "1.21.1",
+            loaderType = LoaderType.FABRIC,
+            loaderVersion = "0.16.9"
+        )
+        val instDir = pathProvider.getInstanceDirectory(instance.id).toFile()
+        val iconFile = File(instDir, "icon.png")
+        iconFile.writeBytes(samplePngBytes)
+
+        val updated = instance.copy(customIconPath = iconFile.absolutePath)
+        repository.updateInstance(updated)
+
+        val targetMrpack = File(tempDir, "pack_with_png.mrpack")
+        val exportResult = mrpackManager.exportMrpack(
+            instance = updated,
+            targetFile = targetMrpack
+        )
+        assertTrue(exportResult.isSuccess)
+
+        java.util.zip.ZipFile(targetMrpack).use { zip ->
+            val iconEntry = zip.getEntry("icon.png")
+            assertNotNull(iconEntry, "icon.png must be present at archive root")
+            val bytesInArchive = zip.getInputStream(iconEntry).use { it.readBytes() }
+            assertTrue(bytesInArchive.contentEquals(samplePngBytes), "Archive icon bytes must match original exactly")
+        }
+    }
+
+    @Test
+    fun testExportMrpackWithTransparentPngIconPreservesTransparency(): Unit = runBlocking {
+        // Create 2x2 transparent PNG
+        val img = BufferedImage(2, 2, BufferedImage.TYPE_INT_ARGB)
+        img.setRGB(0, 0, Color(255, 0, 0, 128).rgb) // 50% translucent red
+        img.setRGB(1, 1, Color(0, 255, 0, 0).rgb)   // 100% transparent green
+        val baos = ByteArrayOutputStream()
+        ImageIO.write(img, "PNG", baos)
+        val transparentBytes = baos.toByteArray()
+
+        val instance = repository.createInstance(
+            name = "Pack With Transparent Icon",
+            minecraftVersion = "1.21.1",
+            loaderType = LoaderType.FABRIC,
+            loaderVersion = "0.16.9"
+        )
+        val instDir = pathProvider.getInstanceDirectory(instance.id).toFile()
+        val iconFile = File(instDir, "icon.png")
+        iconFile.writeBytes(transparentBytes)
+        val updated = instance.copy(customIconPath = iconFile.absolutePath)
+        repository.updateInstance(updated)
+
+        val targetMrpack = File(tempDir, "transparent_pack.mrpack")
+        val exportResult = mrpackManager.exportMrpack(
+            instance = updated,
+            targetFile = targetMrpack
+        )
+        assertTrue(exportResult.isSuccess)
+
+        java.util.zip.ZipFile(targetMrpack).use { zip ->
+            val iconEntry = zip.getEntry("icon.png")
+            assertNotNull(iconEntry)
+            val bytesInArchive = zip.getInputStream(iconEntry).use { it.readBytes() }
+            assertTrue(bytesInArchive.contentEquals(transparentBytes), "Transparent PNG bytes must be 100% preserved")
+        }
+    }
+
+    @Test
+    fun testExportMrpackWithGameDirIconPacksIcon(): Unit = runBlocking {
+        // KrysolDev reproduction: instance.customIconPath is null, but .minecraft/icon.png exists on disk
+        val instance = repository.createInstance(
+            name = "Pack With GameDir Icon",
+            minecraftVersion = "1.21.1",
+            loaderType = LoaderType.FABRIC,
+            loaderVersion = "0.16.9"
+        )
+        assertNull(instance.customIconPath)
+
+        val instDir = pathProvider.getInstanceDirectory(instance.id).toFile()
+        val gameDir = File(instDir, ".minecraft").apply { mkdirs() }
+        val gameDirIcon = File(gameDir, "icon.png")
+        gameDirIcon.writeBytes(samplePngBytes)
+
+        val targetMrpack = File(tempDir, "gamedir_icon.mrpack")
+        val exportResult = mrpackManager.exportMrpack(
+            instance = instance,
+            targetFile = targetMrpack
+        )
+        assertTrue(exportResult.isSuccess)
+
+        java.util.zip.ZipFile(targetMrpack).use { zip ->
+            val iconEntry = zip.getEntry("icon.png")
+            assertNotNull(iconEntry, "Icon located in .minecraft/ must be discovered and packed as icon.png")
+            val bytes = zip.getInputStream(iconEntry).use { it.readBytes() }
+            assertTrue(bytes.contentEquals(samplePngBytes))
+        }
+    }
+
+    @Test
+    fun testExportMrpackWithJpegIconConvertsToPng(): Unit = runBlocking {
+        val img = BufferedImage(4, 4, BufferedImage.TYPE_INT_RGB)
+        val baos = ByteArrayOutputStream()
+        ImageIO.write(img, "JPEG", baos)
+        val jpegBytes = baos.toByteArray()
+
+        val instance = repository.createInstance(
+            name = "Pack With JPEG Icon",
+            minecraftVersion = "1.21.1",
+            loaderType = LoaderType.FABRIC,
+            loaderVersion = "0.16.9"
+        )
+        val instDir = pathProvider.getInstanceDirectory(instance.id).toFile()
+        val jpegFile = File(instDir, "icon.jpg")
+        jpegFile.writeBytes(jpegBytes)
+
+        val targetMrpack = File(tempDir, "jpeg_pack.mrpack")
+        val exportResult = mrpackManager.exportMrpack(
+            instance = instance,
+            targetFile = targetMrpack
+        )
+        assertTrue(exportResult.isSuccess)
+
+        java.util.zip.ZipFile(targetMrpack).use { zip ->
+            val iconEntry = zip.getEntry("icon.png")
+            assertNotNull(iconEntry, "icon.png must be present even when source was JPEG")
+            val bytes = zip.getInputStream(iconEntry).use { it.readBytes() }
+            assertTrue(io.ezz.launcher.core.storage.instance.InstanceIconResolver.isPng(bytes), "Converted archive icon must be valid PNG format")
+        }
+    }
+
+    @Test
+    fun testExportMrpackWithoutIconPreservesFallback(): Unit = runBlocking {
+        val instance = repository.createInstance(
+            name = "Pack Without Icon",
+            minecraftVersion = "1.21.1",
+            loaderType = LoaderType.VANILLA,
+            loaderVersion = null
+        )
+
+        val targetMrpack = File(tempDir, "no_icon.mrpack")
+        val exportResult = mrpackManager.exportMrpack(
+            instance = instance,
+            targetFile = targetMrpack
+        )
+        assertTrue(exportResult.isSuccess)
+
+        java.util.zip.ZipFile(targetMrpack).use { zip ->
+            val iconEntry = zip.getEntry("icon.png")
+            assertNull(iconEntry, "Pack without custom icon must not include icon.png, preserving launcher fallback")
+        }
+    }
+
+    @Test
+    fun testExportMrpackWithCorruptedIconLogsErrorAndContinues(): Unit = runBlocking {
+        val instance = repository.createInstance(
+            name = "Pack With Corrupted Icon",
+            minecraftVersion = "1.21.1",
+            loaderType = LoaderType.FABRIC,
+            loaderVersion = "0.16.9"
+        )
+        val instDir = pathProvider.getInstanceDirectory(instance.id).toFile()
+        val badFile = File(instDir, "icon.png")
+        badFile.writeText("THIS IS NOT A VALID IMAGE FILE DATA AT ALL")
+        val updated = instance.copy(customIconPath = badFile.absolutePath)
+        repository.updateInstance(updated)
+
+        val targetMrpack = File(tempDir, "corrupted_icon.mrpack")
+        val exportResult = mrpackManager.exportMrpack(
+            instance = updated,
+            targetFile = targetMrpack
+        )
+        assertTrue(exportResult.isSuccess, "Export should succeed and not crash on bad icon")
+
+        java.util.zip.ZipFile(targetMrpack).use { zip ->
+            val iconEntry = zip.getEntry("icon.png")
+            assertNull(iconEntry, "Corrupted icon must not be written to archive")
+            assertNotNull(zip.getEntry("modrinth.index.json"), "Archive manifest must remain valid")
+        }
+    }
+
+    @Test
+    fun testExportAndImportRoundTripPreservesIcon(): Unit = runBlocking {
+        // 1. Instance A with custom icon
+        val instanceA = repository.createInstance(
+            name = "Instance A",
+            minecraftVersion = "1.21.1",
+            loaderType = LoaderType.FABRIC,
+            loaderVersion = "0.16.9"
+        )
+        val instDirA = pathProvider.getInstanceDirectory(instanceA.id).toFile()
+        val iconA = File(instDirA, "icon.png")
+        iconA.writeBytes(samplePngBytes)
+
+        val updatedA = instanceA.copy(customIconPath = iconA.absolutePath)
+        repository.updateInstance(updatedA)
+
+        // 2. Export to .mrpack
+        val mrpackFile = File(tempDir, "InstanceA.mrpack")
+        val exportResult = mrpackManager.exportMrpack(
+            instance = updatedA,
+            targetFile = mrpackFile,
+            options = MrpackExportOptions(customName = "Exported Pack A")
+        )
+        assertTrue(exportResult.isSuccess)
+
+        // 3. Import as Instance B
+        val importResult = mrpackManager.importMrpack(
+            file = mrpackFile,
+            targetInstanceName = "Instance B"
+        )
+        assertTrue(importResult.isSuccess)
+        val instanceB = importResult.getOrNull()!!
+
+        // 4. Verify Instance B has icon restored
+        assertNotNull(instanceB.customIconPath, "Imported instance must have customIconPath set")
+        val iconB = File(instanceB.customIconPath!!)
+        assertTrue(iconB.exists(), "Imported icon file must exist on disk")
+        assertTrue(iconB.length() > 0, "Imported icon file must not be empty")
+        val importedBytes = iconB.readBytes()
+        assertTrue(importedBytes.contentEquals(samplePngBytes), "Imported icon bytes must be identical to Instance A")
     }
 }
 

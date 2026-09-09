@@ -56,6 +56,7 @@ import io.ezz.launcher.ui.components.EzzButton
 import io.ezz.launcher.ui.components.EzzButtonSize
 import io.ezz.launcher.ui.components.EzzButtonVariant
 import io.ezz.launcher.ui.components.EzzTextField
+import io.ezz.launcher.ui.components.InstanceArtworkIcon
 import io.ezz.launcher.ui.viewmodel.AppViewModel
 import okio.Path.Companion.toOkioPath
 import org.jetbrains.skia.Image as SkiaImage
@@ -303,42 +304,11 @@ private fun ConfigureView(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Icon
-                val iconFile = instance.customIconPath?.let { File(it) }?.takeIf { it.exists() }
-                val bitmap = remember(iconFile) {
-                    try {
-                        iconFile?.let { SkiaImage.makeFromEncoded(it.readBytes()).toComposeImageBitmap() }
-                    } catch (_: Throwable) {
-                        null
-                    }
-                }
-
-                if (bitmap != null) {
-                    Image(
-                        bitmap = bitmap,
-                        contentDescription = instance.name,
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .border(1.dp, Color(0xFF222735), RoundedCornerShape(6.dp))
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFF141720))
-                            .border(1.dp, Color(0xFF222735), RoundedCornerShape(6.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.Extension,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
+                // Instance Artwork Icon
+                InstanceArtworkIcon(
+                    instance = instance,
+                    size = 44.dp
+                )
 
                 Column(
                     modifier = Modifier.weight(1f),

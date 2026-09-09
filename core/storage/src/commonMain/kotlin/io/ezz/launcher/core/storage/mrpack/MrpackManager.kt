@@ -11,6 +11,7 @@ import io.ezz.launcher.core.model.modrinth.MrpackImportStage
 import io.ezz.launcher.core.model.modrinth.MrpackPreview
 import io.ezz.launcher.core.network.client.HttpClientFactory
 import io.ezz.launcher.core.network.modrinth.ModrinthService
+import io.ezz.launcher.core.storage.instance.InstanceIconResolver
 import io.ezz.launcher.core.storage.path.PathProvider
 import io.ezz.launcher.core.storage.repository.InstanceRepository
 import io.ktor.client.call.body
@@ -696,14 +697,27 @@ class MrpackManager(
                 zos.closeEntry()
 
                 // 2. Include icon if present at archive root
-                val iconFile = instance.customIconPath?.let { File(it) }?.takeIf { it.exists() }
-                    ?: File(instanceDir, "icon.png").takeIf { it.exists() }
-                if (iconFile != null) {
-                    val iconEntry = ZipEntry("icon.png")
-                    zos.putNextEntry(iconEntry)
-                    FileInputStream(iconFile).use { it.copyTo(zos) }
-                    zos.closeEntry()
-                }
+                val iconResolutionResult = InstanceIconResolver.resolveIconBytesForExport(
+                    instance = instance,
+                    instanceDir = instanceDir,
+                    gameDir = gameDir
+                )
+                iconResolutionResult.fold(
+                    onSuccess = { iconBytes ->
+                        if (iconBytes != null && iconBytes.isNotEmpty()) {
+                            val iconEntry = ZipEntry("icon.png")
+                            zos.putNextEntry(iconEntry)
+                            zos.write(iconBytes)
+                            zos.closeEntry()
+                            log("MRPACK_ICON_EXPORTED: Successfully included instance icon 'icon.png' (${iconBytes.size} bytes)")
+                        } else {
+                            log("MRPACK_ICON_EXPORT: No custom icon assigned to instance '${instance.name}'. Preserving standard fallback.")
+                        }
+                    },
+                    onFailure = { error ->
+                        logError("MRPACK_ICON_EXPORT_FAILED: ${error.message}", error)
+                    }
+                )
 
                 // 3. Write overrides
                 unhostedOverrides.forEach { (srcFile, relPath) ->
@@ -799,23 +813,10 @@ class MrpackManager(
     }
 
     /**
-     * Header byte validation for image formats (PNG, JPEG, GIF, WebP).
+     * Header byte validation for image formats (PNG, JPEG, GIF, WebP, BMP).
      */
     private fun isValidImage(bytes: ByteArray): Boolean {
-        if (bytes.size < 8) return false
-        // PNG
-        if (bytes[0] == 0x89.toByte() && bytes[1] == 0x50.toByte() && bytes[2] == 0x4E.toByte() && bytes[3] == 0x47.toByte()) return true
-        // JPEG
-        if (bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() && bytes[2] == 0xFF.toByte()) return true
-        // GIF
-        if (bytes[0] == 'G'.code.toByte() && bytes[1] == 'I'.code.toByte() && bytes[2] == 'F'.code.toByte()) return true
-        // WebP (RIFF....WEBP)
-        if (bytes.size >= 12 &&
-            bytes[0] == 'R'.code.toByte() && bytes[1] == 'I'.code.toByte() && bytes[2] == 'F'.code.toByte() && bytes[3] == 'F'.code.toByte() &&
-            bytes[8] == 'W'.code.toByte() && bytes[9] == 'E'.code.toByte() && bytes[10] == 'B'.code.toByte() && bytes[11] == 'P'.code.toByte()) {
-            return true
-        }
-        return false
+        return InstanceIconResolver.isValidImageHeader(bytes)
     }
 
     private fun cleanupDirectory(dir: File?) {

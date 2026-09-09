@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LoaderType
+import io.ezz.launcher.core.storage.instance.InstanceIconResolver
 import io.ezz.launcher.core.storage.path.DefaultPathProvider
 import io.ezz.launcher.ui.image.ImageDecoder
 import java.io.File
@@ -73,42 +74,12 @@ fun InstanceArtworkIcon(
         if (customFile != null && customFile.exists() && customFile.length() > 0L) {
             customFile
         } else {
-            val path = instance.customIconPath
-            val primaryFile = if (!path.isNullOrBlank()) {
-                val f = File(path)
-                if (f.exists() && f.length() > 0L) f else null
-            } else null
-
-            primaryFile ?: run {
-                val instanceDir = try {
-                    DefaultPathProvider.createDefault().getInstanceDirectory(instance.id).toFile()
-                } catch (_: Throwable) {
-                    null
-                }
-                val userHome = System.getProperty("user.home") ?: "."
-
-                val possibleRoots = listOfNotNull(
-                    instanceDir,
-                    instanceDir?.let { File(it, ".minecraft") },
-                    File(userHome, ".ezzlauncher/instances/${instance.id}"),
-                    File(userHome, "AppData/Roaming/.ezzlauncher/instances/${instance.id}"),
-                    File(userHome, ".ezz/instances/${instance.id}"),
-                    File(userHome, "AppData/Roaming/.ezz/instances/${instance.id}")
-                )
-
-                possibleRoots.flatMap { root ->
-                    listOf(
-                        File(root, "icon.png"),
-                        File(root, "icon.webp"),
-                        File(root, "icon.jpg"),
-                        File(root, "icon.jpeg"),
-                        File(root, "icon.gif"),
-                        File(root, "pack.png"),
-                        File(root, ".minecraft/icon.png"),
-                        File(root, ".minecraft/pack.png")
-                    )
-                }.firstOrNull { it.exists() && it.length() > 0L }
+            val instanceDir = try {
+                DefaultPathProvider.createDefault().getInstanceDirectory(instance.id).toFile()
+            } catch (_: Throwable) {
+                null
             }
+            InstanceIconResolver.resolveIconFile(instance, instanceDir)
         }
     }
 
