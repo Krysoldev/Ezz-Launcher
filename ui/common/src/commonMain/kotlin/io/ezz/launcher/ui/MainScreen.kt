@@ -51,8 +51,8 @@ import io.ezz.launcher.ui.dialogs.MicrosoftAuthModal
 import io.ezz.launcher.ui.dialogs.ModrinthModpackBrowserDialog
 import io.ezz.launcher.ui.dialogs.QuickSearchDialog
 import io.ezz.launcher.ui.home.HomeScreen
-import io.ezz.launcher.ui.instances.InstancesScreen
-import io.ezz.launcher.ui.manager.InstanceManagerScreen
+import io.ezz.launcher.ui.instance.manager.InstanceManagerScreen as InstanceFleetScreen
+import io.ezz.launcher.ui.instance.workspace.InstanceWorkspaceScreen
 import io.ezz.launcher.ui.profiles.ProfilesScreen
 import io.ezz.launcher.ui.servers.ServersScreen
 import io.ezz.launcher.ui.settings.SettingsScreen
@@ -130,10 +130,10 @@ fun MainScreen(
                     ) { screen ->
                         when (screen) {
                             NavigationScreen.HOME -> HomeScreen(viewModel = viewModel)
-                            NavigationScreen.INSTANCES -> InstancesScreen(viewModel = viewModel)
+                            NavigationScreen.INSTANCES -> InstanceFleetScreen(viewModel = viewModel)
                             NavigationScreen.VAULT -> io.ezz.launcher.ui.vault.VaultScreen(viewModel = viewModel)
                             NavigationScreen.ACCOUNTS -> AccountsScreen(viewModel = viewModel)
-                            NavigationScreen.MODS -> InstancesScreen(viewModel = viewModel)
+                            NavigationScreen.MODS -> InstanceFleetScreen(viewModel = viewModel)
                             NavigationScreen.RESOURCE_PACKS -> io.ezz.launcher.ui.packs.ResourcePacksScreen(viewModel = viewModel)
                             NavigationScreen.SHADERS -> io.ezz.launcher.ui.shaders.ShadersScreen(viewModel = viewModel)
                             NavigationScreen.WORLDS -> io.ezz.launcher.ui.worlds.WorldsScreen(viewModel = viewModel)
@@ -142,7 +142,7 @@ fun MainScreen(
                             NavigationScreen.SERVERS -> ServersScreen(viewModel = viewModel)
                             NavigationScreen.PROFILES -> ProfilesScreen(viewModel = viewModel)
                             NavigationScreen.CONSOLE -> ConsoleScreen(viewModel = viewModel)
-                            NavigationScreen.INSTANCE_MANAGER -> InstanceManagerScreen(viewModel = viewModel)
+                            NavigationScreen.INSTANCE_MANAGER -> InstanceWorkspaceScreen(viewModel = viewModel)
                         }
                     }
 

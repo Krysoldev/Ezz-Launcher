@@ -119,6 +119,18 @@ fun InstancesScreen(
     viewModel: AppViewModel,
     modifier: Modifier = Modifier
 ) {
+    // Delegates directly to the completely rebuilt Instance Fleet Manager
+    io.ezz.launcher.ui.instance.manager.InstanceManagerScreen(
+        viewModel = viewModel,
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun LegacyInstancesScreenInternal(
+    viewModel: AppViewModel,
+    modifier: Modifier = Modifier
+) {
     val instances by viewModel.instanceRepository.instances.collectAsState()
     val runningSessions by viewModel.runningSessions.collectAsState()
 

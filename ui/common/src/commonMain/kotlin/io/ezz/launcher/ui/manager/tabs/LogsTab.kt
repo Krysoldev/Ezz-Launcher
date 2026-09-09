@@ -513,15 +513,17 @@ fun LogsTab(
 
                 // Fully Virtualized Log Lines List
                 else -> {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        items(filteredLines, key = { it.lineNumber }) { logLine ->
-                            LogLineRow(logLine)
+                    SelectionContainer {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            items(filteredLines, key = { it.lineNumber }) { logLine ->
+                                LogLineRow(logLine)
+                            }
                         }
                     }
                 }
@@ -604,24 +606,19 @@ private fun LogLineRow(line: LogLine) {
             color = Color(0xFF475569),
             fontSize = 11.sp,
             fontFamily = FontFamily.Monospace,
-            modifier = Modifier.width(42.dp)
+            modifier = Modifier.width(44.dp)
         )
 
-        // Line content with horizontal scroll if single line is wide
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .horizontalScroll(rememberScrollState())
-        ) {
-            Text(
-                text = line.text,
-                color = textColor,
-                fontSize = 11.5.sp,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal,
-                lineHeight = 16.sp
-            )
-        }
+        // Line content - zero per-line overhead, smooth scrolling even with 10k+ lines
+        Text(
+            text = line.text,
+            color = textColor,
+            fontSize = 11.5.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal,
+            lineHeight = 16.sp,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
