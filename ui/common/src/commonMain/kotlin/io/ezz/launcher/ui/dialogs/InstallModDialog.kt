@@ -139,28 +139,38 @@ fun InstallModDialog(
     }
 
     val installedResourcePack = remember(project, installedResourcePacks) {
-        val slug = project.slug.lowercase()
-        val title = project.title.lowercase()
+        val normSlug = project.slug.lowercase().filter { it.isLetterOrDigit() }
         installedResourcePacks.firstOrNull { p ->
+            val slug = project.slug.lowercase()
+            val title = project.title.lowercase()
+            val normName = p.name.lowercase().filter { it.isLetterOrDigit() }
+            val normFile = p.fileName.lowercase().filter { it.isLetterOrDigit() }
             p.fileName.lowercase().contains(slug) ||
-            p.name.lowercase().contains(title)
+            p.name.lowercase().contains(title) ||
+            normName.contains(normSlug) ||
+            normFile.contains(normSlug)
         }
     }
 
     val installedShader = remember(project, installedShaders) {
-        val slug = project.slug.lowercase()
-        val title = project.title.lowercase()
+        val normSlug = project.slug.lowercase().filter { it.isLetterOrDigit() }
         installedShaders.firstOrNull { s ->
+            val slug = project.slug.lowercase()
+            val title = project.title.lowercase()
+            val normName = s.name.lowercase().filter { it.isLetterOrDigit() }
+            val normFile = s.fileName.lowercase().filter { it.isLetterOrDigit() }
             s.fileName.lowercase().contains(slug) ||
-            s.name.lowercase().contains(title)
+            s.name.lowercase().contains(title) ||
+            normName.contains(normSlug) ||
+            normFile.contains(normSlug)
         }
     }
 
     // Check if item is already installed in target instance
-    val isItemAlreadyInstalled = remember(contentType, installedMod, installedResourcePack, installedShader) {
+    val isItemAlreadyInstalled = remember(contentType, installedMod, installedResourcePack, installedShader, project) {
         when (contentType) {
-            InstanceContentType.RESOURCE_PACK -> installedResourcePack != null
-            InstanceContentType.SHADER -> installedShader != null
+            InstanceContentType.RESOURCE_PACK -> viewModel.isResourcePackInstalled(project) || installedResourcePack != null
+            InstanceContentType.SHADER -> viewModel.isShaderInstalled(project) || installedShader != null
             else -> installedMod != null
         }
     }

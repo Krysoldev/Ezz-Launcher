@@ -334,7 +334,9 @@ class LocalInstanceManager(
                         packFormat = obj?.get("pack_format")?.jsonPrimitive?.content?.toIntOrNull()
                     }
 
-                    val iconEntry = zip.getEntry("pack.png") ?: zip.getEntry("icon.png")
+                    val iconEntry = zip.entries().asSequence().firstOrNull {
+                        it.name.equals("pack.png", ignoreCase = true) || it.name.equals("icon.png", ignoreCase = true)
+                    }
                     if (iconEntry != null) {
                         val iconCacheFile = File(getIconsCacheDir("resourcepacks"), "${cleanName}.png")
                         if (!iconCacheFile.exists() || iconCacheFile.length() == 0L) {
@@ -356,12 +358,36 @@ class LocalInstanceManager(
                     packFormat = obj?.get("pack_format")?.jsonPrimitive?.content?.toIntOrNull()
                 }
 
-                val iconFile = File(file, "pack.png").takeIf { it.exists() } ?: File(file, "icon.png").takeIf { it.exists() }
+                val iconFile = file.listFiles { f ->
+                    f.name.equals("pack.png", ignoreCase = true) || f.name.equals("icon.png", ignoreCase = true)
+                }?.firstOrNull()
                 if (iconFile != null) {
                     iconPath = iconFile.absolutePath
                 }
             }
         } catch (_: Throwable) {}
+
+        // Fallback: check sidecar .icon_*.png or *.png alongside file or in cache
+        if (iconPath == null) {
+            val parentDir = file.parentFile
+            if (parentDir != null) {
+                val sideFiles = parentDir.listFiles { f -> f.name.endsWith(".png", ignoreCase = true) } ?: emptyArray()
+                val cleanLower = cleanName.lowercase().filter { it.isLetterOrDigit() }
+                for (sf in sideFiles) {
+                    val sfClean = sf.name.removePrefix(".icon_").removeSuffix(".png").lowercase().filter { it.isLetterOrDigit() }
+                    if (sfClean == cleanLower || sf.name == ".icon_${file.name}.png" || sf.name == ".icon_${file.name.removeSuffix(".disabled")}.png" || sf.name == "${cleanName}.png") {
+                        iconPath = sf.absolutePath
+                        break
+                    }
+                }
+            }
+        }
+        if (iconPath == null) {
+            val iconCacheFile = File(getIconsCacheDir("resourcepacks"), "${cleanName}.png")
+            if (iconCacheFile.exists() && iconCacheFile.length() > 0) {
+                iconPath = iconCacheFile.absolutePath
+            }
+        }
 
         return LocalResourcePack(
             fileName = file.name,
@@ -411,29 +437,55 @@ class LocalInstanceManager(
             val cleanName = file.name.removeSuffix(".disabled").removeSuffix(".zip")
             var iconPath: String? = null
 
-            try {
-                if (file.isFile && (file.name.endsWith(".zip", ignoreCase = true) || file.name.endsWith(".zip.disabled", ignoreCase = true))) {
-                    ZipFile(file).use { zip ->
-                        val iconEntry = zip.getEntry("pack.png") ?: zip.getEntry("icon.png")
-                        if (iconEntry != null) {
-                            val iconCacheFile = File(getIconsCacheDir("shaders"), "${cleanName}.png")
-                            if (!iconCacheFile.exists() || iconCacheFile.length() == 0L) {
-                                zip.getInputStream(iconEntry).use { input ->
-                                    iconCacheFile.outputStream().use { output -> input.copyTo(output) }
+            // 1. Check sidecar .icon_*.png or *.png in shaderpacks/
+            val sideFiles = spDir.listFiles { f -> f.name.endsWith(".png", ignoreCase = true) } ?: emptyArray()
+            val cleanLower = cleanName.lowercase().filter { it.isLetterOrDigit() }
+            for (sf in sideFiles) {
+                val sfClean = sf.name.removePrefix(".icon_").removeSuffix(".png").lowercase().filter { it.isLetterOrDigit() }
+                if (sfClean == cleanLower || sf.name == ".icon_${file.name}.png" || sf.name == ".icon_${file.name.removeSuffix(".disabled")}.png" || sf.name == "${cleanName}.png") {
+                    iconPath = sf.absolutePath
+                    break
+                }
+            }
+
+            // 2. Check icon cache directory
+            if (iconPath == null) {
+                val iconCacheFile = File(getIconsCacheDir("shaders"), "${cleanName}.png")
+                if (iconCacheFile.exists() && iconCacheFile.length() > 0) {
+                    iconPath = iconCacheFile.absolutePath
+                }
+            }
+
+            // 3. Fallback: check inside zip archive
+            if (iconPath == null) {
+                try {
+                    if (file.isFile && (file.name.endsWith(".zip", ignoreCase = true) || file.name.endsWith(".zip.disabled", ignoreCase = true))) {
+                        ZipFile(file).use { zip ->
+                            val iconEntry = zip.entries().asSequence().firstOrNull {
+                                it.name.equals("pack.png", ignoreCase = true) || it.name.equals("icon.png", ignoreCase = true)
+                            }
+                            if (iconEntry != null) {
+                                val iconCacheFile = File(getIconsCacheDir("shaders"), "${cleanName}.png")
+                                if (!iconCacheFile.exists() || iconCacheFile.length() == 0L) {
+                                    zip.getInputStream(iconEntry).use { input ->
+                                        iconCacheFile.outputStream().use { output -> input.copyTo(output) }
+                                    }
+                                }
+                                if (iconCacheFile.exists() && iconCacheFile.length() > 0) {
+                                    iconPath = iconCacheFile.absolutePath
                                 }
                             }
-                            if (iconCacheFile.exists() && iconCacheFile.length() > 0) {
-                                iconPath = iconCacheFile.absolutePath
-                            }
+                        }
+                    } else if (file.isDirectory) {
+                        val iconFile = file.listFiles { f ->
+                            f.name.equals("pack.png", ignoreCase = true) || f.name.equals("icon.png", ignoreCase = true)
+                        }?.firstOrNull()
+                        if (iconFile != null) {
+                            iconPath = iconFile.absolutePath
                         }
                     }
-                } else if (file.isDirectory) {
-                    val iconFile = File(file, "pack.png").takeIf { it.exists() } ?: File(file, "icon.png").takeIf { it.exists() }
-                    if (iconFile != null) {
-                        iconPath = iconFile.absolutePath
-                    }
-                }
-            } catch (_: Throwable) {}
+                } catch (_: Throwable) {}
+            }
 
             LocalShaderPack(
                 fileName = file.name,

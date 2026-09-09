@@ -3366,6 +3366,36 @@ class AppViewModel(
                     throw IllegalStateException("Installation verification failed: $finalTarget does not exist or is empty")
                 }
                 newlyAddedFiles.add(finalTarget)
+
+                // If this is the main version and project has an iconUrl, download and save it alongside the file & in cache
+                if (ver == mainVersion) {
+                    val iconUrl = project.iconUrl
+                    if (!iconUrl.isNullOrBlank()) {
+                        try {
+                            val iconSideFile = java.io.File(targetDir, ".icon_${primaryFile.filename}.png")
+                            val cleanName = primaryFile.filename.removeSuffix(".jar").removeSuffix(".zip").removeSuffix(".disabled")
+                            val iconCategory = when (contentType) {
+                                InstanceContentType.RESOURCE_PACK -> "resourcepacks"
+                                InstanceContentType.SHADER -> "shaders"
+                                else -> "mods"
+                            }
+                            val iconCacheDir = pathProvider.cacheDirectory.resolve("icons").resolve(iconCategory).toFile().apply { mkdirs() }
+                            val iconCacheFile = java.io.File(iconCacheDir, "${cleanName}.png")
+
+                            modrinth.downloadContent(iconUrl, iconSideFile) { _, _ -> }
+                            if (iconSideFile.exists() && iconSideFile.length() > 0) {
+                                iconSideFile.copyTo(iconCacheFile, overwrite = true)
+                            }
+                        } catch (iconEx: Throwable) {
+                            println("[ContentInstaller] Non-fatal: failed to download icon for ${primaryFile.filename}: ${iconEx.message}")
+                        }
+                    }
+
+                    try {
+                        val metaFile = java.io.File(targetDir, ".modrinth_${primaryFile.filename}.json")
+                        metaFile.writeText("""{"projectId":"${project.projectId}","slug":"${project.slug}","title":"${project.title.replace("\"", "\\\"")}"}""")
+                    } catch (_: Throwable) {}
+                }
             }
 
             // 5. Post-installation Verification & Selective Hydration
@@ -3429,7 +3459,10 @@ class AppViewModel(
     fun installModrinthVersion(
         projectTitle: String,
         version: ModrinthVersion,
-        contentType: InstanceContentType = InstanceContentType.MOD
+        contentType: InstanceContentType = InstanceContentType.MOD,
+        iconUrl: String? = null,
+        projectId: String? = null,
+        slug: String? = null
     ) {
         val instance = _selectedInstance.value ?: return
         scope.launch {
@@ -3454,6 +3487,32 @@ class AppViewModel(
                     if (!targetFile.exists() || targetFile.length() == 0L) {
                         throw IllegalStateException("Failed to verify downloaded file: ${targetFile.absolutePath}")
                     }
+
+                    if (!iconUrl.isNullOrBlank()) {
+                        try {
+                            val iconSideFile = java.io.File(targetDir, ".icon_${primaryFile.filename}.png")
+                            val cleanName = primaryFile.filename.removeSuffix(".jar").removeSuffix(".zip").removeSuffix(".disabled")
+                            val iconCategory = when (contentType) {
+                                InstanceContentType.RESOURCE_PACK -> "resourcepacks"
+                                InstanceContentType.SHADER -> "shaders"
+                                else -> "mods"
+                            }
+                            val iconCacheDir = pathProvider.cacheDirectory.resolve("icons").resolve(iconCategory).toFile().apply { mkdirs() }
+                            val iconCacheFile = java.io.File(iconCacheDir, "${cleanName}.png")
+                            modrinth.downloadContent(iconUrl, iconSideFile) { _, _ -> }
+                            if (iconSideFile.exists() && iconSideFile.length() > 0) {
+                                iconSideFile.copyTo(iconCacheFile, overwrite = true)
+                            }
+                        } catch (_: Throwable) {}
+                    }
+
+                    if (!projectId.isNullOrBlank() || !slug.isNullOrBlank()) {
+                        try {
+                            val metaFile = java.io.File(targetDir, ".modrinth_${primaryFile.filename}.json")
+                            metaFile.writeText("""{"projectId":"${projectId ?: ""}","slug":"${slug ?: ""}","title":"${projectTitle.replace("\"", "\\\"")}"}""")
+                        } catch (_: Throwable) {}
+                    }
+
                     refreshContent(instance.id, contentType)
                 }
             } catch (e: Throwable) {
@@ -3465,30 +3524,101 @@ class AppViewModel(
         }
     }
 
+    private fun isLocalContentMatch(
+        localFileName: String,
+        localName: String,
+        hit: ModrinthProjectHit,
+        targetDir: java.io.File?
+    ): Boolean {
+        // 1. Check sidecar metadata file .modrinth_<fileName>.json if targetDir is available
+        if (targetDir != null) {
+            val metaFile = java.io.File(targetDir, ".modrinth_${localFileName}.json")
+            if (metaFile.exists()) {
+                try {
+                    val text = metaFile.readText()
+                    if (text.contains("\"${hit.projectId}\"") || text.contains("\"${hit.slug}\"")) {
+                        return true
+                    }
+                } catch (_: Throwable) {}
+            }
+        }
+
+        // 2. Direct string checks
+        if (localFileName.contains(hit.slug, ignoreCase = true) ||
+            localFileName.contains(hit.projectId, ignoreCase = true) ||
+            localName.contains(hit.slug, ignoreCase = true) ||
+            localName.contains(hit.title, ignoreCase = true) ||
+            hit.title.contains(localName, ignoreCase = true)
+        ) {
+            return true
+        }
+
+        // 3. Normalized alphanumeric checks
+        val normFileName = localFileName.lowercase().filter { it.isLetterOrDigit() }
+        val normLocalName = localName.lowercase().filter { it.isLetterOrDigit() }
+        val normSlug = hit.slug.lowercase().filter { it.isLetterOrDigit() }
+        val normTitle = hit.title.lowercase().filter { it.isLetterOrDigit() }
+
+        if (normFileName.contains(normSlug) || normLocalName.contains(normSlug) ||
+            normFileName.contains(normTitle) || normLocalName.contains(normTitle) ||
+            normSlug.contains(normLocalName) || normTitle.contains(normLocalName)
+        ) {
+            return true
+        }
+
+        // 4. Strip common content suffixes ("shaders", "shader", "resourcepack", "texturepack", "pack")
+        val strippedTitle = normTitle
+            .removeSuffix("shaders")
+            .removeSuffix("shader")
+            .removeSuffix("resourcepack")
+            .removeSuffix("texturepack")
+            .removeSuffix("pack")
+        val strippedSlug = normSlug
+            .removeSuffix("shaders")
+            .removeSuffix("shader")
+            .removeSuffix("resourcepack")
+            .removeSuffix("texturepack")
+            .removeSuffix("pack")
+
+        if (strippedSlug.length >= 3 && (normFileName.contains(strippedSlug) || normLocalName.contains(strippedSlug) || strippedSlug.contains(normLocalName))) {
+            return true
+        }
+        if (strippedTitle.length >= 3 && (normFileName.contains(strippedTitle) || normLocalName.contains(strippedTitle) || strippedTitle.contains(normLocalName))) {
+            return true
+        }
+
+        return false
+    }
+
     fun isModInstalled(hit: ModrinthProjectHit): Boolean {
+        val instanceId = _selectedInstance.value?.id
+        val dir = if (instanceId != null) try { destinationResolver.resolveContentDirectory(instanceId, InstanceContentType.MOD) } catch (_: Throwable) { null } else null
         val mods = manageMods.value
         return mods.any { local ->
             local.fileName.contains(hit.slug, ignoreCase = true) ||
             local.fileName.contains(hit.projectId, ignoreCase = true) ||
             local.name.equals(hit.title, ignoreCase = true) ||
             local.id.equals(hit.slug, ignoreCase = true) ||
-            local.id.equals(hit.projectId, ignoreCase = true)
+            local.id.equals(hit.projectId, ignoreCase = true) ||
+            isLocalContentMatch(local.fileName, local.name, hit, dir)
         }
     }
 
     fun isResourcePackInstalled(hit: ModrinthProjectHit): Boolean {
+        val instanceId = _selectedInstance.value?.id
+        val dir = if (instanceId != null) try { destinationResolver.resolveContentDirectory(instanceId, InstanceContentType.RESOURCE_PACK) } catch (_: Throwable) { null } else null
         val packs = manageResourcePacks.value
         return packs.any { local ->
-            local.fileName.contains(hit.slug, ignoreCase = true) ||
-            local.name.contains(hit.title, ignoreCase = true)
+            isLocalContentMatch(local.fileName, local.name, hit, dir)
         }
     }
 
     fun isShaderInstalled(hit: ModrinthProjectHit): Boolean {
+        val instanceId = _selectedInstance.value?.id
+        val dir = if (instanceId != null) try { destinationResolver.resolveContentDirectory(instanceId, InstanceContentType.SHADER) } catch (_: Throwable) { null } else null
         val shaders = manageShaders.value
         return shaders.any { local ->
-            local.fileName.contains(hit.slug, ignoreCase = true) ||
-            local.name.contains(hit.title, ignoreCase = true)
+            isLocalContentMatch(local.fileName, local.name, hit, dir)
         }
     }
 
