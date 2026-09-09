@@ -478,4 +478,75 @@ class MrpackManagerTest {
         assertTrue(importedModFile.exists(), "Exported mod file should be restored")
         assertEquals("Mock Mod Jar Content", importedModFile.readText())
     }
+
+    @Test
+    fun testExportMrpackWithWorldsAndInspectZipLayout() = runBlocking {
+        // 1. Create source instance with world and mods
+        val sourceInstance = repository.createInstance(
+            name = "World And Mod Instance",
+            minecraftVersion = "1.21.1",
+            loaderType = LoaderType.FABRIC,
+            loaderVersion = "0.16.9"
+        )
+        val instDir = pathProvider.getInstanceDirectory(sourceInstance.id).toFile()
+        val mcDir = File(instDir, ".minecraft").apply { mkdirs() }
+
+        // Add config
+        val configDir = File(mcDir, "config").apply { mkdirs() }
+        File(configDir, "client.json").writeText("""{"uiTheme": "dark"}""")
+
+        // Add world in saves/
+        val saveDir = File(mcDir, "saves/SurvivalWorld").apply { mkdirs() }
+        File(saveDir, "level.dat").writeText("Level Data Binary Mock")
+
+        // Add mod
+        val modsDir = File(mcDir, "mods").apply { mkdirs() }
+        File(modsDir, "sodium-fabric-0.5.jar").writeText("Mock Sodium Jar")
+
+        // 2. Export with includeWorlds = true
+        val targetMrpack = File(tempDir, "world_test.mrpack")
+        val exportResult = mrpackManager.exportMrpack(
+            instance = sourceInstance,
+            targetFile = targetMrpack,
+            options = MrpackExportOptions(
+                customName = "Custom World Pack",
+                customSummary = "Pack with included world save",
+                versionId = "1.0.5",
+                includeConfigs = true,
+                includeMods = true,
+                includeWorlds = true
+            )
+        )
+        assertTrue(exportResult.isSuccess)
+        assertTrue(targetMrpack.exists())
+
+        // 3. Inspect raw zip archive entries
+        val entryNames = mutableListOf<String>()
+        java.util.zip.ZipFile(targetMrpack).use { zip ->
+            val entries = zip.entries()
+            while (entries.hasMoreElements()) {
+                val entry = entries.nextElement()
+                entryNames.add(entry.name)
+                // Ensure no Windows backslashes in ZIP entries (standard format compliance)
+                assertTrue(!entry.name.contains('\\'), "Zip entry path must use forward slashes: ${entry.name}")
+            }
+
+            // Verify modrinth.index.json at root
+            val manifestEntry = zip.getEntry("modrinth.index.json")
+            assertNotNull(manifestEntry, "modrinth.index.json must be present at archive root")
+
+            val manifestContent = zip.getInputStream(manifestEntry).bufferedReader().use { it.readText() }
+            assertTrue(manifestContent.contains(""""formatVersion": 1"""))
+            assertTrue(manifestContent.contains(""""game": "minecraft""""))
+            assertTrue(manifestContent.contains(""""versionId": "1.0.5""""))
+            assertTrue(manifestContent.contains(""""minecraft": "1.21.1""""))
+            assertTrue(manifestContent.contains(""""fabric-loader": "0.16.9""""))
+        }
+
+        assertTrue(entryNames.contains("modrinth.index.json"), "Must contain root manifest")
+        assertTrue(entryNames.contains("overrides/config/client.json"), "Must contain config override")
+        assertTrue(entryNames.contains("overrides/saves/SurvivalWorld/level.dat"), "Must contain world save override")
+        assertTrue(entryNames.contains("overrides/mods/sodium-fabric-0.5.jar"), "Unhosted mod must fall back to overrides")
+    }
 }
+

@@ -3,11 +3,14 @@ package io.ezz.launcher.core.storage.mrpack
 import io.ezz.launcher.core.model.instance.Instance
 import io.ezz.launcher.core.model.instance.LoaderType
 import io.ezz.launcher.core.model.modrinth.ModrinthIndex
+import io.ezz.launcher.core.model.modrinth.ModrinthIndexEnv
+import io.ezz.launcher.core.model.modrinth.ModrinthIndexFile
 import io.ezz.launcher.core.model.modrinth.MrpackExportOptions
 import io.ezz.launcher.core.model.modrinth.MrpackImportProgress
 import io.ezz.launcher.core.model.modrinth.MrpackImportStage
 import io.ezz.launcher.core.model.modrinth.MrpackPreview
 import io.ezz.launcher.core.network.client.HttpClientFactory
+import io.ezz.launcher.core.network.modrinth.ModrinthService
 import io.ezz.launcher.core.storage.path.PathProvider
 import io.ezz.launcher.core.storage.repository.InstanceRepository
 import io.ktor.client.call.body
@@ -44,7 +47,8 @@ import kotlin.coroutines.coroutineContext
 class MrpackManager(
     private val pathProvider: PathProvider,
     private val instanceRepository: InstanceRepository,
-    private val dispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val modrinthService: ModrinthService? = null
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -508,6 +512,12 @@ class MrpackManager(
      * Exports an existing Instance into a structurally valid .mrpack archive.
      * Complies with Modrinth specification: includes modrinth.index.json manifest and overrides/ directory.
      */
+    /**
+     * Exports an existing Instance into a structurally valid .mrpack archive.
+     * Complies with Modrinth specification: includes modrinth.index.json manifest and overrides/ directory.
+     * Automatically queries Modrinth to resolve CDN downloads and SHA1/SHA512 hashes for hosted mods,
+     * while seamlessly packing unhosted/custom mods, configs, options, and worlds into overrides/.
+     */
     suspend fun exportMrpack(
         instance: Instance,
         targetFile: File,
@@ -516,7 +526,7 @@ class MrpackManager(
     ): Result<File> = withContext(dispatcher) {
         try {
             log("Exporting instance '${instance.name}' to ${targetFile.absolutePath}")
-            onProgress("Preparing instance files...", 0.1f)
+            onProgress("Preparing instance files...", 0.05f)
             val instanceDir = pathProvider.getInstanceDirectory(instance.id).toFile()
             val gameDir = File(instanceDir, ".minecraft")
 
@@ -536,27 +546,156 @@ class MrpackManager(
                 LoaderType.VANILLA -> {}
             }
 
+            val indexFiles = mutableListOf<ModrinthIndexFile>()
+            val unhostedOverrides = mutableListOf<Pair<File, String>>() // Pair(sourceFile, relativePathUnderOverrides)
+
+            // 1. Process Mods
+            if (options.includeMods) {
+                val modsDir = File(gameDir, "mods")
+                if (modsDir.exists() && modsDir.isDirectory) {
+                    val modFiles = modsDir.listFiles { f -> f.isFile && f.name.endsWith(".jar", ignoreCase = true) }?.toList() ?: emptyList()
+                    if (modFiles.isNotEmpty()) {
+                        onProgress("Calculating hashes for ${modFiles.size} mods...", 0.15f)
+                        data class ModFileCandidate(val file: File, val sha1: String, val sha512: String)
+                        val candidates = modFiles.map { file ->
+                            val sha1 = calculateSha1(file)
+                            val sha512 = calculateSha512(file)
+                            ModFileCandidate(file, sha1, sha512)
+                        }
+
+                        val resolvedVersions = if (modrinthService != null) {
+                            onProgress("Resolving mods against Modrinth API...", 0.35f)
+                            try {
+                                val hashes = candidates.map { it.sha1 }
+                                modrinthService.getVersionsFromHashes(hashes)
+                            } catch (e: Throwable) {
+                                logError("Failed to lookup version files from Modrinth", e)
+                                emptyMap()
+                            }
+                        } else {
+                            emptyMap()
+                        }
+
+                        candidates.forEach { candidate ->
+                            val version = resolvedVersions[candidate.sha1]
+                            val versionFile = version?.files?.firstOrNull { vf ->
+                                vf.hashes["sha1"]?.equals(candidate.sha1, ignoreCase = true) == true
+                            } ?: version?.files?.firstOrNull()
+
+                            if (version != null && versionFile != null && versionFile.url.isNotBlank()) {
+                                // Match found on Modrinth! Declare in modrinth.index.json
+                                indexFiles.add(
+                                    ModrinthIndexFile(
+                                        path = "mods/${candidate.file.name}",
+                                        hashes = mapOf(
+                                            "sha1" to (versionFile.hashes["sha1"] ?: candidate.sha1),
+                                            "sha512" to (versionFile.hashes["sha512"] ?: candidate.sha512)
+                                        ),
+                                        env = ModrinthIndexEnv(
+                                            client = "required",
+                                            server = "required"
+                                        ),
+                                        downloads = listOf(versionFile.url),
+                                        fileSize = if (versionFile.size > 0L) versionFile.size else candidate.file.length()
+                                    )
+                                )
+                                log("Mod resolved on Modrinth: ${candidate.file.name} -> ${version.name}")
+                            } else {
+                                // Not found on Modrinth or custom mod -> Add to overrides/mods
+                                unhostedOverrides.add(candidate.file to "mods/${candidate.file.name}")
+                                log("Mod unhosted on Modrinth, packing to overrides: ${candidate.file.name}")
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Resource Packs
+            if (options.includeResourcePacks) {
+                val rpDir = File(gameDir, "resourcepacks")
+                if (rpDir.exists() && rpDir.isDirectory) {
+                    rpDir.walkTopDown().forEach { file ->
+                        if (file.isFile) {
+                            val rel = file.relativeTo(gameDir).path.replace('\\', '/')
+                            unhostedOverrides.add(file to rel)
+                        }
+                    }
+                }
+            }
+
+            // 3. Shader Packs
+            if (options.includeShaderPacks) {
+                val spDir = File(gameDir, "shaderpacks")
+                if (spDir.exists() && spDir.isDirectory) {
+                    spDir.walkTopDown().forEach { file ->
+                        if (file.isFile) {
+                            val rel = file.relativeTo(gameDir).path.replace('\\', '/')
+                            unhostedOverrides.add(file to rel)
+                        }
+                    }
+                }
+            }
+
+            // 4. Configs & options.txt
+            if (options.includeConfigs) {
+                val configDir = File(gameDir, "config")
+                if (configDir.exists() && configDir.isDirectory) {
+                    configDir.walkTopDown().forEach { file ->
+                        if (file.isFile) {
+                            val rel = file.relativeTo(gameDir).path.replace('\\', '/')
+                            unhostedOverrides.add(file to rel)
+                        }
+                    }
+                }
+                val defaultConfigsDir = File(gameDir, "defaultconfigs")
+                if (defaultConfigsDir.exists() && defaultConfigsDir.isDirectory) {
+                    defaultConfigsDir.walkTopDown().forEach { file ->
+                        if (file.isFile) {
+                            val rel = file.relativeTo(gameDir).path.replace('\\', '/')
+                            unhostedOverrides.add(file to rel)
+                        }
+                    }
+                }
+                val optionsTxt = File(gameDir, "options.txt")
+                if (optionsTxt.exists() && optionsTxt.isFile) {
+                    unhostedOverrides.add(optionsTxt to "options.txt")
+                }
+            }
+
+            // 5. Worlds (Saves)
+            if (options.includeWorlds) {
+                val savesDir = File(gameDir, "saves")
+                if (savesDir.exists() && savesDir.isDirectory) {
+                    savesDir.walkTopDown().forEach { file ->
+                        if (file.isFile) {
+                            val rel = file.relativeTo(gameDir).path.replace('\\', '/')
+                            unhostedOverrides.add(file to rel)
+                        }
+                    }
+                }
+            }
+
             val manifest = ModrinthIndex(
                 formatVersion = 1,
                 game = "minecraft",
                 versionId = versionId,
                 name = packName,
                 summary = packSummary,
-                files = emptyList(),
+                files = indexFiles,
                 dependencies = dependencies
             )
 
-            onProgress("Building .mrpack archive...", 0.3f)
+            onProgress("Building .mrpack archive...", 0.7f)
             val manifestJson = json.encodeToString(ModrinthIndex.serializer(), manifest)
 
             ZipOutputStream(FileOutputStream(targetFile)).use { zos ->
-                // 1. Write modrinth.index.json
+                // 1. Write modrinth.index.json at archive root
                 val indexEntry = ZipEntry("modrinth.index.json")
                 zos.putNextEntry(indexEntry)
                 zos.write(manifestJson.toByteArray(Charsets.UTF_8))
                 zos.closeEntry()
 
-                // 2. Include icon if present
+                // 2. Include icon if present at archive root
                 val iconFile = instance.customIconPath?.let { File(it) }?.takeIf { it.exists() }
                     ?: File(instanceDir, "icon.png").takeIf { it.exists() }
                 if (iconFile != null) {
@@ -567,41 +706,17 @@ class MrpackManager(
                 }
 
                 // 3. Write overrides
-                val foldersToInclude = mutableListOf<String>()
-                if (options.includeConfigs) foldersToInclude.add("config")
-                if (options.includeMods) foldersToInclude.add("mods")
-                if (options.includeResourcePacks) foldersToInclude.add("resourcepacks")
-                if (options.includeShaderPacks) foldersToInclude.add("shaderpacks")
-
-                foldersToInclude.forEach { folderName ->
-                    val folder = File(gameDir, folderName)
-                    if (folder.exists() && folder.isDirectory) {
-                        folder.walkTopDown().forEach { file ->
-                            if (file.isFile) {
-                                val rel = file.relativeTo(gameDir).path.replace('\\', '/')
-                                val entry = ZipEntry("overrides/$rel")
-                                zos.putNextEntry(entry)
-                                FileInputStream(file).use { it.copyTo(zos) }
-                                zos.closeEntry()
-                            }
-                        }
-                    }
-                }
-
-                // Include options.txt if configs are included
-                if (options.includeConfigs) {
-                    val optionsTxt = File(gameDir, "options.txt")
-                    if (optionsTxt.exists() && optionsTxt.isFile) {
-                        val entry = ZipEntry("overrides/options.txt")
-                        zos.putNextEntry(entry)
-                        FileInputStream(optionsTxt).use { it.copyTo(zos) }
-                        zos.closeEntry()
-                    }
+                unhostedOverrides.forEach { (srcFile, relPath) ->
+                    val cleanRel = relPath.replace('\\', '/').trimStart('/')
+                    val entry = ZipEntry("overrides/$cleanRel")
+                    zos.putNextEntry(entry)
+                    FileInputStream(srcFile).use { it.copyTo(zos) }
+                    zos.closeEntry()
                 }
             }
 
             onProgress("Export complete!", 1.0f)
-            log("Modpack export completed successfully: ${targetFile.name}")
+            log("Modpack export completed successfully: ${targetFile.name} (declared files=${indexFiles.size}, overrides=${unhostedOverrides.size})")
             Result.success(targetFile)
         } catch (e: Throwable) {
             logError("Modpack export failed", e)

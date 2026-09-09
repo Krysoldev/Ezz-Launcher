@@ -50,8 +50,8 @@ import io.ezz.launcher.ui.components.EzzButtonSize
 import io.ezz.launcher.ui.components.EzzButtonVariant
 import io.ezz.launcher.ui.instance.dialogs.InstanceDeleteDialog
 import io.ezz.launcher.ui.instance.dialogs.InstanceRenameDialog
+import io.ezz.launcher.ui.dialogs.ExportModpackDialog
 import io.ezz.launcher.ui.manager.dialogs.InstanceDuplicateDialog
-import io.ezz.launcher.ui.manager.dialogs.InstanceExportDialog
 import io.ezz.launcher.ui.manager.dialogs.InstanceRepairDialog
 import io.ezz.launcher.ui.manager.dialogs.ScreenshotViewerDialog
 import io.ezz.launcher.ui.manager.dialogs.WorldBackupRestoreDialog
@@ -201,7 +201,7 @@ fun InstanceWorkspaceScreen(
                 },
                 onRename = { showRenameDialog = true },
                 onDuplicate = { viewModel.showDuplicateInstanceDialog.value = currentInstance },
-                onExport = { viewModel.showExportInstanceDialog.value = currentInstance },
+                onExport = { viewModel.openExportModpack(currentInstance) },
                 onRepair = { viewModel.showRepairDialog.value = true },
                 onDelete = { showDeleteDialog = true },
                 onEditLogo = {
@@ -331,11 +331,11 @@ fun InstanceWorkspaceScreen(
             )
         }
 
-        // Export Dialog
+        // Export Modpack Dialog (.mrpack)
         val exp = exportInstance
         if (exp != null) {
-            InstanceExportDialog(
-                sourceInstance = exp,
+            ExportModpackDialog(
+                instance = exp,
                 viewModel = viewModel,
                 onDismiss = { viewModel.showExportInstanceDialog.value = null }
             )

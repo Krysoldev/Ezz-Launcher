@@ -90,6 +90,7 @@ fun ExportModpackDialog(
     var includeMods by remember { mutableStateOf(true) }
     var includeResourcePacks by remember { mutableStateOf(true) }
     var includeShaderPacks by remember { mutableStateOf(true) }
+    var includeWorlds by remember { mutableStateOf(false) }
 
     var progressText by remember { mutableStateOf("Preparing export...") }
     var progressPercent by remember { mutableStateOf(0f) }
@@ -145,7 +146,7 @@ fun ExportModpackDialog(
                                 letterSpacing = 0.5.sp
                             )
                             Text(
-                                text = "Modrinth Modpack (.mrpack)",
+                                text = "Modrinth Modpack (.mrpack) • Compatible with Modrinth App, Prism, ATLauncher & Ezz",
                                 color = Color(0xFF64748B),
                                 fontSize = 11.sp
                             )
@@ -187,6 +188,8 @@ fun ExportModpackDialog(
                                 onToggleResourcePacks = { includeResourcePacks = !includeResourcePacks },
                                 includeShaderPacks = includeShaderPacks,
                                 onToggleShaderPacks = { includeShaderPacks = !includeShaderPacks },
+                                includeWorlds = includeWorlds,
+                                onToggleWorlds = { includeWorlds = !includeWorlds },
                                 onCancel = onDismiss,
                                 onExport = {
                                     val defaultFileName = "${packName.replace(Regex("[^a-zA-Z0-9._-]"), "_")}_$versionId.mrpack"
@@ -208,7 +211,8 @@ fun ExportModpackDialog(
                                                     includeConfigs = includeConfigs,
                                                     includeMods = includeMods,
                                                     includeResourcePacks = includeResourcePacks,
-                                                    includeShaderPacks = includeShaderPacks
+                                                    includeShaderPacks = includeShaderPacks,
+                                                    includeWorlds = includeWorlds
                                                 )
                                                 viewModel.executeExportMrpack(
                                                     instance = instance,
@@ -276,6 +280,8 @@ private fun ConfigureView(
     onToggleResourcePacks: () -> Unit,
     includeShaderPacks: Boolean,
     onToggleShaderPacks: () -> Unit,
+    includeWorlds: Boolean,
+    onToggleWorlds: () -> Unit,
     onCancel: () -> Unit,
     onExport: () -> Unit
 ) {
@@ -456,6 +462,11 @@ private fun ConfigureView(
                         title = "Shader Packs (shaderpacks/ folder)",
                         checked = includeShaderPacks,
                         onToggle = onToggleShaderPacks
+                    )
+                    InclusionCheckboxItem(
+                        title = "World Saves (saves/ folder)",
+                        checked = includeWorlds,
+                        onToggle = onToggleWorlds
                     )
                 }
             }

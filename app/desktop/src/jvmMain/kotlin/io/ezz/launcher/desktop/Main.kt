@@ -270,8 +270,8 @@ fun main() {
                         val localModScanner = io.ezz.launcher.core.minecraft.mods.LocalModScanner(pathProvider)
                         val skinManager = io.ezz.launcher.core.minecraft.skin.MinecraftSkinManager(pathProvider, httpClient, vaultSkinRepository)
                         val processSessionTracker = io.ezz.launcher.core.runtime.process.ProcessSessionTracker(pathProvider)
-                        val localInstanceManager = io.ezz.launcher.core.storage.instance.LocalInstanceManager(pathProvider, instanceRepository)
                         val modrinthService = io.ezz.launcher.core.network.modrinth.ModrinthService(httpClient)
+                        val localInstanceManager = io.ezz.launcher.core.storage.instance.LocalInstanceManager(pathProvider, instanceRepository, modrinthService = modrinthService)
                         val curseForgeService = CurseForgeService()
 
                         val adminAuthorizationService = io.ezz.launcher.core.auth.admin.AdminAuthorizationService(

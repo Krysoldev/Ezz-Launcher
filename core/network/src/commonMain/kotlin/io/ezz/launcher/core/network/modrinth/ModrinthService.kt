@@ -7,12 +7,18 @@ import io.ezz.launcher.core.model.modrinth.ModrinthSearchResponse
 import io.ezz.launcher.core.model.modrinth.ModrinthVersion
 import io.ezz.launcher.core.model.modrinth.ModUpdateCandidate
 import io.ezz.launcher.core.network.client.HttpClientFactory
+import io.ezz.launcher.core.model.modrinth.ModrinthVersionFilesRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.core.isEmpty
 import io.ktor.utils.io.core.readBytes
@@ -685,6 +691,39 @@ class ModrinthService(
             } catch (_: Throwable) {}
         }
         candidates
+    }
+
+    /**
+     * Batch resolve mod/pack versions from their file hashes (default algorithm: sha1).
+     * Modrinth API: POST /v2/version_files
+     */
+    suspend fun getVersionsFromHashes(
+        hashes: List<String>,
+        algorithm: String = "sha1"
+    ): Map<String, ModrinthVersion> = withContext(Dispatchers.IO) {
+        if (hashes.isEmpty()) return@withContext emptyMap()
+        val results = mutableMapOf<String, ModrinthVersion>()
+        val distinctHashes = hashes.filter { it.isNotBlank() }.distinct()
+        val chunks = distinctHashes.chunked(100)
+        for (chunk in chunks) {
+            try {
+                val response = client.post("$baseUrl/version_files") {
+                    header("User-Agent", userAgent)
+                    contentType(ContentType.Application.Json)
+                    setBody(ModrinthVersionFilesRequest(hashes = chunk, algorithm = algorithm))
+                }
+                if (response.status.isSuccess()) {
+                    val bodyText = response.bodyAsText()
+                    val chunkMap = json.decodeFromString<Map<String, ModrinthVersion>>(bodyText)
+                    results.putAll(chunkMap)
+                } else {
+                    println("Modrinth version_files notice: HTTP ${response.status.value}")
+                }
+            } catch (e: Throwable) {
+                println("Modrinth version_files warning: ${e.message}")
+            }
+        }
+        results
     }
 
     private fun compareVersionParts(v1: String, v2: String): Int {

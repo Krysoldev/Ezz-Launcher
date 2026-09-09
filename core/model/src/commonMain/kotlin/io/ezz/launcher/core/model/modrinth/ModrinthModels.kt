@@ -173,8 +173,19 @@ data class MrpackExportOptions(
     val includeConfigs: Boolean = true,
     val includeMods: Boolean = true,
     val includeResourcePacks: Boolean = true,
-    val includeShaderPacks: Boolean = true
+    val includeShaderPacks: Boolean = true,
+    val includeWorlds: Boolean = false
 )
+
+/**
+ * Batch request payload for /v2/version_files lookup.
+ */
+@Serializable
+data class ModrinthVersionFilesRequest(
+    val hashes: List<String>,
+    val algorithm: String = "sha1"
+)
+
 
 /**
  * Stages in the MRPACK import lifecycle.

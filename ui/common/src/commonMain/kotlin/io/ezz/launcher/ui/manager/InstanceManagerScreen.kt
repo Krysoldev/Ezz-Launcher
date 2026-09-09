@@ -89,8 +89,8 @@ import io.ezz.launcher.ui.components.InstanceArtworkIcon
 import io.ezz.launcher.ui.components.RuntimeDisplay
 import io.ezz.launcher.ui.components.ToastManager
 import io.ezz.launcher.ui.components.ToastType
+import io.ezz.launcher.ui.dialogs.ExportModpackDialog
 import io.ezz.launcher.ui.manager.dialogs.InstanceDuplicateDialog
-import io.ezz.launcher.ui.manager.dialogs.InstanceExportDialog
 import io.ezz.launcher.ui.manager.dialogs.InstanceRepairDialog
 import io.ezz.launcher.ui.manager.dialogs.ScreenshotViewerDialog
 import io.ezz.launcher.ui.manager.dialogs.WorldBackupRestoreDialog
@@ -448,11 +448,11 @@ fun InstanceManagerScreen(
                                     colors = MenuDefaults.itemColors(textColor = Color.White)
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Export Instance (.zip)", color = Color.White, fontSize = 13.sp) },
+                                    text = { Text("Export Modpack (.mrpack)", color = Color.White, fontSize = 13.sp) },
                                     leadingIcon = { Icon(Icons.Default.Upload, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(15.dp)) },
                                     onClick = {
                                         showMoreMenu = false
-                                        viewModel.showExportInstanceDialog.value = instance
+                                        viewModel.openExportModpack(instance)
                                     },
                                     colors = MenuDefaults.itemColors(textColor = Color.White)
                                 )
@@ -815,10 +815,10 @@ fun InstanceManagerScreen(
             )
         }
 
-        // Export Dialog
+        // Export Modpack Dialog (.mrpack)
         if (exportInstance != null) {
-            InstanceExportDialog(
-                sourceInstance = exportInstance!!,
+            ExportModpackDialog(
+                instance = exportInstance!!,
                 viewModel = viewModel,
                 onDismiss = { viewModel.showExportInstanceDialog.value = null }
             )

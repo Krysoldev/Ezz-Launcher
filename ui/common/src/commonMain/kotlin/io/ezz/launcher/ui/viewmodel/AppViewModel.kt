@@ -220,14 +220,14 @@ class AppViewModel(
     val vaultRepository: VaultSkinRepository =
         vaultSkinRepository ?: LocalVaultSkinRepository(pathProvider)
 
+    val modrinth: ModrinthService =
+        modrinthService ?: ModrinthService()
+
     val instanceManager: LocalInstanceManager =
-        localInstanceManager ?: LocalInstanceManager(pathProvider, instanceRepository)
+        localInstanceManager ?: LocalInstanceManager(pathProvider, instanceRepository, modrinthService = modrinth)
 
     val destinationResolver: InstanceContentDestinationResolver =
         InstanceContentDestinationResolver(pathProvider)
-
-    val modrinth: ModrinthService =
-        modrinthService ?: ModrinthService()
 
     val curseForge: io.ezz.launcher.core.network.curseforge.CurseForgeService =
         curseForgeService ?: io.ezz.launcher.core.network.curseforge.CurseForgeService()
@@ -2031,7 +2031,8 @@ class AppViewModel(
             includeConfigs = true,
             includeMods = true,
             includeResourcePacks = true,
-            includeShaderPacks = true
+            includeShaderPacks = true,
+            includeWorlds = includeWorlds
         )
         executeExportMrpack(instance, targetFile, options, onComplete = onComplete)
     }

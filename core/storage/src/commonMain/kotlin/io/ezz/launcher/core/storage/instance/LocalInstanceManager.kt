@@ -47,7 +47,8 @@ import java.util.zip.ZipOutputStream
 class LocalInstanceManager(
     private val pathProvider: PathProvider,
     private val instanceRepository: InstanceRepository,
-    private val dispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val modrinthService: io.ezz.launcher.core.network.modrinth.ModrinthService? = null
 ) {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true; prettyPrint = true }
 
@@ -918,7 +919,7 @@ class LocalInstanceManager(
     }
 
     val mrpackManager: io.ezz.launcher.core.storage.mrpack.MrpackManager =
-        io.ezz.launcher.core.storage.mrpack.MrpackManager(pathProvider, instanceRepository, dispatcher)
+        io.ezz.launcher.core.storage.mrpack.MrpackManager(pathProvider, instanceRepository, dispatcher, modrinthService)
 
     // ==========================================
     // 8. INSTANCE EXPORT (.mrpack)
@@ -935,7 +936,8 @@ class LocalInstanceManager(
             includeConfigs = true,
             includeMods = true,
             includeResourcePacks = true,
-            includeShaderPacks = true
+            includeShaderPacks = true,
+            includeWorlds = includeWorlds
         )
         val result = mrpackManager.exportMrpack(instance, targetFile, options, onProgress)
         result.isSuccess
