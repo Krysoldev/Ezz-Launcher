@@ -41,6 +41,7 @@ compose.desktop {
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Deb,
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe
             )
+            outputBaseDir.set(project.layout.buildDirectory.dir("dist"))
             packageName = "EzzLauncher"
             packageVersion = "1.0.0"
             description = "Ezz Launcher"
@@ -78,18 +79,33 @@ compose.desktop {
                 "jdk.accessibility"
             )
 
+            appResourcesRootDir.set(project.file("src/jvmMain/package-resources"))
+
             windows {
                 iconFile.set(project.file("src/jvmMain/resources/icon.ico"))
+                upgradeUuid = "18e2e7aa-6b88-3c5f-86ff-ff4314365ec5"
                 menu = true
+                menuGroup = "Ezz Launcher"
                 shortcut = true
                 console = false
-                dirChooser = true
+                dirChooser = false
                 perUserInstall = true
             }
         }
 
         buildTypes.release.proguard {
             isEnabled.set(false)
+        }
+    }
+}
+
+tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask>().configureEach {
+    doFirst {
+        val resDir = project.layout.buildDirectory.dir("compose/tmp/resources").get().asFile
+        resDir.mkdirs()
+        val pkgRes = project.file("src/jvmMain/package-resources")
+        if (pkgRes.exists()) {
+            pkgRes.copyRecursively(resDir, overwrite = true)
         }
     }
 }
