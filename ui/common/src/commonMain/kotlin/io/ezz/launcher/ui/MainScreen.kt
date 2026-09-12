@@ -81,6 +81,8 @@ fun MainScreen(
     val showSearchDialog by viewModel.showSearchDialog.collectAsState()
     val accounts by viewModel.accountRepository.accounts.collectAsState()
     val selectedAccount by viewModel.accountRepository.selectedAccount.collectAsState()
+    val adminStatus by viewModel.adminStatus.collectAsState()
+    val isVerifiedAdmin = adminStatus is io.ezz.launcher.core.auth.admin.AdminStatus.VerifiedAdmin && viewModel.isAuthorizedAdmin()
 
     EzzTheme {
         val colors = EzzTheme.colors
@@ -115,7 +117,8 @@ fun MainScreen(
                     account = selectedAccount,
                     accounts = accounts,
                     onSelectAccount = { acc -> viewModel.selectAccount(acc) },
-                    skinManager = viewModel.skinService
+                    skinManager = viewModel.skinService,
+                    isAdmin = isVerifiedAdmin
                 )
 
                 Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
@@ -143,6 +146,13 @@ fun MainScreen(
                             NavigationScreen.PROFILES -> ProfilesScreen(viewModel = viewModel)
                             NavigationScreen.CONSOLE -> ConsoleScreen(viewModel = viewModel)
                             NavigationScreen.INSTANCE_MANAGER -> InstanceWorkspaceScreen(viewModel = viewModel)
+                            NavigationScreen.ADMIN_MANAGER -> {
+                                if (isVerifiedAdmin) {
+                                    io.ezz.launcher.ui.admin.AdminManagerScreen(viewModel = viewModel)
+                                } else {
+                                    io.ezz.launcher.ui.admin.AccessDeniedScreen(viewModel = viewModel)
+                                }
+                            }
                         }
                     }
 

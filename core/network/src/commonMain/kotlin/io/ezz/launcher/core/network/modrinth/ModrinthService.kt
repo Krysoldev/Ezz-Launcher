@@ -34,7 +34,7 @@ class ModrinthService(
 ) {
     private val json: Json = Json { ignoreUnknownKeys = true; isLenient = true }
     private val baseUrl = "https://api.modrinth.com/v2"
-    private val userAgent = "Krysoldev/Ezz-Launcher/1.0.0 (admin@ezzlauncher.com)"
+    private val userAgent = "Krysoldev/Ezz-Launcher/1.0.1 (admin@ezzlauncher.com)"
 
     /**
      * Search Modrinth projects with faceted filters.

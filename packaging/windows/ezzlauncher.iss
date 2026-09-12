@@ -1,5 +1,5 @@
 #define MyAppName "Ezz Launcher"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #define MyAppPublisher "Ezz"
 #define MyAppExeName "EzzLauncher.exe"
 #define MyAppId "{{18E2E7AA-6B88-3C5F-86FF-FF4314365EC5}"
@@ -17,7 +17,7 @@ DisableDirPage=yes
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=..\..\release
-OutputBaseFilename=EzzLauncher-Setup-1.0.0
+OutputBaseFilename=EzzLauncher-Setup-1.0.1
 SetupIconFile=..\..\app\desktop\src\jvmMain\resources\icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/ultra64

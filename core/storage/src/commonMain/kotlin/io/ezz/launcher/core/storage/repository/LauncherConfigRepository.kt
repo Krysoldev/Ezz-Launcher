@@ -9,11 +9,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+
 interface LauncherConfigRepository {
     val configMap: StateFlow<Map<String, String>>
     suspend fun loadConfig(forceRefresh: Boolean = false): Map<String, String>
+    suspend fun getAllConfigs(forceRefresh: Boolean = false): List<SupabaseLauncherConfigDto>
     suspend fun getConfig(key: String, defaultValue: String = ""): String
     suspend fun isMaintenanceMode(): Pair<Boolean, String>
+    suspend fun updateConfig(adminUsername: String, key: String, value: String): Result<Unit>
 }
 
 class SupabaseLauncherConfigRepository(
@@ -23,6 +29,20 @@ class SupabaseLauncherConfigRepository(
 
     private val _configMap = MutableStateFlow<Map<String, String>>(emptyMap())
     override val configMap: StateFlow<Map<String, String>> = _configMap.asStateFlow()
+
+    private suspend fun isAdmin(adminUsername: String): Boolean {
+        return try {
+            val response = supabaseClient.rpc(
+                functionName = "is_admin_user",
+                params = buildJsonObject {
+                    put("lookup_username", adminUsername)
+                }
+            )
+            response.trim().equals("true", ignoreCase = true)
+        } catch (e: Throwable) {
+            false
+        }
+    }
 
     override suspend fun loadConfig(forceRefresh: Boolean): Map<String, String> = withContext(dispatcher) {
         if (!forceRefresh && _configMap.value.isNotEmpty()) {
@@ -42,6 +62,17 @@ class SupabaseLauncherConfigRepository(
         }
     }
 
+    override suspend fun getAllConfigs(forceRefresh: Boolean): List<SupabaseLauncherConfigDto> = withContext(dispatcher) {
+        try {
+            supabaseClient.select(
+                table = "launcher_config",
+                params = mapOf("order" to "key.asc", "select" to "*")
+            )
+        } catch (e: Throwable) {
+            emptyList()
+        }
+    }
+
     override suspend fun getConfig(key: String, defaultValue: String): String = withContext(dispatcher) {
         if (_configMap.value.isEmpty()) {
             loadConfig()
@@ -54,5 +85,28 @@ class SupabaseLauncherConfigRepository(
         val isMaintenance = config["maintenance_mode"]?.equals("true", ignoreCase = true) == true
         val message = config["maintenance_message"] ?: "Ezz Launcher is currently under scheduled maintenance."
         Pair(isMaintenance, message)
+    }
+
+    override suspend fun updateConfig(
+        adminUsername: String,
+        key: String,
+        value: String
+    ): Result<Unit> = withContext(dispatcher) {
+        try {
+            if (!isAdmin(adminUsername)) {
+                return@withContext Result.failure(SecurityException("403 Forbidden: '$adminUsername' is not an authorized administrator"))
+            }
+            supabaseClient.update<JsonObject, JsonObject>(
+                table = "launcher_config",
+                filterParams = mapOf("key" to "eq.$key"),
+                bodyData = buildJsonObject {
+                    put("value", value)
+                }
+            )
+            loadConfig(forceRefresh = true)
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
     }
 }

@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -26,6 +27,8 @@ interface LauncherReleaseRepository {
         isLatest: Boolean = true,
         isRequired: Boolean = false
     ): Result<Unit>
+    suspend fun deleteRelease(adminUsername: String, releaseId: String): Result<Unit>
+    suspend fun toggleReleaseLatest(adminUsername: String, releaseId: String, isLatest: Boolean): Result<Unit>
 }
 
 data class UpdateCheckResult(
@@ -121,6 +124,9 @@ class SupabaseLauncherReleaseRepository(
         isRequired: Boolean
     ): Result<Unit> = withContext(dispatcher) {
         try {
+            if (!isAdminUser(adminUsername)) {
+                return@withContext Result.failure(SecurityException("403 Forbidden: '$adminUsername' is not an authorized administrator"))
+            }
             supabaseClient.rpc(
                 functionName = "publish_launcher_release",
                 params = buildJsonObject {
@@ -135,6 +141,46 @@ class SupabaseLauncherReleaseRepository(
             )
             // Immediately refresh the cached latest release so all subscribers get the updated version
             getLatestRelease(platform)
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun deleteRelease(adminUsername: String, releaseId: String): Result<Unit> = withContext(dispatcher) {
+        try {
+            if (!isAdminUser(adminUsername)) {
+                return@withContext Result.failure(SecurityException("403 Forbidden: '$adminUsername' is not an authorized administrator"))
+            }
+            supabaseClient.delete(
+                table = "launcher_releases",
+                filterParams = mapOf("id" to "eq.$releaseId")
+            )
+            getLatestRelease("windows")
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun toggleReleaseLatest(adminUsername: String, releaseId: String, isLatest: Boolean): Result<Unit> = withContext(dispatcher) {
+        try {
+            if (!isAdminUser(adminUsername)) {
+                return@withContext Result.failure(SecurityException("403 Forbidden: '$adminUsername' is not an authorized administrator"))
+            }
+            if (isLatest) {
+                supabaseClient.update<JsonObject, JsonObject>(
+                    table = "launcher_releases",
+                    filterParams = mapOf("platform" to "eq.windows"),
+                    bodyData = buildJsonObject { put("is_latest", false) }
+                )
+            }
+            supabaseClient.update<JsonObject, JsonObject>(
+                table = "launcher_releases",
+                filterParams = mapOf("id" to "eq.$releaseId"),
+                bodyData = buildJsonObject { put("is_latest", isLatest) }
+            )
+            getLatestRelease("windows")
             Result.success(Unit)
         } catch (e: Throwable) {
             Result.failure(e)

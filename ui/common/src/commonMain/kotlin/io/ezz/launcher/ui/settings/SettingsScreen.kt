@@ -33,6 +33,7 @@ import io.ezz.launcher.core.storage.github.GitHubConnectionStatus
 import io.ezz.launcher.core.storage.supabase.SupabaseLauncherReleaseDto
 import io.ezz.launcher.ui.components.*
 import io.ezz.launcher.ui.viewmodel.AppViewModel
+import io.ezz.launcher.ui.viewmodel.NavigationScreen
 import io.ezz.launcher.ui.viewmodel.JavaValidationResult
 import io.ezz.launcher.ui.viewmodel.ReleasePublishStep
 import java.io.File
@@ -930,14 +931,14 @@ fun SettingsScreen(
                                             onClick = { viewModel.checkForUpdates() }
                                         )
 
-                                        // Admin Release Manager: Exclusively for genuinely verified Microsoft admin
+                                        // Admin Manager: Exclusively for genuinely verified Microsoft admin
                                         if (isVerifiedAdmin) {
                                             EzzButton(
-                                                text = "Admin Release Manager",
-                                                icon = Icons.Default.Publish,
+                                                text = "Open Admin Manager",
+                                                icon = Icons.Default.Security,
                                                 size = EzzButtonSize.SMALL,
                                                 variant = EzzButtonVariant.PRIMARY,
-                                                onClick = { showAdminReleaseModal = true }
+                                                onClick = { viewModel.navigateTo(NavigationScreen.ADMIN_MANAGER) }
                                             )
                                         }
                                     }

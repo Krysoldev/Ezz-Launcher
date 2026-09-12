@@ -60,11 +60,39 @@ class AdminAuthorizationService(
     companion object {
         const val AUTHORIZED_ADMIN_USERNAME = "KrysolDev"
         const val AUTHORIZED_ADMIN_UUID = "ad17221c781d4ec5aca6f5069fbced7b"
+
+        /**
+         * Canonical identity check: validates both the immutable UUID and username
+         * from a genuine Microsoft account. Offline accounts always return false.
+         */
+        fun isCanonicalAdminIdentity(account: Account?): Boolean {
+            if (account == null || account !is MicrosoftAccount || account.type != io.ezz.launcher.core.model.account.AccountType.MICROSOFT) {
+                return false
+            }
+            val cleanAccountUuid = account.uuid.replace("-", "").lowercase()
+            val cleanAdminUuid = AUTHORIZED_ADMIN_UUID.replace("-", "").lowercase()
+            val uuidMatches = cleanAccountUuid == cleanAdminUuid
+            val usernameMatches = account.username.equals(AUTHORIZED_ADMIN_USERNAME, ignoreCase = true)
+            return uuidMatches && usernameMatches
+        }
     }
 
     private val json = Json { ignoreUnknownKeys = true }
     private val _adminStatus = MutableStateFlow<AdminStatus>(AdminStatus.NotAuthorized("Not evaluated"))
     val adminStatus: StateFlow<AdminStatus> = _adminStatus.asStateFlow()
+
+    fun isAuthorizedAdmin(account: Account? = null): Boolean {
+        val currentStatus = _adminStatus.value
+        if (currentStatus !is AdminStatus.VerifiedAdmin) return false
+        return if (account != null) isCanonicalAdminIdentity(account) else true
+    }
+
+    fun requireAuthorizedAdmin(account: Account?): AdminStatus.VerifiedAdmin {
+        if (!isCanonicalAdminIdentity(account) || _adminStatus.value !is AdminStatus.VerifiedAdmin) {
+            throw SecurityException("403 Forbidden: Access denied. Authorized Microsoft KrysolDev account required.")
+        }
+        return _adminStatus.value as AdminStatus.VerifiedAdmin
+    }
 
     suspend fun verifyAdminStatus(account: Account?): AdminStatus = evaluateAccount(account)
 
@@ -162,7 +190,8 @@ class AdminAuthorizationService(
         val usernameMatches = effectiveUsername.equals(AUTHORIZED_ADMIN_USERNAME, ignoreCase = true)
         val uuidMatches = cleanAccountUuid == cleanAdminUuid
 
-        val isAuthorizedIdentity = usernameMatches || uuidMatches
+        // Both canonical immutable UUID and verified username must match for genuine admin identity
+        val isAuthorizedIdentity = uuidMatches && usernameMatches
         println("[AUTH_DIAGNOSTIC] Identity match check against KrysolDev:")
         println("[AUTH_DIAGNOSTIC]    - Username matches '$AUTHORIZED_ADMIN_USERNAME': $usernameMatches")
         println("[AUTH_DIAGNOSTIC]    - UUID matches '$cleanAdminUuid': $uuidMatches (found: '$cleanAccountUuid')")

@@ -1,3 +1,7 @@
+param(
+    [switch]$SkipGradleBuild
+)
+
 $ErrorActionPreference = "Stop"
 
 $root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
@@ -21,10 +25,10 @@ if (-not $iscc) {
     throw "Inno Setup compiler (ISCC.exe) not found."
 }
 
-Write-Host "=== Building Ezz Launcher Production Installer & Updater ===" -ForegroundColor Cyan
+Write-Host "=== Building Ezz Launcher Production Installer & Updater (v1.0.1) ===" -ForegroundColor Cyan
 
-if (-not (Test-Path (Join-Path $distDir "EzzLauncher.exe"))) {
-    Write-Host "Release distributable not found. Generating via Gradle..." -ForegroundColor Yellow
+if (-not $SkipGradleBuild) {
+    Write-Host "Generating release distributable via Gradle..." -ForegroundColor Yellow
     & (Join-Path $root "gradlew.bat") ":app:desktop:createReleaseDistributable"
     if ($LASTEXITCODE -ne 0) {
         throw "Gradle createReleaseDistributable failed."
@@ -39,7 +43,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $releaseDir = Join-Path $root "release"
-$setupExe = Join-Path $releaseDir "EzzLauncher-Setup-1.0.0.exe"
+$setupExe = Join-Path $releaseDir "EzzLauncher-Setup-1.0.1.exe"
 $appExe = Join-Path $distDir "EzzLauncher.exe"
 
 Copy-Item -Path $appExe -Destination (Join-Path $releaseDir "EzzLauncher.exe") -Force
@@ -49,4 +53,4 @@ $exeSize = (Get-Item (Join-Path $releaseDir "EzzLauncher.exe")).Length
 
 Write-Host "=== Build Complete ===" -ForegroundColor Cyan
 Write-Host "EzzLauncher.exe: $exeSize bytes" -ForegroundColor White
-Write-Host "EzzLauncher-Setup-1.0.0.exe: $setupSize bytes" -ForegroundColor White
+Write-Host "EzzLauncher-Setup-1.0.1.exe: $setupSize bytes" -ForegroundColor White

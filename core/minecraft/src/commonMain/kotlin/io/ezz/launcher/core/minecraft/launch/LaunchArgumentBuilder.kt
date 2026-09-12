@@ -72,7 +72,7 @@ object LaunchArgumentBuilder {
             "version_type" to versionInfo.type,
             "natives_directory" to nativesDir.toString(),
             "launcher_name" to "EzzLauncher",
-            "launcher_version" to "1.0.0",
+            "launcher_version" to "1.0.1",
             "classpath" to fullClasspath,
             "resolution_width" to instance.windowWidth.toString(),
             "resolution_height" to instance.windowHeight.toString()

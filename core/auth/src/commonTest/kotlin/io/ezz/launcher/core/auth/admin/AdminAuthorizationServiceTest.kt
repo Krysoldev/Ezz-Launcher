@@ -140,4 +140,67 @@ class AdminAuthorizationServiceTest {
         assertFalse(step8.microsoftConnected)
         assertFalse(service.adminStatus.value.isAuthorizedAdmin)
     }
+
+    @Test
+    fun testMicrosoftAccountMatchingUsernameOnly_isDeniedAdmin() = runBlocking {
+        val service = AdminAuthorizationService()
+        // Microsoft account that changed gamertag to KrysolDev but has a different UUID
+        val spoofedMicrosoft = MicrosoftAccount(
+            id = "spoofed-ms-id",
+            username = "KrysolDev",
+            uuid = "99999999-9999-9999-9999-999999999999",
+            msaRefreshToken = "",
+            mcAccessToken = "",
+            expiresAt = 0L
+        )
+        val status = service.verifyAdminStatus(spoofedMicrosoft)
+
+        assertTrue(status is AdminStatus.NormalUser, "Must be NormalUser since UUID does not match canonical admin")
+        assertFalse(status.isAuthorizedAdmin)
+        assertFalse(AdminAuthorizationService.isCanonicalAdminIdentity(spoofedMicrosoft))
+    }
+
+    @Test
+    fun testMicrosoftAccountMatchingUuidOnly_isDeniedAdmin() = runBlocking {
+        val service = AdminAuthorizationService()
+        // Microsoft account with admin UUID but different username
+        val spoofedName = MicrosoftAccount(
+            id = "ad17221c781d4ec5aca6f5069fbced7b",
+            username = "ImposterPlayer",
+            uuid = "ad17221c781d4ec5aca6f5069fbced7b",
+            msaRefreshToken = "",
+            mcAccessToken = "",
+            expiresAt = 0L
+        )
+        val status = service.verifyAdminStatus(spoofedName)
+
+        assertTrue(status is AdminStatus.NormalUser, "Must be NormalUser since username does not match KrysolDev")
+        assertFalse(status.isAuthorizedAdmin)
+        assertFalse(AdminAuthorizationService.isCanonicalAdminIdentity(spoofedName))
+    }
+
+    @Test
+    fun testRequireAuthorizedAdmin_throwsSecurityExceptionOnUnauthorized() = runBlocking {
+        val service = AdminAuthorizationService()
+        service.verifyAdminStatus(otherMicrosoftAccount)
+
+        var caught = false
+        try {
+            service.requireAuthorizedAdmin(otherMicrosoftAccount)
+        } catch (e: SecurityException) {
+            caught = true
+            assertTrue(e.message?.contains("403 Forbidden") == true)
+        }
+        assertTrue(caught, "requireAuthorizedAdmin must throw SecurityException for unauthorized accounts")
+    }
+
+    @Test
+    fun testRequireAuthorizedAdmin_succeedsForCanonicalAdmin() = runBlocking {
+        val service = AdminAuthorizationService()
+        service.verifyAdminStatus(krysolDevAccount)
+
+        val verified = service.requireAuthorizedAdmin(krysolDevAccount)
+        assertEquals("KrysolDev", verified.minecraftUsername)
+        assertEquals("ad17221c781d4ec5aca6f5069fbced7b", verified.minecraftUuid)
+    }
 }

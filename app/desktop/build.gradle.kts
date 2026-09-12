@@ -43,7 +43,7 @@ compose.desktop {
             )
             outputBaseDir.set(project.layout.buildDirectory.dir("dist"))
             packageName = "EzzLauncher"
-            packageVersion = "1.0.0"
+            packageVersion = "1.0.1"
             description = "Ezz Launcher"
             vendor = "Ezz"
 

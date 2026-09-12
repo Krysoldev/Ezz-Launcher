@@ -51,7 +51,7 @@ class CurseForgeService(
 ) {
     private val json: Json = Json { ignoreUnknownKeys = true; isLenient = true }
     private val baseUrl = "https://api.curseforge.com/v1"
-    private val userAgent = "Krysoldev/Ezz-Launcher/1.0.0 (admin@ezzlauncher.com)"
+    private val userAgent = "Krysoldev/Ezz-Launcher/1.0.1 (admin@ezzlauncher.com)"
     val minecraftGameId = 432
     val minecraftModsClassId = 6
 

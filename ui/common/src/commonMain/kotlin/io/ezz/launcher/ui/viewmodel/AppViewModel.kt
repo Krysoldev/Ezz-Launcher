@@ -36,6 +36,9 @@ import io.ezz.launcher.core.storage.repository.ProfileRepository
 import io.ezz.launcher.core.storage.repository.SettingsRepository
 import io.ezz.launcher.core.storage.repository.UpdateCheckResult
 import io.ezz.launcher.core.storage.supabase.SupabaseAnnouncementDto
+import io.ezz.launcher.core.storage.supabase.SupabaseLauncherReleaseDto
+import io.ezz.launcher.core.storage.supabase.SupabaseFeatureFlagDto
+import io.ezz.launcher.core.storage.supabase.SupabaseLauncherConfigDto
 import io.ezz.launcher.core.storage.supabase.SupabaseClient
 import io.ezz.launcher.core.auth.admin.AdminAuthorizationService
 import io.ezz.launcher.core.auth.admin.AdminStatus
@@ -137,8 +140,21 @@ enum class NavigationScreen {
     SERVERS,
     PROFILES,
     CONSOLE,
-    INSTANCE_MANAGER
+    INSTANCE_MANAGER,
+    ADMIN_MANAGER
 }
+
+data class AdminDashboardStats(
+    val totalReleases: Int = 0,
+    val activeAnnouncements: Int = 0,
+    val totalFeatureFlags: Int = 0,
+    val enabledFeatureFlags: Int = 0,
+    val isMaintenanceMode: Boolean = false,
+    val maintenanceMessage: String = "",
+    val adminUsername: String = "KrysolDev",
+    val adminUuid: String = "ad17221c-781d-4ec5-aca6-f5069fbced7b",
+    val verifiedAt: Long = System.currentTimeMillis()
+)
 
 data class LaunchErrorData(
     val instanceName: String,
@@ -215,7 +231,7 @@ class AppViewModel(
     val secureVault: SecureVault? = null,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main)
 ) {
-    val currentLauncherVersion = "1.0.0"
+    val currentLauncherVersion = "1.0.1"
 
     val vaultRepository: VaultSkinRepository =
         vaultSkinRepository ?: LocalVaultSkinRepository(pathProvider)
@@ -360,6 +376,28 @@ class AppViewModel(
 
     private val _releasePublishStep = MutableStateFlow<ReleasePublishStep>(ReleasePublishStep.Idle)
     val releasePublishStep: StateFlow<ReleasePublishStep> = _releasePublishStep.asStateFlow()
+
+    // Full Admin Manager Dashboard Flows
+    private val _adminReleases = MutableStateFlow<List<SupabaseLauncherReleaseDto>>(emptyList())
+    val adminReleases: StateFlow<List<SupabaseLauncherReleaseDto>> = _adminReleases.asStateFlow()
+
+    private val _adminAnnouncements = MutableStateFlow<List<SupabaseAnnouncementDto>>(emptyList())
+    val adminAnnouncements: StateFlow<List<SupabaseAnnouncementDto>> = _adminAnnouncements.asStateFlow()
+
+    private val _adminFeatureFlags = MutableStateFlow<List<SupabaseFeatureFlagDto>>(emptyList())
+    val adminFeatureFlags: StateFlow<List<SupabaseFeatureFlagDto>> = _adminFeatureFlags.asStateFlow()
+
+    private val _adminLauncherConfigs = MutableStateFlow<List<SupabaseLauncherConfigDto>>(emptyList())
+    val adminLauncherConfigs: StateFlow<List<SupabaseLauncherConfigDto>> = _adminLauncherConfigs.asStateFlow()
+
+    private val _adminDashboardStats = MutableStateFlow(AdminDashboardStats())
+    val adminDashboardStats: StateFlow<AdminDashboardStats> = _adminDashboardStats.asStateFlow()
+
+    private val _isLoadingAdminData = MutableStateFlow(false)
+    val isLoadingAdminData: StateFlow<Boolean> = _isLoadingAdminData.asStateFlow()
+
+    private val _adminActionStatus = MutableStateFlow<String?>(null)
+    val adminActionStatus: StateFlow<String?> = _adminActionStatus.asStateFlow()
 
     val featureFlags: StateFlow<Map<String, Boolean>> = featureFlagRepository?.flags ?: MutableStateFlow(emptyMap())
 
@@ -788,6 +826,9 @@ class AppViewModel(
                             minecraftUuid = selAcc?.uuid ?: "",
                             microsoftConnected = false
                         )
+                        if (_currentScreen.value == NavigationScreen.ADMIN_MANAGER) {
+                            _currentScreen.value = NavigationScreen.HOME
+                        }
                         if (selAcc != null) {
                             skinService.loadOrRefreshSkin(selAcc)
                         }
@@ -976,7 +1017,21 @@ class AppViewModel(
         _errorMessage.value = null
     }
 
+    fun isAuthorizedAdmin(): Boolean {
+        val currentAccount = accountRepository.selectedAccount.value
+        return _adminStatus.value is AdminStatus.VerifiedAdmin &&
+            AdminAuthorizationService.isCanonicalAdminIdentity(currentAccount)
+    }
+
     fun navigateTo(screen: NavigationScreen) {
+        if (screen == NavigationScreen.ADMIN_MANAGER) {
+            if (!isAuthorizedAdmin()) {
+                _errorMessage.value = "Access Denied: Admin Manager requires authorized Microsoft KrysolDev account."
+                _currentScreen.value = NavigationScreen.HOME
+                return
+            }
+            loadAdminData()
+        }
         _currentScreen.value = screen
     }
 
@@ -1027,6 +1082,9 @@ class AppViewModel(
             minecraftUuid = account.uuid,
             microsoftConnected = account is MicrosoftAccount && account.type == AccountType.MICROSOFT
         )
+        if (_currentScreen.value == NavigationScreen.ADMIN_MANAGER) {
+            _currentScreen.value = NavigationScreen.HOME
+        }
         scope.launch {
             try {
                 accountRepository.selectAccount(account.id)
@@ -1251,6 +1309,9 @@ class AppViewModel(
                     minecraftUuid = targetAccount?.uuid ?: "",
                     microsoftConnected = false
                 )
+                if (_currentScreen.value == NavigationScreen.ADMIN_MANAGER) {
+                    _currentScreen.value = NavigationScreen.HOME
+                }
                 return@launch
             }
 
@@ -1263,6 +1324,8 @@ class AppViewModel(
                     _adminStatus.value = status
                     if (status is AdminStatus.VerifiedAdmin) {
                         checkGitHubStatus()
+                    } else if (_currentScreen.value == NavigationScreen.ADMIN_MANAGER) {
+                        _currentScreen.value = NavigationScreen.HOME
                     }
                 } else {
                     _adminStatus.value = AdminStatus.NormalUser(
@@ -1270,6 +1333,9 @@ class AppViewModel(
                         minecraftUuid = targetAccount.uuid,
                         microsoftConnected = true
                     )
+                    if (_currentScreen.value == NavigationScreen.ADMIN_MANAGER) {
+                        _currentScreen.value = NavigationScreen.HOME
+                    }
                 }
             } catch (e: Throwable) {
                 println("Admin verification notice: ${e.message}")
@@ -1278,6 +1344,9 @@ class AppViewModel(
                     minecraftUuid = targetAccount.uuid,
                     microsoftConnected = true
                 )
+                if (_currentScreen.value == NavigationScreen.ADMIN_MANAGER) {
+                    _currentScreen.value = NavigationScreen.HOME
+                }
             } finally {
                 _isCheckingAdmin.value = false
             }
@@ -1366,6 +1435,255 @@ class AppViewModel(
 
     fun resetReleasePublishState() {
         _releasePublishStep.value = ReleasePublishStep.Idle
+    }
+
+    // ==========================================================
+    // ADMIN MANAGER CRUD & OPERATIONS
+    // ==========================================================
+
+    private fun handleAdminSecurityError(e: Throwable) {
+        val msg = e.message ?: ""
+        if (msg.contains("401") || msg.contains("403") || msg.contains("Unauthorized") || msg.contains("Forbidden") || e is SecurityException) {
+            val acc = accountRepository.selectedAccount.value
+            _adminStatus.value = AdminStatus.NormalUser(
+                minecraftUsername = acc?.username ?: "",
+                minecraftUuid = acc?.uuid ?: "",
+                microsoftConnected = acc is MicrosoftAccount
+            )
+            _adminReleases.value = emptyList()
+            _adminAnnouncements.value = emptyList()
+            _adminFeatureFlags.value = emptyList()
+            _adminLauncherConfigs.value = emptyList()
+            if (_currentScreen.value == NavigationScreen.ADMIN_MANAGER) {
+                _currentScreen.value = NavigationScreen.HOME
+            }
+        }
+    }
+
+    fun loadAdminData(force: Boolean = false) {
+        scope.launch {
+            val account = accountRepository.selectedAccount.value
+            if (!isAuthorizedAdmin()) {
+                _adminStatus.value = AdminStatus.NormalUser(
+                    minecraftUsername = account?.username ?: "",
+                    minecraftUuid = account?.uuid ?: "",
+                    microsoftConnected = account is MicrosoftAccount
+                )
+                if (_currentScreen.value == NavigationScreen.ADMIN_MANAGER) {
+                    _currentScreen.value = NavigationScreen.HOME
+                }
+                return@launch
+            }
+
+            _isLoadingAdminData.value = true
+            _adminActionStatus.value = null
+            try {
+                withContext(Dispatchers.IO) {
+                    val releases = releaseRepository?.getAllReleases("windows") ?: emptyList()
+                    _adminReleases.value = releases
+
+                    val announcements = announcementRepository?.getAllAnnouncements(forceRefresh = force) ?: emptyList()
+                    _adminAnnouncements.value = announcements
+
+                    val flags = featureFlagRepository?.getAllFlags("windows", forceRefresh = force) ?: emptyList()
+                    _adminFeatureFlags.value = flags
+
+                    val configs = launcherConfigRepository?.getAllConfigs(forceRefresh = force) ?: emptyList()
+                    _adminLauncherConfigs.value = configs
+
+                    val isMaint = configs.find { it.key == "maintenance_mode" }?.value?.equals("true", ignoreCase = true) ?: false
+                    val maintMsg = configs.find { it.key == "maintenance_message" }?.value ?: ""
+
+                    _adminDashboardStats.value = AdminDashboardStats(
+                        totalReleases = releases.size,
+                        activeAnnouncements = announcements.count { it.isActive },
+                        totalFeatureFlags = flags.size,
+                        enabledFeatureFlags = flags.count { it.enabled },
+                        isMaintenanceMode = isMaint,
+                        maintenanceMessage = maintMsg,
+                        adminUsername = account?.username ?: "KrysolDev",
+                        adminUuid = account?.uuid ?: ""
+                    )
+                }
+            } catch (e: Throwable) {
+                handleAdminSecurityError(e)
+                _adminActionStatus.value = "Failed to load admin data: ${e.message}"
+            } finally {
+                _isLoadingAdminData.value = false
+            }
+        }
+    }
+
+    fun deleteAdminRelease(releaseId: String) {
+        scope.launch {
+            val account = accountRepository.selectedAccount.value
+            if (!isAuthorizedAdmin() || account == null) {
+                handleAdminSecurityError(SecurityException("403 Forbidden: unauthorized account"))
+                return@launch
+            }
+            _isLoadingAdminData.value = true
+            try {
+                val res = withContext(Dispatchers.IO) {
+                    releaseRepository?.deleteRelease(account.username, releaseId) ?: Result.failure(Exception("Release repository unavailable"))
+                }
+                res.fold(
+                    onSuccess = {
+                        _adminActionStatus.value = "Release successfully deleted."
+                        loadAdminData(force = true)
+                    },
+                    onFailure = {
+                        handleAdminSecurityError(it)
+                        _adminActionStatus.value = "Failed to delete release: ${it.message}"
+                    }
+                )
+            } finally {
+                _isLoadingAdminData.value = false
+            }
+        }
+    }
+
+    fun toggleAdminReleaseLatest(releaseId: String, isLatest: Boolean) {
+        scope.launch {
+            val account = accountRepository.selectedAccount.value
+            if (!isAuthorizedAdmin() || account == null) {
+                handleAdminSecurityError(SecurityException("403 Forbidden: unauthorized account"))
+                return@launch
+            }
+            _isLoadingAdminData.value = true
+            try {
+                val res = withContext(Dispatchers.IO) {
+                    releaseRepository?.toggleReleaseLatest(account.username, releaseId, isLatest) ?: Result.failure(Exception("Release repository unavailable"))
+                }
+                res.fold(
+                    onSuccess = {
+                        _adminActionStatus.value = "Release latest status updated."
+                        loadAdminData(force = true)
+                    },
+                    onFailure = {
+                        handleAdminSecurityError(it)
+                        _adminActionStatus.value = "Failed to update release: ${it.message}"
+                    }
+                )
+            } finally {
+                _isLoadingAdminData.value = false
+            }
+        }
+    }
+
+    fun saveAdminAnnouncement(announcement: SupabaseAnnouncementDto) {
+        scope.launch {
+            val account = accountRepository.selectedAccount.value
+            if (!isAuthorizedAdmin() || account == null) {
+                handleAdminSecurityError(SecurityException("403 Forbidden: unauthorized account"))
+                return@launch
+            }
+            _isLoadingAdminData.value = true
+            try {
+                val res = withContext(Dispatchers.IO) {
+                    announcementRepository?.saveAnnouncement(account.username, announcement) ?: Result.failure(Exception("Announcement repository unavailable"))
+                }
+                res.fold(
+                    onSuccess = {
+                        _adminActionStatus.value = "Announcement saved successfully."
+                        loadAdminData(force = true)
+                    },
+                    onFailure = {
+                        handleAdminSecurityError(it)
+                        _adminActionStatus.value = "Failed to save announcement: ${it.message}"
+                    }
+                )
+            } finally {
+                _isLoadingAdminData.value = false
+            }
+        }
+    }
+
+    fun deleteAdminAnnouncement(announcementId: String) {
+        scope.launch {
+            val account = accountRepository.selectedAccount.value
+            if (!isAuthorizedAdmin() || account == null) {
+                handleAdminSecurityError(SecurityException("403 Forbidden: unauthorized account"))
+                return@launch
+            }
+            _isLoadingAdminData.value = true
+            try {
+                val res = withContext(Dispatchers.IO) {
+                    announcementRepository?.deleteAnnouncement(account.username, announcementId) ?: Result.failure(Exception("Announcement repository unavailable"))
+                }
+                res.fold(
+                    onSuccess = {
+                        _adminActionStatus.value = "Announcement deleted."
+                        loadAdminData(force = true)
+                    },
+                    onFailure = {
+                        handleAdminSecurityError(it)
+                        _adminActionStatus.value = "Failed to delete announcement: ${it.message}"
+                    }
+                )
+            } finally {
+                _isLoadingAdminData.value = false
+            }
+        }
+    }
+
+    fun updateAdminFeatureFlag(featureKey: String, enabled: Boolean) {
+        scope.launch {
+            val account = accountRepository.selectedAccount.value
+            if (!isAuthorizedAdmin() || account == null) {
+                handleAdminSecurityError(SecurityException("403 Forbidden: unauthorized account"))
+                return@launch
+            }
+            _isLoadingAdminData.value = true
+            try {
+                val res = withContext(Dispatchers.IO) {
+                    featureFlagRepository?.updateFlag(account.username, featureKey, enabled, "windows") ?: Result.failure(Exception("Feature flag repository unavailable"))
+                }
+                res.fold(
+                    onSuccess = {
+                        _adminActionStatus.value = "Feature flag '$featureKey' updated."
+                        loadAdminData(force = true)
+                    },
+                    onFailure = {
+                        handleAdminSecurityError(it)
+                        _adminActionStatus.value = "Failed to update feature flag: ${it.message}"
+                    }
+                )
+            } finally {
+                _isLoadingAdminData.value = false
+            }
+        }
+    }
+
+    fun updateAdminLauncherConfig(key: String, value: String) {
+        scope.launch {
+            val account = accountRepository.selectedAccount.value
+            if (!isAuthorizedAdmin() || account == null) {
+                handleAdminSecurityError(SecurityException("403 Forbidden: unauthorized account"))
+                return@launch
+            }
+            _isLoadingAdminData.value = true
+            try {
+                val res = withContext(Dispatchers.IO) {
+                    launcherConfigRepository?.updateConfig(account.username, key, value) ?: Result.failure(Exception("Launcher config repository unavailable"))
+                }
+                res.fold(
+                    onSuccess = {
+                        _adminActionStatus.value = "Configuration '$key' updated."
+                        loadAdminData(force = true)
+                    },
+                    onFailure = {
+                        handleAdminSecurityError(it)
+                        _adminActionStatus.value = "Failed to update config: ${it.message}"
+                    }
+                )
+            } finally {
+                _isLoadingAdminData.value = false
+            }
+        }
+    }
+
+    fun clearAdminActionStatus() {
+        _adminActionStatus.value = null
     }
 
     fun refreshJavaRuntimes() {

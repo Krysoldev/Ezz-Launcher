@@ -308,4 +308,13 @@ data class SupabaseFeatureFlagDto(
     @SerialName("updated_at") val updatedAt: String? = null
 )
 
+@Serializable
+data class SupabaseAdminUserDto(
+    val username: String,
+    @SerialName("minecraft_uuid") val minecraftUuid: String? = null,
+    val role: String = "ADMIN",
+    @SerialName("is_active") val isActive: Boolean = true,
+    @SerialName("created_at") val createdAt: String? = null
+)
+
 

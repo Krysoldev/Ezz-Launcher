@@ -91,20 +91,24 @@ fun Sidebar(
     accounts: List<Account> = emptyList(),
     onSelectAccount: ((Account) -> Unit)? = null,
     skinManager: MinecraftSkinManager? = null,
+    isAdmin: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var showAccountSwitcher by remember { mutableStateOf(false) }
     val enableAnim = EzzTheme.state.enableAnimations
 
-    val navItems = remember {
-        listOf(
-            NavItem(NavigationScreen.HOME, "Home", Icons.Default.Home),
-            NavItem(NavigationScreen.INSTANCES, "Instances", Icons.Default.GridView),
-            NavItem(NavigationScreen.VAULT, "Vault", Icons.Default.Person),
-            NavItem(NavigationScreen.ACCOUNTS, "Accounts", Icons.Default.AccountCircle),
-            NavItem(NavigationScreen.CONSOLE, "Console", Icons.Default.Terminal),
-            NavItem(NavigationScreen.SETTINGS, "Settings", Icons.Default.Settings)
-        )
+    val navItems = remember(isAdmin) {
+        buildList {
+            add(NavItem(NavigationScreen.HOME, "Home", Icons.Default.Home))
+            add(NavItem(NavigationScreen.INSTANCES, "Instances", Icons.Default.GridView))
+            add(NavItem(NavigationScreen.VAULT, "Vault", Icons.Default.Person))
+            add(NavItem(NavigationScreen.ACCOUNTS, "Accounts", Icons.Default.AccountCircle))
+            add(NavItem(NavigationScreen.CONSOLE, "Console", Icons.Default.Terminal))
+            add(NavItem(NavigationScreen.SETTINGS, "Settings", Icons.Default.Settings))
+            if (isAdmin) {
+                add(NavItem(NavigationScreen.ADMIN_MANAGER, "Admin Manager", Icons.Default.ManageAccounts))
+            }
+        }
     }
 
     // Determine current active item index

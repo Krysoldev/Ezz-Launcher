@@ -87,6 +87,7 @@ fun TopBar(
                 NavigationScreen.PROFILES -> "Profiles"
                 NavigationScreen.CONSOLE -> "Console"
                 NavigationScreen.INSTANCE_MANAGER -> "Instance Manager"
+                NavigationScreen.ADMIN_MANAGER -> "Admin Manager"
             }
 
             Text(
