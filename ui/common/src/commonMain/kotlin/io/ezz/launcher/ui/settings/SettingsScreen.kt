@@ -57,6 +57,7 @@ fun SettingsScreen(
     val updateResult by viewModel.updateCheckResult.collectAsState()
     val isCheckingUpdates by viewModel.isCheckingForUpdates.collectAsState()
     val updateError by viewModel.updateCheckError.collectAsState()
+    val isApplyingUpdate by viewModel.isApplyingUpdate.collectAsState()
 
     var showAdminReleaseModal by remember { mutableStateOf(false) }
     var showGitHubConnectModal by remember { mutableStateOf(false) }
@@ -969,16 +970,14 @@ fun SettingsScreen(
                                                     variant = EzzButtonVariant.SECONDARY,
                                                     onClick = { showChangelogModal = latestRelease }
                                                 )
-                                                val dlUrl = latestRelease.downloadUrl
-                                                if (dlUrl != null) {
-                                                    EzzButton(
-                                                        text = "Download",
-                                                        icon = Icons.Default.Download,
-                                                        size = EzzButtonSize.SMALL,
-                                                        variant = EzzButtonVariant.PRIMARY,
-                                                        onClick = { viewModel.platformBridge.openUrl(dlUrl) }
-                                                    )
-                                                }
+                                                EzzButton(
+                                                    text = if (isApplyingUpdate) "Updating..." else "Update Now",
+                                                    icon = Icons.Default.Download,
+                                                    size = EzzButtonSize.SMALL,
+                                                    variant = EzzButtonVariant.PRIMARY,
+                                                    isLoading = isApplyingUpdate,
+                                                    onClick = { viewModel.downloadAndApplyUpdate(latestRelease) }
+                                                )
                                             }
                                         }
                                     }
@@ -1501,10 +1500,11 @@ private fun AdminReleaseManagerModal(
                 // Publish Progress Status Banner
                 when (val step = releaseStep) {
                     ReleasePublishStep.Idle -> {}
-                    ReleasePublishStep.Preparing -> StepBanner("Preparing release parameters...", Color(0xFF8B5CF6))
-                    ReleasePublishStep.Uploading -> StepBanner("Uploading binary artifact to GitHub Release Assets...", Color(0xFF8B5CF6))
-                    ReleasePublishStep.Publishing -> StepBanner("Creating GitHub Release tag...", Color(0xFF8B5CF6))
-                    ReleasePublishStep.SyncingSupabase -> StepBanner("Synchronizing release metadata with Supabase...", Color(0xFF3B82F6))
+                    is ReleasePublishStep.Preparing -> StepBanner("Preparing release parameters...", Color(0xFF8B5CF6))
+                    is ReleasePublishStep.Validating -> StepBanner(step.message, Color(0xFF8B5CF6))
+                    is ReleasePublishStep.Uploading -> StepBanner("Uploading ${step.fileName} (${(step.progress * 100).toInt()}%)...", Color(0xFF8B5CF6))
+                    is ReleasePublishStep.Publishing -> StepBanner(step.message, Color(0xFF8B5CF6))
+                    is ReleasePublishStep.SyncingSupabase -> StepBanner("Synchronizing release metadata with Supabase...", Color(0xFF3B82F6))
                     is ReleasePublishStep.Success -> {
                         Box(
                             modifier = Modifier
@@ -1582,7 +1582,8 @@ private fun AdminReleaseManagerModal(
                             version = versionInput,
                             title = titleInput,
                             changelog = notesInput,
-                            artifactFile = selectedArtifact,
+                            installerFile = selectedArtifact,
+                            exeFile = null,
                             isDraft = isDraft
                         )
                     }

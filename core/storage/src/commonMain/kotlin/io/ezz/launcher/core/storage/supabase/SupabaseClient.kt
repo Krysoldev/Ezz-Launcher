@@ -30,7 +30,7 @@ class SupabaseException(message: String, val code: String? = null, cause: Throwa
 
 class SupabaseClient(
     var config: SupabaseConfig,
-    @PublishedApi internal val httpClient: HttpClient,
+    val httpClient: HttpClient,
     @PublishedApi internal val dispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     val json = Json {

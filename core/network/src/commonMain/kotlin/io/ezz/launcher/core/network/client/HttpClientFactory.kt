@@ -33,6 +33,31 @@ object HttpClientFactory {
         }
     }
 
+    fun createLargeTransferClient(): HttpClient {
+        return HttpClient {
+            install(ContentNegotiation) {
+                json(
+                    Json {
+                        ignoreUnknownKeys = true
+                        prettyPrint = false
+                        isLenient = true
+                        coerceInputValues = true
+                    }
+                )
+            }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 900_000 // 15 minutes for 100MB+ installer/artifact transfers
+                connectTimeoutMillis = 60_000
+                socketTimeoutMillis = 900_000
+            }
+            install(HttpRequestRetry) {
+                maxRetries = 2
+                retryIf { _, response -> response.status.value in 500..599 }
+                exponentialDelay()
+            }
+        }
+    }
+
     fun createCurseForgeClient(): HttpClient {
         return HttpClient {
             install(ContentNegotiation) {

@@ -15,6 +15,7 @@ interface PlatformBridge {
     fun pickExportInstanceFile(defaultName: String, title: String = "Export Modrinth Modpack (*.mrpack)"): File?
     fun pickJavaExecutable(title: String = "Select Java Executable (java.exe)"): File?
     fun pickReleaseArtifact(title: String = "Select Release Artifact (*.zip, *.exe, *.msi)"): File?
+    fun executeInstaller(installerFile: File, silent: Boolean = true): Result<Unit>
 }
 
 class DefaultPlatformBridge(
@@ -26,7 +27,8 @@ class DefaultPlatformBridge(
     private val onPickImportFile: ((String) -> File?)? = null,
     private val onPickExportFile: ((String, String) -> File?)? = null,
     private val onPickJavaExecutable: ((String) -> File?)? = null,
-    private val onPickReleaseArtifact: ((String) -> File?)? = null
+    private val onPickReleaseArtifact: ((String) -> File?)? = null,
+    private val onExecuteInstaller: ((File, Boolean) -> Result<Unit>)? = null
 ) : PlatformBridge {
     override fun openFolder(path: Path) {
         onOpenFolder?.invoke(path)
@@ -127,5 +129,23 @@ class DefaultPlatformBridge(
                 "All Files (*.*)" to "*.*"
             )
         )
+    }
+
+    override fun executeInstaller(installerFile: File, silent: Boolean): Result<Unit> {
+        if (onExecuteInstaller != null) return onExecuteInstaller.invoke(installerFile, silent)
+        return try {
+            if (!installerFile.exists() || !installerFile.isFile) {
+                return Result.failure(java.io.FileNotFoundException("Installer executable not found: ${installerFile.absolutePath}"))
+            }
+            val args = mutableListOf(installerFile.absolutePath)
+            if (silent) {
+                args.add("/SILENT")
+                args.add("/SUPPRESSMSGBOXES")
+            }
+            ProcessBuilder(args).start()
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
     }
 }

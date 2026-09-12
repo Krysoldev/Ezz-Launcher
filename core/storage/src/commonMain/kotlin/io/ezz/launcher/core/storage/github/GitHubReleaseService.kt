@@ -4,6 +4,7 @@ import io.ezz.launcher.core.network.client.HttpClientFactory
 import io.ezz.launcher.core.storage.repository.LauncherReleaseRepository
 import io.ezz.launcher.core.storage.vault.SecureVault
 import io.ktor.client.HttpClient
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -24,11 +25,13 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.io.File
+import java.security.MessageDigest
 
 sealed interface GitHubConnectionStatus {
     data class Connected(
@@ -43,32 +46,60 @@ sealed interface GitHubConnectionStatus {
 
 sealed interface ReleasePublishState {
     data object Idle : ReleasePublishState
-    data class Preparing(val message: String) : ReleasePublishState
-    data class UploadingArtifact(val fileName: String, val progress: Float) : ReleasePublishState
-    data class PublishingRelease(val version: String) : ReleasePublishState
+    data class Validating(val message: String) : ReleasePublishState
+    data class PublishingGitHub(val version: String, val message: String) : ReleasePublishState
+    data class UploadingArtifact(
+        val fileName: String,
+        val progress: Float,
+        val currentFileIndex: Int,
+        val totalFiles: Int
+    ) : ReleasePublishState
+    data class GitHubPublished(
+        val version: String,
+        val gitHubUrl: String,
+        val assets: List<GitHubAssetDto>
+    ) : ReleasePublishState
     data class SyncingSupabase(val version: String) : ReleasePublishState
     data class Published(
         val version: String,
         val gitHubUrl: String,
-        val downloadUrl: String?
+        val installerUrl: String?,
+        val exeUrl: String?
     ) : ReleasePublishState
-    data class Failed(val error: String, val isPartialSuccess: Boolean = false) : ReleasePublishState
+    data class Failed(
+        val error: String,
+        val stateBeforeFailure: String = "",
+        val isPartialSuccess: Boolean = false,
+        val existingRelease: GitHubReleaseDto? = null
+    ) : ReleasePublishState
 }
 
 @Serializable
-private data class GitHubUserDto(val login: String = "")
+data class GitHubUserDto(val login: String = "")
 
 @Serializable
-private data class GitHubReleaseResponse(
+data class GitHubAssetDto(
     val id: Long = 0L,
-    val html_url: String = "",
-    val upload_url: String = ""
+    val name: String = "",
+    val size: Long = 0L,
+    @SerialName("browser_download_url") val browserDownloadUrl: String = "",
+    @SerialName("download_count") val downloadCount: Int = 0,
+    @SerialName("created_at") val createdAt: String? = null
 )
 
 @Serializable
-private data class GitHubAssetResponse(
+data class GitHubReleaseDto(
     val id: Long = 0L,
-    val browser_download_url: String = ""
+    @SerialName("tag_name") val tagName: String = "",
+    val name: String? = null,
+    val body: String? = null,
+    val draft: Boolean = false,
+    val prerelease: Boolean = false,
+    @SerialName("html_url") val htmlUrl: String = "",
+    @SerialName("upload_url") val uploadUrl: String = "",
+    @SerialName("published_at") val publishedAt: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    val assets: List<GitHubAssetDto> = emptyList()
 )
 
 class GitHubReleaseService(
@@ -81,9 +112,22 @@ class GitHubReleaseService(
         const val REPO_OWNER = "Krysoldev"
         const val REPO_NAME = "Ezz-Launcher"
         private const val VAULT_KEY_GITHUB_TOKEN = "admin_github_token"
+
+        fun computeSha256(file: File): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { fis ->
+                val buffer = ByteArray(8192)
+                var bytesRead: Int
+                while (fis.read(buffer).also { bytesRead = it } != -1) {
+                    digest.update(buffer, 0, bytesRead)
+                }
+            }
+            return digest.digest().joinToString("") { "%02x".format(it) }
+        }
     }
 
     private val json = Json { ignoreUnknownKeys = true }
+    private val transferClient: HttpClient = HttpClientFactory.createLargeTransferClient()
     private val _connectionStatus = MutableStateFlow<GitHubConnectionStatus>(GitHubConnectionStatus.Disconnected)
     val connectionStatus: StateFlow<GitHubConnectionStatus> = _connectionStatus.asStateFlow()
 
@@ -92,7 +136,11 @@ class GitHubReleaseService(
     }
 
     suspend fun getStoredToken(): String? = withContext(dispatcher) {
-        vault.getString(VAULT_KEY_GITHUB_TOKEN)?.trim()?.takeIf { it.isNotBlank() }
+        val fromVault = vault.getString(VAULT_KEY_GITHUB_TOKEN)?.trim()?.takeIf { it.isNotBlank() }
+        if (fromVault != null) return@withContext fromVault
+        val envToken = System.getenv("GH_TOKEN")?.trim()?.takeIf { it.isNotBlank() }
+            ?: System.getenv("GITHUB_TOKEN")?.trim()?.takeIf { it.isNotBlank() }
+        envToken
     }
 
     suspend fun connectWithToken(token: String): GitHubConnectionStatus = withContext(dispatcher) {
@@ -165,71 +213,190 @@ class GitHubReleaseService(
         }
     }
 
+    suspend fun fetchGitHubReleases(): Result<List<GitHubReleaseDto>> = withContext(dispatcher) {
+        try {
+            val token = getStoredToken()
+            val response = httpClient.get("https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases") {
+                if (!token.isNullOrBlank()) {
+                    header(HttpHeaders.Authorization, "Bearer $token")
+                }
+                header("Accept", "application/vnd.github.v3+json")
+            }
+            if (!response.status.isSuccess()) {
+                return@withContext Result.failure(Exception("GitHub API HTTP ${response.status.value}: ${response.bodyAsText()}"))
+            }
+            val list = json.decodeFromString<List<GitHubReleaseDto>>(response.bodyAsText())
+            Result.success(list)
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getReleaseByTag(tag: String): Result<GitHubReleaseDto?> = withContext(dispatcher) {
+        try {
+            val token = getStoredToken()
+            val cleanTag = if (tag.startsWith("v", ignoreCase = true)) tag else "v$tag"
+            val response = httpClient.get("https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/tags/$cleanTag") {
+                if (!token.isNullOrBlank()) {
+                    header(HttpHeaders.Authorization, "Bearer $token")
+                }
+                header("Accept", "application/vnd.github.v3+json")
+            }
+            if (response.status.value == 404) {
+                return@withContext Result.success(null)
+            }
+            if (!response.status.isSuccess()) {
+                return@withContext Result.failure(Exception("GitHub API HTTP ${response.status.value}: ${response.bodyAsText()}"))
+            }
+            val release = json.decodeFromString<GitHubReleaseDto>(response.bodyAsText())
+            Result.success(release)
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
+    }
+
+    fun calculateSha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { fis ->
+            val buffer = ByteArray(8192)
+            var bytesRead: Int
+            while (fis.read(buffer).also { bytesRead = it } != -1) {
+                digest.update(buffer, 0, bytesRead)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
     fun publishRelease(
         adminUsername: String,
         version: String,
         releaseTitle: String,
         releaseNotes: String,
-        artifactFile: File?,
-        isDraft: Boolean = false
+        installerFile: File?,
+        exeFile: File? = null,
+        isDraft: Boolean = false,
+        isRequired: Boolean = false
     ): Flow<ReleasePublishState> = flow {
-        emit(ReleasePublishState.Preparing("Validating release parameters..."))
+        emit(ReleasePublishState.Validating("Validating release parameters and semantic versioning..."))
 
-        val cleanVer = version.trim().removePrefix("v")
-        if (cleanVer.isBlank() || !cleanVer.matches(Regex("""^\d+(\.\d+)+.*$"""))) {
-            emit(ReleasePublishState.Failed("Invalid semver version format (e.g. 1.0.1)."))
+        val cleanVer = version.trim().removePrefix("v").removePrefix("V")
+        val semverRegex = Regex("""^\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?$""")
+        if (!cleanVer.matches(semverRegex)) {
+            emit(ReleasePublishState.Failed("Invalid semantic version '$version'. Must follow semver format (e.g. 1.0.1).", stateBeforeFailure = "VALIDATING"))
             return@flow
         }
 
         val token = getStoredToken()
         if (token.isNullOrBlank()) {
-            emit(ReleasePublishState.Failed("GitHub is not connected. Please connect your GitHub account in Admin Identity."))
+            emit(ReleasePublishState.Failed("GitHub is not connected. Connect your authorized GitHub account in Admin Manager.", stateBeforeFailure = "VALIDATING"))
             return@flow
         }
 
-        if (artifactFile != null && (!artifactFile.exists() || !artifactFile.isFile || artifactFile.length() == 0L)) {
-            emit(ReleasePublishState.Failed("Selected artifact file is invalid or empty: ${artifactFile.absolutePath}"))
-            return@flow
-        }
+        // Validate artifacts
+        val artifactsToUpload = mutableListOf<File>()
+        val checksums = mutableMapOf<String, String>()
 
-        // 1. Create GitHub Release
-        emit(ReleasePublishState.PublishingRelease(cleanVer))
-        val releasePayload = buildJsonObject {
-            put("tag_name", "v$cleanVer")
-            put("name", releaseTitle.ifBlank { "Ezz Launcher v$cleanVer" })
-            put("body", releaseNotes.ifBlank { "Ezz Launcher production release v$cleanVer" })
-            put("draft", isDraft)
-            put("prerelease", false)
-        }.toString()
-
-        val releaseResponse = try {
-            val response = httpClient.post("https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases") {
-                header(HttpHeaders.Authorization, "Bearer $token")
-                header("Accept", "application/vnd.github.v3+json")
-                contentType(ContentType.Application.Json)
-                setBody(releasePayload)
-            }
-            if (!response.status.isSuccess()) {
-                emit(ReleasePublishState.Failed("GitHub API error creating release (HTTP ${response.status.value}): ${response.bodyAsText()}"))
+        if (installerFile != null) {
+            if (!installerFile.exists() || !installerFile.isFile || installerFile.length() == 0L) {
+                emit(ReleasePublishState.Failed("Installer artifact is invalid or empty: ${installerFile.absolutePath}", stateBeforeFailure = "VALIDATING"))
                 return@flow
             }
-            json.decodeFromString<GitHubReleaseResponse>(response.bodyAsText())
-        } catch (e: Throwable) {
-            emit(ReleasePublishState.Failed("Failed to create GitHub release: ${e.message}"))
+            artifactsToUpload.add(installerFile)
+            checksums[installerFile.name] = calculateSha256(installerFile)
+        }
+
+        if (exeFile != null) {
+            if (!exeFile.exists() || !exeFile.isFile || exeFile.length() == 0L) {
+                emit(ReleasePublishState.Failed("Standalone EXE artifact is invalid or empty: ${exeFile.absolutePath}", stateBeforeFailure = "VALIDATING"))
+                return@flow
+            }
+            artifactsToUpload.add(exeFile)
+            checksums[exeFile.name] = calculateSha256(exeFile)
+        }
+
+        if (artifactsToUpload.isEmpty()) {
+            emit(ReleasePublishState.Failed("At least one release artifact (Installer or Standalone EXE) is required to publish.", stateBeforeFailure = "VALIDATING"))
             return@flow
         }
 
-        // 2. Upload Artifact (if provided)
-        var artifactDownloadUrl: String? = null
-        if (artifactFile != null) {
-            emit(ReleasePublishState.UploadingArtifact(artifactFile.name, 0.1f))
+        // Check for existing release on GitHub (idempotent / duplicate protection)
+        emit(ReleasePublishState.Validating("Checking for existing GitHub release tag 'v$cleanVer'..."))
+        val existingCheck = getReleaseByTag(cleanVer)
+        val existingRelease = existingCheck.getOrNull()
+
+        // Build comprehensive release body with notes + SHA-256 Checksums
+        val formattedBody = buildString {
+            append(releaseNotes.ifBlank { "Ezz Launcher production release v$cleanVer" })
+            append("\n\n### Official Release Artifacts & SHA-256 Checksums\n")
+            artifactsToUpload.forEach { file ->
+                val hash = checksums[file.name] ?: ""
+                val sizeMb = String.format("%.2f MB", file.length() / (1024.0 * 1024.0))
+                append("- **`${file.name}`** ($sizeMb)\n  `SHA-256: $hash`\n")
+            }
+        }
+
+        val finalTitle = releaseTitle.ifBlank { "Ezz Launcher v$cleanVer" }
+
+        // 1. Create or retrieve GitHub Release
+        emit(ReleasePublishState.PublishingGitHub(cleanVer, if (existingRelease != null) "Reusing existing GitHub release (tag v$cleanVer)..." else "Creating official GitHub release tag v$cleanVer..."))
+
+        val releaseResponse: GitHubReleaseDto = if (existingRelease != null) {
+            existingRelease
+        } else {
+            val releasePayload = buildJsonObject {
+                put("tag_name", "v$cleanVer")
+                put("name", finalTitle)
+                put("body", formattedBody)
+                put("draft", isDraft)
+                put("prerelease", false)
+            }.toString()
 
             try {
-                val fileBytes = artifactFile.readBytes()
-                val uploadBaseUrl = releaseResponse.upload_url.substringBefore("{")
-                val uploadUrl = "$uploadBaseUrl?name=${artifactFile.name}"
+                val response = httpClient.post("https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases") {
+                    header(HttpHeaders.Authorization, "Bearer $token")
+                    header("Accept", "application/vnd.github.v3+json")
+                    contentType(ContentType.Application.Json)
+                    setBody(releasePayload)
+                }
+                if (!response.status.isSuccess()) {
+                    emit(ReleasePublishState.Failed("GitHub API error creating release (HTTP ${response.status.value}): ${response.bodyAsText()}", stateBeforeFailure = "PUBLISHING_GITHUB"))
+                    return@flow
+                }
+                json.decodeFromString<GitHubReleaseDto>(response.bodyAsText())
+            } catch (e: Throwable) {
+                emit(ReleasePublishState.Failed("Failed to create GitHub release: ${e.message}", stateBeforeFailure = "PUBLISHING_GITHUB"))
+                return@flow
+            }
+        }
 
-                val uploadResponse = httpClient.post(uploadUrl) {
+        // 2. Upload Artifacts
+        val uploadBaseUrl = releaseResponse.uploadUrl.substringBefore("{")
+        val uploadedAssets = mutableListOf<GitHubAssetDto>()
+        var installerDownloadUrl: String? = null
+        var exeDownloadUrl: String? = null
+
+        val totalArtifacts = artifactsToUpload.size
+        artifactsToUpload.forEachIndexed { index, artifact ->
+            val fileIndex = index + 1
+            emit(ReleasePublishState.UploadingArtifact(artifact.name, 0.05f, fileIndex, totalArtifacts))
+
+            try {
+                // If asset already exists on this release, delete it first to replace cleanly
+                val existingAsset = releaseResponse.assets.find { it.name.equals(artifact.name, ignoreCase = true) }
+                if (existingAsset != null && existingAsset.id > 0) {
+                    try {
+                        httpClient.delete("https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/assets/${existingAsset.id}") {
+                            header(HttpHeaders.Authorization, "Bearer $token")
+                            header("Accept", "application/vnd.github.v3+json")
+                        }
+                    } catch (_: Throwable) {}
+                }
+
+                val fileBytes = artifact.readBytes()
+                emit(ReleasePublishState.UploadingArtifact(artifact.name, 0.4f, fileIndex, totalArtifacts))
+
+                val uploadUrl = "$uploadBaseUrl?name=${artifact.name}"
+                val uploadResponse = transferClient.post(uploadUrl) {
                     header(HttpHeaders.Authorization, "Bearer $token")
                     header("Accept", "application/vnd.github.v3+json")
                     header("Content-Type", "application/octet-stream")
@@ -238,25 +405,44 @@ class GitHubReleaseService(
 
                 if (!uploadResponse.status.isSuccess()) {
                     emit(ReleasePublishState.Failed(
-                        "Release created on GitHub, but artifact upload failed (HTTP ${uploadResponse.status.value}): ${uploadResponse.bodyAsText()}",
-                        isPartialSuccess = true
+                        "GitHub release created, but upload failed for ${artifact.name} (HTTP ${uploadResponse.status.value}): ${uploadResponse.bodyAsText()}",
+                        stateBeforeFailure = "UPLOADING_ARTIFACT",
+                        isPartialSuccess = true,
+                        existingRelease = releaseResponse
                     ))
                     return@flow
                 }
 
-                val asset = json.decodeFromString<GitHubAssetResponse>(uploadResponse.bodyAsText())
-                artifactDownloadUrl = asset.browser_download_url
-                emit(ReleasePublishState.UploadingArtifact(artifactFile.name, 1.0f))
+                val asset = json.decodeFromString<GitHubAssetDto>(uploadResponse.bodyAsText())
+                uploadedAssets.add(asset)
+
+                if (artifact.name.contains("Setup", ignoreCase = true)) {
+                    installerDownloadUrl = asset.browserDownloadUrl
+                } else if (artifact.name.endsWith(".exe", ignoreCase = true)) {
+                    exeDownloadUrl = asset.browserDownloadUrl
+                }
+
+                emit(ReleasePublishState.UploadingArtifact(artifact.name, 1.0f, fileIndex, totalArtifacts))
             } catch (e: Throwable) {
                 emit(ReleasePublishState.Failed(
-                    "Release created on GitHub, but artifact upload failed: ${e.message}",
-                    isPartialSuccess = true
+                    "GitHub release created, but artifact upload failed for ${artifact.name}: ${e.message}",
+                    stateBeforeFailure = "UPLOADING_ARTIFACT",
+                    isPartialSuccess = true,
+                    existingRelease = releaseResponse
                 ))
                 return@flow
             }
         }
 
-        val effectiveDownloadUrl = artifactDownloadUrl ?: releaseResponse.html_url
+        // Primary download URL is preferably the Setup installer, fallback to first asset or html url
+        val canonicalInstallerUrl = installerDownloadUrl ?: uploadedAssets.firstOrNull()?.browserDownloadUrl ?: releaseResponse.htmlUrl
+        val canonicalExeUrl = exeDownloadUrl
+
+        emit(ReleasePublishState.GitHubPublished(
+            version = cleanVer,
+            gitHubUrl = releaseResponse.htmlUrl,
+            assets = uploadedAssets
+        ))
 
         // 3. Synchronize with Supabase
         emit(ReleasePublishState.SyncingSupabase(cleanVer))
@@ -265,17 +451,19 @@ class GitHubReleaseService(
                 adminUsername = adminUsername,
                 version = cleanVer,
                 platform = "windows",
-                downloadUrl = effectiveDownloadUrl,
-                releaseNotes = releaseNotes,
+                downloadUrl = canonicalInstallerUrl,
+                releaseNotes = formattedBody,
                 isLatest = !isDraft,
-                isRequired = false
+                isRequired = isRequired
             )
 
             if (syncResult.isFailure) {
                 val syncError = syncResult.exceptionOrNull()?.message ?: "Supabase sync error"
                 emit(ReleasePublishState.Failed(
-                    "GitHub release published successfully (${releaseResponse.html_url}), but Supabase synchronization failed: $syncError. Distribution metadata is incomplete.",
-                    isPartialSuccess = true
+                    "GitHub release published successfully (${releaseResponse.htmlUrl}), but Supabase catalog synchronization failed: $syncError. Distribution metadata can be synchronized manually.",
+                    stateBeforeFailure = "SYNCING_SUPABASE",
+                    isPartialSuccess = true,
+                    existingRelease = releaseResponse
                 ))
                 return@flow
             }
@@ -283,8 +471,36 @@ class GitHubReleaseService(
 
         emit(ReleasePublishState.Published(
             version = cleanVer,
-            gitHubUrl = releaseResponse.html_url,
-            downloadUrl = effectiveDownloadUrl
+            gitHubUrl = releaseResponse.htmlUrl,
+            installerUrl = canonicalInstallerUrl,
+            exeUrl = canonicalExeUrl
         ))
     }.flowOn(dispatcher)
+
+    suspend fun syncReleaseToSupabase(
+        adminUsername: String,
+        release: GitHubReleaseDto,
+        isLatest: Boolean = true,
+        isRequired: Boolean = false
+    ): Result<Unit> = withContext(dispatcher) {
+        if (releaseRepository == null) {
+            return@withContext Result.failure(Exception("Release repository is unavailable."))
+        }
+
+        val cleanVer = release.tagName.trim().removePrefix("v").removePrefix("V")
+        val installerAsset = release.assets.find { it.name.contains("Setup", ignoreCase = true) }
+            ?: release.assets.firstOrNull()
+
+        val downloadUrl = installerAsset?.browserDownloadUrl ?: release.htmlUrl
+
+        releaseRepository.publishRelease(
+            adminUsername = adminUsername,
+            version = cleanVer,
+            platform = "windows",
+            downloadUrl = downloadUrl,
+            releaseNotes = release.body,
+            isLatest = isLatest,
+            isRequired = isRequired
+        )
+    }
 }

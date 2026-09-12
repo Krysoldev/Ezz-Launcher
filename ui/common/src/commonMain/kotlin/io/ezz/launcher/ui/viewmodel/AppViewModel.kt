@@ -43,8 +43,19 @@ import io.ezz.launcher.core.storage.supabase.SupabaseClient
 import io.ezz.launcher.core.auth.admin.AdminAuthorizationService
 import io.ezz.launcher.core.auth.admin.AdminStatus
 import io.ezz.launcher.core.storage.github.GitHubReleaseService
+import java.io.File
+import io.ktor.client.request.header
+import io.ktor.http.contentLength
 import io.ezz.launcher.core.storage.github.GitHubConnectionStatus
 import io.ezz.launcher.core.storage.github.ReleasePublishState
+import io.ezz.launcher.core.storage.github.GitHubReleaseDto
+import io.ezz.launcher.core.storage.github.GitHubAssetDto
+import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.http.contentLength
+import io.ktor.http.isSuccess
+import io.ktor.utils.io.ByteReadChannel
+import io.ktor.utils.io.readAvailable
 import io.ezz.launcher.core.runtime.discord.DiscordRpcService
 import io.ezz.launcher.core.storage.vault.SecureVault
 import kotlinx.coroutines.CoroutineScope
@@ -190,12 +201,18 @@ sealed class JavaValidationResult {
 sealed class ReleasePublishStep {
     object Idle : ReleasePublishStep()
     object Preparing : ReleasePublishStep()
-    object Uploading : ReleasePublishStep()
-    object Publishing : ReleasePublishStep()
-    object SyncingSupabase : ReleasePublishStep()
-    data class Success(val releaseUrl: String) : ReleasePublishStep()
-    data class PartialSuccess(val message: String) : ReleasePublishStep()
-    data class Failed(val error: String) : ReleasePublishStep()
+    data class Validating(val message: String = "Validating parameters and artifacts...") : ReleasePublishStep()
+    data class Publishing(val message: String = "Creating GitHub release...") : ReleasePublishStep()
+    data class Uploading(
+        val fileName: String = "",
+        val progress: Float = 0f,
+        val currentFileIndex: Int = 1,
+        val totalFiles: Int = 1
+    ) : ReleasePublishStep()
+    data class SyncingSupabase(val version: String = "") : ReleasePublishStep()
+    data class Success(val releaseUrl: String, val version: String = "") : ReleasePublishStep()
+    data class PartialSuccess(val message: String, val existingRelease: io.ezz.launcher.core.storage.github.GitHubReleaseDto? = null) : ReleasePublishStep()
+    data class Failed(val error: String, val stateBeforeFailure: String = "") : ReleasePublishStep()
 }
 
 class AppViewModel(
@@ -398,6 +415,21 @@ class AppViewModel(
 
     private val _adminActionStatus = MutableStateFlow<String?>(null)
     val adminActionStatus: StateFlow<String?> = _adminActionStatus.asStateFlow()
+
+    private val _gitHubReleases = MutableStateFlow<List<GitHubReleaseDto>>(emptyList())
+    val gitHubReleases: StateFlow<List<GitHubReleaseDto>> = _gitHubReleases.asStateFlow()
+
+    private val _isFetchingGitHubReleases = MutableStateFlow(false)
+    val isFetchingGitHubReleases: StateFlow<Boolean> = _isFetchingGitHubReleases.asStateFlow()
+
+    private val _updateDownloadProgress = MutableStateFlow<Float?>(null)
+    val updateDownloadProgress: StateFlow<Float?> = _updateDownloadProgress.asStateFlow()
+
+    private val _updateDownloadStatus = MutableStateFlow<String?>(null)
+    val updateDownloadStatus: StateFlow<String?> = _updateDownloadStatus.asStateFlow()
+
+    private val _isApplyingUpdate = MutableStateFlow(false)
+    val isApplyingUpdate: StateFlow<Boolean> = _isApplyingUpdate.asStateFlow()
 
     val featureFlags: StateFlow<Map<String, Boolean>> = featureFlagRepository?.flags ?: MutableStateFlow(emptyMap())
 
@@ -1385,12 +1417,32 @@ class AppViewModel(
         }
     }
 
+    fun fetchGitHubReleases(force: Boolean = false) {
+        if (_isFetchingGitHubReleases.value && !force) return
+        scope.launch {
+            _isFetchingGitHubReleases.value = true
+            try {
+                if (gitHubReleaseService != null) {
+                    val res = withContext(Dispatchers.IO) { gitHubReleaseService.fetchGitHubReleases() }
+                    res.fold(
+                        onSuccess = { _gitHubReleases.value = it },
+                        onFailure = { println("[GitHubReleaseService] Fetch releases warning: ${it.message}") }
+                    )
+                }
+            } finally {
+                _isFetchingGitHubReleases.value = false
+            }
+        }
+    }
+
     fun publishAdminRelease(
         version: String,
         title: String,
         changelog: String,
-        artifactFile: java.io.File?,
-        isDraft: Boolean
+        installerFile: java.io.File?,
+        exeFile: java.io.File? = null,
+        isDraft: Boolean = false,
+        isRequired: Boolean = false
     ) {
         scope.launch {
             val currentAccount = accountRepository.selectedAccount.value
@@ -1408,27 +1460,156 @@ class AppViewModel(
                 version = version,
                 releaseTitle = title,
                 releaseNotes = changelog,
-                artifactFile = artifactFile,
-                isDraft = isDraft
+                installerFile = installerFile,
+                exeFile = exeFile,
+                isDraft = isDraft,
+                isRequired = isRequired
             ).collect { state ->
                 when (state) {
                     is ReleasePublishState.Idle -> _releasePublishStep.value = ReleasePublishStep.Idle
-                    is ReleasePublishState.Preparing -> _releasePublishStep.value = ReleasePublishStep.Preparing
-                    is ReleasePublishState.PublishingRelease -> _releasePublishStep.value = ReleasePublishStep.Publishing
-                    is ReleasePublishState.UploadingArtifact -> _releasePublishStep.value = ReleasePublishStep.Uploading
-                    is ReleasePublishState.SyncingSupabase -> _releasePublishStep.value = ReleasePublishStep.SyncingSupabase
+                    is ReleasePublishState.Validating -> _releasePublishStep.value = ReleasePublishStep.Validating(state.message)
+                    is ReleasePublishState.PublishingGitHub -> _releasePublishStep.value = ReleasePublishStep.Publishing(state.message)
+                    is ReleasePublishState.UploadingArtifact -> _releasePublishStep.value = ReleasePublishStep.Uploading(
+                        fileName = state.fileName,
+                        progress = state.progress,
+                        currentFileIndex = state.currentFileIndex,
+                        totalFiles = state.totalFiles
+                    )
+                    is ReleasePublishState.SyncingSupabase -> _releasePublishStep.value = ReleasePublishStep.SyncingSupabase(state.version)
+                    is ReleasePublishState.GitHubPublished -> {
+                        // Intermediate state, continues to SyncingSupabase
+                    }
                     is ReleasePublishState.Published -> {
-                        _releasePublishStep.value = ReleasePublishStep.Success(state.gitHubUrl)
+                        _releasePublishStep.value = ReleasePublishStep.Success(state.gitHubUrl, state.version)
+                        loadAdminData(force = true)
+                        fetchGitHubReleases(force = true)
                         checkForUpdates()
                     }
                     is ReleasePublishState.Failed -> {
                         if (state.isPartialSuccess) {
-                            _releasePublishStep.value = ReleasePublishStep.PartialSuccess(state.error)
+                            _releasePublishStep.value = ReleasePublishStep.PartialSuccess(state.error, state.existingRelease)
                         } else {
-                            _releasePublishStep.value = ReleasePublishStep.Failed(state.error)
+                            _releasePublishStep.value = ReleasePublishStep.Failed(state.error, state.stateBeforeFailure)
                         }
                     }
                 }
+            }
+        }
+    }
+
+    fun syncGitHubReleaseToSupabase(
+        release: GitHubReleaseDto,
+        isLatest: Boolean = true,
+        isRequired: Boolean = false
+    ) {
+        scope.launch {
+            val account = accountRepository.selectedAccount.value
+            if (!isAuthorizedAdmin() || account == null) {
+                handleAdminSecurityError(SecurityException("403 Forbidden: unauthorized account"))
+                return@launch
+            }
+            if (gitHubReleaseService == null) return@launch
+            _isLoadingAdminData.value = true
+            try {
+                val res = withContext(Dispatchers.IO) {
+                    gitHubReleaseService.syncReleaseToSupabase(account.username, release, isLatest, isRequired)
+                }
+                res.fold(
+                    onSuccess = {
+                        _adminActionStatus.value = "Release ${release.tagName} synced to Supabase catalog."
+                        loadAdminData(force = true)
+                        fetchGitHubReleases(force = true)
+                        checkForUpdates()
+                    },
+                    onFailure = {
+                        handleAdminSecurityError(it)
+                        _adminActionStatus.value = "Failed to sync release to Supabase: ${it.message}"
+                    }
+                )
+            } finally {
+                _isLoadingAdminData.value = false
+            }
+        }
+    }
+
+    fun downloadAndApplyUpdate(update: SupabaseLauncherReleaseDto, onFinished: (() -> Unit)? = null) {
+        val downloadUrl = update.downloadUrl ?: update.installerUrl
+        if (downloadUrl.isNullOrBlank()) {
+            _updateDownloadStatus.value = "No download URL available for this update."
+            return
+        }
+
+        scope.launch {
+            _isApplyingUpdate.value = true
+            _updateDownloadProgress.value = 0.0f
+            _updateDownloadStatus.value = "Connecting to official release host..."
+
+            try {
+                val updatesDir = pathProvider.rootDirectory.resolve("cache").resolve("updates").toFile().apply { mkdirs() }
+                val fileName = "EzzLauncher-Setup-${update.version}.exe"
+                val targetFile = File(updatesDir, fileName)
+
+                _updateDownloadStatus.value = "Downloading $fileName..."
+
+                val client = io.ezz.launcher.core.network.client.HttpClientFactory.createLargeTransferClient()
+                val response = client.get(downloadUrl) {
+                    header("Accept", "application/octet-stream")
+                }
+
+                if (!response.status.isSuccess()) {
+                    throw Exception("Failed to download installer from release host (HTTP ${response.status.value})")
+                }
+
+                val contentLength = response.contentLength() ?: -1L
+                val channel: io.ktor.utils.io.ByteReadChannel = response.bodyAsChannel()
+                val buffer = ByteArray(16384)
+                var bytesReadTotal = 0L
+
+                val outputStream = targetFile.outputStream()
+                try {
+                    while (!channel.isClosedForRead) {
+                        val read = channel.readAvailable(buffer, 0, buffer.size)
+                        if (read <= 0) break
+                        outputStream.write(buffer, 0, read)
+                        bytesReadTotal += read
+                        if (contentLength > 0) {
+                            val progress = (bytesReadTotal.toFloat() / contentLength.toFloat()).coerceIn(0f, 1f)
+                            _updateDownloadProgress.value = progress
+                            val percent = (progress * 100).toInt()
+                            val mbDownloaded = String.format("%.1f", bytesReadTotal / (1024.0 * 1024.0))
+                            val mbTotal = String.format("%.1f", contentLength / (1024.0 * 1024.0))
+                            _updateDownloadStatus.value = "Downloading update: $percent% ($mbDownloaded MB / $mbTotal MB)"
+                        }
+                    }
+                    outputStream.flush()
+                } finally {
+                    outputStream.close()
+                }
+
+                _updateDownloadProgress.value = 1.0f
+                _updateDownloadStatus.value = "Verifying installer integrity..."
+
+                val expectedSha = update.sha256
+                if (!expectedSha.isNullOrBlank()) {
+                    val actualHash = gitHubReleaseService?.calculateSha256(targetFile)
+                    if (actualHash != null && !actualHash.equals(expectedSha.trim(), ignoreCase = true)) {
+                        throw Exception("SHA-256 integrity check failed! Expected $expectedSha, got $actualHash")
+                    }
+                }
+
+                _updateDownloadStatus.value = "Launching update installer..."
+                val launchResult = platformBridge.executeInstaller(targetFile, silent = false)
+                if (launchResult.isFailure) {
+                    throw launchResult.exceptionOrNull() ?: Exception("Failed to execute installer")
+                }
+
+                _updateDownloadStatus.value = "Installer started. Preparing to restart..."
+                onFinished?.invoke()
+            } catch (e: Throwable) {
+                _updateDownloadStatus.value = "Update failed: ${e.message}"
+                _updateDownloadProgress.value = null
+            } finally {
+                _isApplyingUpdate.value = false
             }
         }
     }
@@ -1481,6 +1662,7 @@ class AppViewModel(
                 withContext(Dispatchers.IO) {
                     val releases = releaseRepository?.getAllReleases("windows") ?: emptyList()
                     _adminReleases.value = releases
+                    fetchGitHubReleases(force = force)
 
                     val announcements = announcementRepository?.getAllAnnouncements(forceRefresh = force) ?: emptyList()
                     _adminAnnouncements.value = announcements

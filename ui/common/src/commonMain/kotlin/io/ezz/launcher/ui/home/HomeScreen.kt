@@ -42,11 +42,20 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import io.ezz.launcher.ui.components.EzzBadge
+import io.ezz.launcher.ui.components.EzzBadgeVariant
+import io.ezz.launcher.ui.components.EzzCard
+import io.ezz.launcher.ui.components.EzzCardVariant
+import io.ezz.launcher.ui.components.EzzModal
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -97,6 +106,13 @@ fun HomeScreen(
     val selectedStartedAt = selectedInstance?.let { runningSessions[it.id]?.startedAt }
     val launchProgress by viewModel.launchProgressState.collectAsState()
 
+    val updateDownloadProgress by viewModel.updateDownloadProgress.collectAsState()
+    val updateDownloadStatus by viewModel.updateDownloadStatus.collectAsState()
+    val isApplyingUpdate by viewModel.isApplyingUpdate.collectAsState()
+
+    var showUpdateDetailsModal by remember { mutableStateOf(false) }
+    var isUpdateDismissedForSession by remember { mutableStateOf(false) }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -134,39 +150,93 @@ fun HomeScreen(
                 }
             }
 
-            // Update Notification (if available)
-            if (updateCheckResult?.hasUpdate == true && updateCheckResult?.latestRelease != null) {
+            // User Update Notification Card (if update available)
+            if (updateCheckResult?.hasUpdate == true && updateCheckResult?.latestRelease != null && !isUpdateDismissedForSession) {
                 val latest = updateCheckResult!!.latestRelease!!
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF101318))
-                        .border(1.dp, Color(0xFF1A1D26), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                EzzCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = EzzCardVariant.OUTLINED,
+                    borderColor = Color(0xFF2E3D52),
+                    backgroundColor = Color(0xFF0C1017)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color.White))
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "New Launcher Release: v${latest.version}",
-                                color = Color.White,
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF38BDF8))
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "Ezz Launcher v${latest.version} Available",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                EzzBadge(
+                                    text = "v${viewModel.currentLauncherVersion} → v${latest.version}",
+                                    variant = EzzBadgeVariant.PRIMARY
+                                )
+                                if (latest.isRequired) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    EzzBadge(text = "REQUIRED", variant = EzzBadgeVariant.WARNING)
+                                }
+                            }
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                EzzButton(
+                                    text = "View Changes",
+                                    variant = EzzButtonVariant.GHOST,
+                                    size = EzzButtonSize.SMALL,
+                                    onClick = { showUpdateDetailsModal = true }
+                                )
+
+                                EzzButton(
+                                    text = if (isApplyingUpdate) "Updating..." else "Update Now",
+                                    icon = Icons.Default.Download,
+                                    variant = EzzButtonVariant.PRIMARY,
+                                    size = EzzButtonSize.SMALL,
+                                    isLoading = isApplyingUpdate,
+                                    onClick = { viewModel.downloadAndApplyUpdate(latest) }
+                                )
+
+                                if (!latest.isRequired) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Dismiss",
+                                        tint = Color(0xFF94A3B8),
+                                        modifier = Modifier.size(16.dp).clickable { isUpdateDismissedForSession = true }
+                                    )
+                                }
+                            }
                         }
-                        if (!latest.downloadUrl.isNullOrBlank()) {
-                            EzzButton(
-                                text = "Download",
-                                onClick = { viewModel.platformBridge.openUrl(latest.downloadUrl!!) },
-                                variant = EzzButtonVariant.PRIMARY,
-                                size = EzzButtonSize.SMALL
-                            )
+
+                        if (isApplyingUpdate || updateDownloadStatus != null) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = updateDownloadStatus ?: "Preparing update installer...",
+                                    color = Color(0xFF94A3B8),
+                                    fontSize = 11.5.sp
+                                )
+                                if (updateDownloadProgress != null) {
+                                    LinearProgressIndicator(
+                                        progress = { updateDownloadProgress!! },
+                                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                        color = Color(0xFF38BDF8),
+                                        trackColor = Color(0xFF1E2638)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -221,6 +291,136 @@ fun HomeScreen(
                     announcements = announcements,
                     onOpenUrl = { url -> viewModel.platformBridge.openUrl(url) }
                 )
+            }
+        }
+
+        // Modal: Update Details & What's New
+        if (showUpdateDetailsModal && updateCheckResult?.latestRelease != null) {
+            val latest = updateCheckResult!!.latestRelease!!
+            EzzModal(
+                onDismiss = { showUpdateDetailsModal = false },
+                title = "EZZ LAUNCHER UPDATE — v${latest.version}"
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = latest.title ?: "Ezz Launcher ${latest.version}",
+                                color = Color.White,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Black
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Release Date: ${latest.publishedAt?.take(10) ?: "Latest"} • Windows Setup",
+                                color = Color(0xFF94A3B8),
+                                fontSize = 11.5.sp
+                            )
+                        }
+
+                        EzzBadge(
+                            text = "Current: v${viewModel.currentLauncherVersion}",
+                            variant = EzzBadgeVariant.NEUTRAL
+                        )
+                    }
+
+                    // What's New / Release Notes
+                    EzzCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = EzzCardVariant.SURFACE,
+                        borderColor = Color(0xFF1E2638)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text(
+                                text = "WHAT'S NEW",
+                                color = Color(0xFF94A3B8),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = latest.releaseNotes ?: "Bug fixes and performance improvements.",
+                                color = Color.White,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+
+                    // Safety / In-place update notice
+                    EzzCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = EzzCardVariant.OUTLINED,
+                        borderColor = Color(0xFF1B382B),
+                        backgroundColor = Color(0xFF0D1C16)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = Color(0xFF10B981),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Your Microsoft accounts, offline profiles, instances, mods, worlds, and settings will be completely preserved. The installer will update Ezz Launcher in-place.",
+                                color = Color(0xFFCBD5E1),
+                                fontSize = 11.5.sp
+                            )
+                        }
+                    }
+
+                    if (isApplyingUpdate || updateDownloadStatus != null) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = updateDownloadStatus ?: "Preparing update...",
+                                color = Color(0xFF94A3B8),
+                                fontSize = 11.5.sp
+                            )
+                            if (updateDownloadProgress != null) {
+                                LinearProgressIndicator(
+                                    progress = { updateDownloadProgress!! },
+                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                    color = Color(0xFF38BDF8),
+                                    trackColor = Color(0xFF1E2638)
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        EzzButton(
+                            text = "Later",
+                            variant = EzzButtonVariant.GHOST,
+                            enabled = !isApplyingUpdate,
+                            onClick = { showUpdateDetailsModal = false }
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        EzzButton(
+                            text = if (isApplyingUpdate) "Updating..." else "Update & Restart",
+                            icon = Icons.Default.Download,
+                            variant = EzzButtonVariant.PRIMARY,
+                            isLoading = isApplyingUpdate,
+                            onClick = { viewModel.downloadAndApplyUpdate(latest) }
+                        )
+                    }
+                }
             }
         }
     }

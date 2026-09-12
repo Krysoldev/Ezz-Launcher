@@ -2,6 +2,10 @@ package io.ezz.launcher.core.storage.repository
 
 import io.ezz.launcher.core.storage.supabase.SupabaseClient
 import io.ezz.launcher.core.storage.supabase.SupabaseLauncherReleaseDto
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.isSuccess
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,6 +21,7 @@ interface LauncherReleaseRepository {
     suspend fun getLatestRelease(platform: String = "windows"): SupabaseLauncherReleaseDto?
     suspend fun getAllReleases(platform: String = "windows"): List<SupabaseLauncherReleaseDto>
     suspend fun checkForUpdates(currentVersion: String, platform: String = "windows"): UpdateCheckResult
+    suspend fun checkGitHubLatestRelease(): SupabaseLauncherReleaseDto?
     suspend fun isAdminUser(username: String): Boolean
     suspend fun publishRelease(
         adminUsername: String,
@@ -83,12 +88,22 @@ class SupabaseLauncherReleaseRepository(
     }
 
     override suspend fun checkForUpdates(currentVersion: String, platform: String): UpdateCheckResult = withContext(dispatcher) {
-        val latest = getLatestRelease(platform) ?: return@withContext UpdateCheckResult(
-            hasUpdate = false,
-            isRequired = false,
-            currentVersion = currentVersion,
-            latestRelease = null
-        )
+        var latest = getLatestRelease(platform)
+        if (latest == null) {
+            // Fallback: check official GitHub release directly if Supabase is unreachable or empty
+            latest = checkGitHubLatestRelease()
+            if (latest != null) {
+                _latestRelease.value = latest
+            }
+        }
+        if (latest == null) {
+            return@withContext UpdateCheckResult(
+                hasUpdate = false,
+                isRequired = false,
+                currentVersion = currentVersion,
+                latestRelease = null
+            )
+        }
 
         val hasUpdate = isNewerVersion(latest.version, currentVersion)
         UpdateCheckResult(
@@ -97,6 +112,78 @@ class SupabaseLauncherReleaseRepository(
             currentVersion = currentVersion,
             latestRelease = latest
         )
+    }
+
+    override suspend fun checkGitHubLatestRelease(): SupabaseLauncherReleaseDto? = withContext(dispatcher) {
+        try {
+            val response = supabaseClient.httpClient.get("https://api.github.com/repos/Krysoldev/Ezz-Launcher/releases/latest") {
+                header("Accept", "application/vnd.github.v3+json")
+                header("User-Agent", "EzzLauncher")
+            }
+            if (!response.status.isSuccess()) return@withContext null
+            val body = response.bodyAsText()
+            val jsonElement = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }.parseToJsonElement(body)
+            val jsonObject = jsonElement as? JsonObject ?: return@withContext null
+
+            val tagName = (jsonObject["tag_name"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: return@withContext null
+            val version = tagName.removePrefix("v").trim()
+            val title = (jsonObject["name"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "Ezz Launcher $version"
+            val releaseNotes = (jsonObject["body"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+            val publishedAt = (jsonObject["published_at"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+            val htmlUrl = (jsonObject["html_url"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+
+            val assets = (jsonObject["assets"] as? kotlinx.serialization.json.JsonArray) ?: emptyList()
+            var installerUrl: String? = null
+            var exeUrl: String? = null
+            var downloadUrl: String? = null
+            var fileSize: Long? = null
+
+            for (asset in assets) {
+                val assetObj = asset as? JsonObject ?: continue
+                val name = (assetObj["name"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: ""
+                val browserDownloadUrl = (assetObj["browser_download_url"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+                val size = (assetObj["size"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull()
+
+                if (name.contains("Setup", ignoreCase = true) && name.endsWith(".exe", ignoreCase = true)) {
+                    installerUrl = browserDownloadUrl
+                    if (downloadUrl == null) {
+                        downloadUrl = browserDownloadUrl
+                        fileSize = size
+                    }
+                } else if (name.endsWith(".exe", ignoreCase = true)) {
+                    exeUrl = browserDownloadUrl
+                    if (downloadUrl == null) {
+                        downloadUrl = browserDownloadUrl
+                        fileSize = size
+                    }
+                }
+            }
+
+            // Extract sha256 checksum from release notes if present
+            val sha256Regex = Regex("""SHA-?256:\s*([a-fA-F0-9]{64})""", RegexOption.IGNORE_CASE)
+            val sha256 = releaseNotes?.let { sha256Regex.find(it)?.groupValues?.getOrNull(1) }
+
+            SupabaseLauncherReleaseDto(
+                id = "github-$tagName",
+                version = version,
+                title = title,
+                platform = "windows",
+                downloadUrl = downloadUrl ?: installerUrl ?: exeUrl,
+                installerUrl = installerUrl,
+                exeUrl = exeUrl,
+                githubUrl = htmlUrl,
+                sha256 = sha256,
+                fileSize = fileSize,
+                releaseNotes = releaseNotes,
+                isLatest = true,
+                isRequired = false,
+                isActive = true,
+                publishedAt = publishedAt
+            )
+        } catch (e: Throwable) {
+            println("[SupabaseLauncherReleaseRepository] GitHub release check fallback failed: ${e.message}")
+            null
+        }
     }
 
     override suspend fun isAdminUser(username: String): Boolean = withContext(dispatcher) {
@@ -187,10 +274,13 @@ class SupabaseLauncherReleaseRepository(
         }
     }
 
-    private fun isNewerVersion(latest: String, current: String): Boolean {
-        if (latest.equals(current, ignoreCase = true)) return false
-        val latestParts = latest.trim().removePrefix("v").split(".").mapNotNull { it.toIntOrNull() }
-        val currentParts = current.trim().removePrefix("v").split(".").mapNotNull { it.toIntOrNull() }
+    internal fun isNewerVersion(latest: String, current: String): Boolean {
+        val cleanLatest = latest.trim().removePrefix("v").substringBefore("-")
+        val cleanCurrent = current.trim().removePrefix("v").substringBefore("-")
+        if (cleanLatest.equals(cleanCurrent, ignoreCase = true)) return false
+
+        val latestParts = cleanLatest.split(".").mapNotNull { it.toIntOrNull() }
+        val currentParts = cleanCurrent.split(".").mapNotNull { it.toIntOrNull() }
         val maxLen = maxOf(latestParts.size, currentParts.size)
         for (i in 0 until maxLen) {
             val l = latestParts.getOrElse(i) { 0 }

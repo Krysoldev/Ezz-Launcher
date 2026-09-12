@@ -36,16 +36,26 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.NewReleases
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import io.ezz.launcher.core.storage.github.GitHubReleaseDto
+import io.ezz.launcher.ui.viewmodel.ReleasePublishStep
+import java.io.File
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -254,6 +264,7 @@ fun AdminManagerScreen(
                     onRefresh = { viewModel.loadAdminData(force = true) }
                 )
                 AdminManagerTab.RELEASES -> AdminReleasesTab(
+                    viewModel = viewModel,
                     releases = releases,
                     isLoading = isLoading,
                     onToggleLatest = { release, isLatest -> viewModel.toggleAdminReleaseLatest(release.id, isLatest) },
@@ -875,45 +886,144 @@ private fun AdminSessionDetail(label: String, value: String, modifier: Modifier 
 // TAB 2: RELEASES
 // =========================================================================
 
+// =========================================================================
+// TAB 2: RELEASES (OFFICIAL RELEASE MANAGEMENT CENTER)
+// =========================================================================
+
 @Composable
 private fun AdminReleasesTab(
+    viewModel: AppViewModel,
     releases: List<SupabaseLauncherReleaseDto>,
     isLoading: Boolean,
     onToggleLatest: (SupabaseLauncherReleaseDto, Boolean) -> Unit,
     onDeleteRelease: (SupabaseLauncherReleaseDto) -> Unit
 ) {
+    val gitHubReleases by viewModel.gitHubReleases.collectAsState()
+    val isFetchingGitHub by viewModel.isFetchingGitHubReleases.collectAsState()
+    val publishStep by viewModel.releasePublishStep.collectAsState()
+
     var searchQuery by remember { mutableStateOf("") }
+    var selectedFilter by remember { mutableStateOf("ALL") }
+    var isCreatingRelease by remember { mutableStateOf(false) }
+    var selectedGitHubReleaseForDetails by remember { mutableStateOf<GitHubReleaseDto?>(null) }
+    var selectedSupabaseReleaseForDetails by remember { mutableStateOf<SupabaseLauncherReleaseDto?>(null) }
 
-    val filtered = remember(releases, searchQuery) {
-        if (searchQuery.isBlank()) releases
-        else releases.filter {
-            it.version.contains(searchQuery, ignoreCase = true) ||
-            (it.releaseNotes?.contains(searchQuery, ignoreCase = true) == true)
+    val latestSupabase = remember(releases) { releases.find { it.isLatest } ?: releases.firstOrNull() }
+    val latestGitHub = remember(gitHubReleases) { gitHubReleases.firstOrNull() }
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        // Summary Status Cards
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            AdminMetricCard(
+                title = "CURRENT APPLICATION",
+                value = "v${viewModel.currentLauncherVersion}",
+                subtext = "Active running binary",
+                icon = Icons.Default.CheckCircle,
+                accentColor = Color(0xFF10B981),
+                modifier = Modifier.weight(1f),
+                onClick = {}
+            )
+
+            AdminMetricCard(
+                title = "SUPABASE LATEST",
+                value = if (latestSupabase != null) "v${latestSupabase.version}" else "None",
+                subtext = if (latestSupabase != null) "User update target" else "No release cataloged",
+                icon = Icons.Default.CloudDone,
+                accentColor = Color(0xFF6366F1),
+                modifier = Modifier.weight(1f),
+                onClick = {}
+            )
+
+            AdminMetricCard(
+                title = "GITHUB RELEASES",
+                value = "${gitHubReleases.size} Builds",
+                subtext = "Krysoldev/Ezz-Launcher",
+                icon = Icons.Default.CloudUpload,
+                accentColor = Color(0xFF38BDF8),
+                modifier = Modifier.weight(1f),
+                onClick = {}
+            )
+
+            AdminMetricCard(
+                title = "INTEGRITY & SAFETY",
+                value = "SHA-256",
+                subtext = "Dual binaries verified",
+                icon = Icons.Default.Security,
+                accentColor = Color(0xFFF59E0B),
+                modifier = Modifier.weight(1f),
+                onClick = {}
+            )
         }
-    }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+        // Action & Filter Bar
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            EzzTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = "Search releases by version...",
-                leadingIcon = Icons.Default.Search,
-                modifier = Modifier.width(320.dp)
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                EzzTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = "Search releases by version or tag...",
+                    leadingIcon = Icons.Default.Search,
+                    modifier = Modifier.width(280.dp)
+                )
 
-            Text(
-                text = "${filtered.size} Releases found",
-                color = Color(0xFF94A3B8),
-                fontSize = 12.sp
-            )
+                // Quick Filters
+                Row(
+                    modifier = Modifier
+                        .background(Color(0xFF0F1218), RoundedCornerShape(6.dp))
+                        .padding(2.dp)
+                ) {
+                    listOf("ALL" to "All", "GITHUB" to "GitHub", "SUPABASE" to "Supabase").forEach { (key, label) ->
+                        val isSelected = selectedFilter == key
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (isSelected) Color(0xFF1E2638) else Color.Transparent)
+                                .clickable { selectedFilter = key }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = label,
+                                color = if (isSelected) Color.White else Color(0xFF94A3B8),
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                EzzButton(
+                    text = if (isFetchingGitHub) "Syncing..." else "Refresh",
+                    icon = Icons.Default.Refresh,
+                    variant = EzzButtonVariant.SECONDARY,
+                    size = EzzButtonSize.SMALL,
+                    isLoading = isFetchingGitHub,
+                    onClick = {
+                        viewModel.loadAdminData(force = true)
+                        viewModel.fetchGitHubReleases(force = true)
+                    }
+                )
+
+                EzzButton(
+                    text = "Create Release",
+                    icon = Icons.Default.Add,
+                    variant = EzzButtonVariant.PRIMARY,
+                    size = EzzButtonSize.SMALL,
+                    onClick = { isCreatingRelease = true }
+                )
+            }
         }
-
-        Spacer(modifier = Modifier.height(12.dp))
 
         // Releases Table Header
         Row(
@@ -923,108 +1033,283 @@ private fun AdminReleasesTab(
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("VERSION", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.5f))
-            Text("PLATFORM", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.2f))
-            Text("FLAGS", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(2f))
-            Text("PUBLISHED AT", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(2f))
-            Text("ACTIONS", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(2f))
+            Text("VERSION & TITLE", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(2.2f))
+            Text("HOST & STATUS", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.8f))
+            Text("ARTIFACTS", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(2f))
+            Text("PUBLISHED AT", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.5f))
+            Text("ACTIONS", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(2.2f))
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
-
-        if (isLoading && releases.isEmpty()) {
+        // List Content
+        if (isLoading && releases.isEmpty() && gitHubReleases.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = Color.White, modifier = Modifier.size(28.dp))
             }
-        } else if (filtered.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                EzzEmptyState(
-                    title = "No Releases Found",
-                    description = if (searchQuery.isNotBlank()) "No releases match '$searchQuery'" else "No launcher releases in database",
-                    icon = Icons.Default.NewReleases
-                )
-            }
         } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                contentPadding = PaddingValues(bottom = 16.dp)
-            ) {
-                items(filtered, key = { it.id }) { rel ->
-                    EzzCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        variant = EzzCardVariant.OUTLINED,
-                        borderColor = if (rel.isLatest) Color(0xFF1E3A2F) else Color(0xFF1A1E29)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Version
-                            Text(
-                                text = "v${rel.version}",
-                                color = Color.White,
-                                fontSize = 13.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1.5f)
-                            )
+            // Unify releases for display
+            val displayedGitHubReleases = remember(gitHubReleases, searchQuery, selectedFilter) {
+                if (selectedFilter == "SUPABASE") emptyList()
+                else gitHubReleases.filter {
+                    searchQuery.isBlank() ||
+                    it.tagName.contains(searchQuery, ignoreCase = true) ||
+                    (it.name?.contains(searchQuery, ignoreCase = true) == true)
+                }
+            }
 
-                            // Platform
-                            Text(
-                                text = rel.platform,
-                                color = Color(0xFF94A3B8),
-                                fontSize = 12.sp,
-                                modifier = Modifier.weight(1.2f)
-                            )
+            val displayedSupabaseReleases = remember(releases, searchQuery, selectedFilter) {
+                if (selectedFilter == "GITHUB") emptyList()
+                else releases.filter {
+                    searchQuery.isBlank() ||
+                    it.version.contains(searchQuery, ignoreCase = true) ||
+                    (it.releaseNotes?.contains(searchQuery, ignoreCase = true) == true)
+                }
+            }
 
-                            // Flags
-                            Row(
-                                modifier = Modifier.weight(2f),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            val isEmpty = displayedGitHubReleases.isEmpty() && displayedSupabaseReleases.isEmpty()
+
+            if (isEmpty) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    EzzEmptyState(
+                        title = "No Releases Found",
+                        description = if (searchQuery.isNotBlank()) "No releases match '$searchQuery'" else "Click 'Create Release' to build and publish your first official release.",
+                        icon = Icons.Default.NewReleases,
+                        actionLabel = "Create Release",
+                        onAction = { isCreatingRelease = true }
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = PaddingValues(bottom = 16.dp)
+                ) {
+                    // GitHub Releases
+                    if (selectedFilter != "SUPABASE") {
+                        items(displayedGitHubReleases, key = { "gh-${it.id}" }) { gh ->
+                            val cleanVer = gh.tagName.removePrefix("v").trim()
+                            val matchingSupabase = releases.find { it.version.equals(cleanVer, ignoreCase = true) }
+                            val hasInstaller = gh.assets.any { it.name.contains("Setup", ignoreCase = true) && it.name.endsWith(".exe", ignoreCase = true) }
+                            val hasExe = gh.assets.any { it.name.endsWith(".exe", ignoreCase = true) && !it.name.contains("Setup", ignoreCase = true) }
+
+                            EzzCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                variant = EzzCardVariant.OUTLINED,
+                                borderColor = if (matchingSupabase?.isLatest == true) Color(0xFF1E3A2F) else Color(0xFF1A1E29)
                             ) {
-                                if (rel.isLatest) {
-                                    EzzBadge(text = "LATEST", variant = EzzBadgeVariant.SUCCESS)
-                                }
-                                if (rel.isRequired) {
-                                    EzzBadge(text = "REQUIRED", variant = EzzBadgeVariant.WARNING)
-                                }
-                                if (!rel.isLatest && !rel.isRequired) {
-                                    Text("Standard", color = Color(0xFF64748B), fontSize = 11.sp)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Version & Title
+                                    Column(modifier = Modifier.weight(2.2f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = gh.tagName,
+                                                color = Color.White,
+                                                fontSize = 13.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            if (gh.draft) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                EzzBadge(text = "DRAFT", variant = EzzBadgeVariant.WARNING)
+                                            }
+                                            if (matchingSupabase?.isLatest == true) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                EzzBadge(text = "LATEST", variant = EzzBadgeVariant.SUCCESS)
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = gh.name ?: "Release ${gh.tagName}",
+                                            color = Color(0xFF94A3B8),
+                                            fontSize = 11.5.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
+                                    // Host & Status
+                                    Column(modifier = Modifier.weight(1.8f)) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            EzzBadge(text = "GITHUB", variant = EzzBadgeVariant.PRIMARY)
+                                            if (matchingSupabase != null) {
+                                                EzzBadge(text = "SYNCED", variant = EzzBadgeVariant.SUCCESS)
+                                            } else {
+                                                EzzBadge(text = "NOT SYNCED", variant = EzzBadgeVariant.NEUTRAL)
+                                            }
+                                        }
+                                        if (matchingSupabase?.isRequired == true) {
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            EzzBadge(text = "MANDATORY", variant = EzzBadgeVariant.DANGER)
+                                        }
+                                    }
+
+                                    // Artifacts
+                                    Column(modifier = Modifier.weight(2f)) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            if (hasInstaller) {
+                                                EzzBadge(text = "Setup.exe", variant = EzzBadgeVariant.SUCCESS)
+                                            }
+                                            if (hasExe) {
+                                                EzzBadge(text = "EzzLauncher.exe", variant = EzzBadgeVariant.NEUTRAL)
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "${gh.assets.size} asset(s) attached",
+                                            color = Color(0xFF64748B),
+                                            fontSize = 11.sp
+                                        )
+                                    }
+
+                                    // Published At
+                                    Text(
+                                        text = gh.publishedAt?.take(10) ?: gh.createdAt?.take(10) ?: "Unknown",
+                                        color = Color(0xFF94A3B8),
+                                        fontSize = 11.5.sp,
+                                        modifier = Modifier.weight(1.5f)
+                                    )
+
+                                    // Actions
+                                    Row(
+                                        modifier = Modifier.weight(2.2f),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        EzzButton(
+                                            text = "Details",
+                                            variant = EzzButtonVariant.GHOST,
+                                            size = EzzButtonSize.SMALL,
+                                            onClick = { selectedGitHubReleaseForDetails = gh }
+                                        )
+
+                                        if (gh.htmlUrl != null) {
+                                            EzzButton(
+                                                text = "GitHub",
+                                                icon = Icons.Default.OpenInNew,
+                                                variant = EzzButtonVariant.OUTLINE,
+                                                size = EzzButtonSize.SMALL,
+                                                onClick = { viewModel.platformBridge.openUrl(gh.htmlUrl) }
+                                            )
+                                        }
+
+                                        if (matchingSupabase == null) {
+                                            EzzButton(
+                                                text = "Sync",
+                                                icon = Icons.Default.Sync,
+                                                variant = EzzButtonVariant.SECONDARY,
+                                                size = EzzButtonSize.SMALL,
+                                                onClick = {
+                                                    viewModel.syncGitHubReleaseToSupabase(
+                                                        release = gh,
+                                                        isLatest = true,
+                                                        isRequired = false
+                                                    )
+                                                }
+                                            )
+                                        }
+                                    }
                                 }
                             }
+                        }
+                    }
 
-                            // Published At
-                            Text(
-                                text = rel.publishedAt?.take(10) ?: rel.createdAt?.take(10) ?: "Unknown",
-                                color = Color(0xFF94A3B8),
-                                fontSize = 11.5.sp,
-                                modifier = Modifier.weight(2f)
-                            )
+                    // Supabase Only Releases (if not already listed in GitHub)
+                    if (selectedFilter != "GITHUB") {
+                        val supabaseOnly = displayedSupabaseReleases.filter { s ->
+                            gitHubReleases.none { it.tagName.removePrefix("v").equals(s.version.removePrefix("v"), ignoreCase = true) }
+                        }
 
-                            // Actions
-                            Row(
-                                modifier = Modifier.weight(2f),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                        items(supabaseOnly, key = { "sb-${it.id}" }) { rel ->
+                            EzzCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                variant = EzzCardVariant.OUTLINED,
+                                borderColor = if (rel.isLatest) Color(0xFF1E3A2F) else Color(0xFF1A1E29)
                             ) {
-                                if (!rel.isLatest) {
-                                    EzzButton(
-                                        text = "Make Latest",
-                                        variant = EzzButtonVariant.OUTLINE,
-                                        size = EzzButtonSize.SMALL,
-                                        onClick = { onToggleLatest(rel, true) }
-                                    )
-                                }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Version
+                                    Column(modifier = Modifier.weight(2.2f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = "v${rel.version}",
+                                                color = Color.White,
+                                                fontSize = 13.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            if (rel.isLatest) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                EzzBadge(text = "LATEST", variant = EzzBadgeVariant.SUCCESS)
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = rel.title ?: "Ezz Launcher ${rel.version}",
+                                            color = Color(0xFF94A3B8),
+                                            fontSize = 11.5.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
 
-                                EzzButton(
-                                    text = "Delete",
-                                    icon = Icons.Default.Delete,
-                                    variant = EzzButtonVariant.DANGER,
-                                    size = EzzButtonSize.SMALL,
-                                    onClick = { onDeleteRelease(rel) }
-                                )
+                                    // Host & Status
+                                    Column(modifier = Modifier.weight(1.8f)) {
+                                        EzzBadge(text = "SUPABASE ONLY", variant = EzzBadgeVariant.NEUTRAL)
+                                        if (rel.isRequired) {
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            EzzBadge(text = "REQUIRED", variant = EzzBadgeVariant.WARNING)
+                                        }
+                                    }
+
+                                    // Artifacts
+                                    Column(modifier = Modifier.weight(2f)) {
+                                        if (rel.installerUrl != null) {
+                                            EzzBadge(text = "Setup.exe", variant = EzzBadgeVariant.SUCCESS)
+                                        } else if (rel.downloadUrl != null) {
+                                            EzzBadge(text = "Download URL", variant = EzzBadgeVariant.PRIMARY)
+                                        } else {
+                                            Text("No artifact URL", color = Color(0xFF64748B), fontSize = 11.sp)
+                                        }
+                                    }
+
+                                    // Published At
+                                    Text(
+                                        text = rel.publishedAt?.take(10) ?: rel.createdAt?.take(10) ?: "Unknown",
+                                        color = Color(0xFF94A3B8),
+                                        fontSize = 11.5.sp,
+                                        modifier = Modifier.weight(1.5f)
+                                    )
+
+                                    // Actions
+                                    Row(
+                                        modifier = Modifier.weight(2.2f),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (!rel.isLatest) {
+                                            EzzButton(
+                                                text = "Make Latest",
+                                                variant = EzzButtonVariant.OUTLINE,
+                                                size = EzzButtonSize.SMALL,
+                                                onClick = { onToggleLatest(rel, true) }
+                                            )
+                                        }
+
+                                        EzzButton(
+                                            text = "Delete",
+                                            icon = Icons.Default.Delete,
+                                            variant = EzzButtonVariant.DANGER,
+                                            size = EzzButtonSize.SMALL,
+                                            onClick = { onDeleteRelease(rel) }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -1032,6 +1317,596 @@ private fun AdminReleasesTab(
             }
         }
     }
+
+    // =========================================================================
+    // MODAL: CREATE RELEASE (OFFICIAL RELEASE CENTER)
+    // =========================================================================
+    if (isCreatingRelease) {
+        var version by remember { mutableStateOf("1.0.1") }
+        var releaseTitle by remember { mutableStateOf("Ezz Launcher 1.0.1") }
+        var releaseNotes by remember {
+            mutableStateOf(
+                """## What's New in Ezz Launcher v1.0.1
+- Official Admin Release Management Center
+- Strict Microsoft Administrator authentication (KrysolDev canonical verification)
+- Live GitHub Release asset upload and Supabase update synchronization
+- Automatic in-place updater with SHA-256 integrity verification
+- Buttery-smooth sidebar interactions and UI polish
+- Full user profile, account, and modpack preservation"""
+            )
+        }
+        var installerPath by remember { mutableStateOf("release/EzzLauncher-Setup-1.0.1.exe") }
+        var exePath by remember { mutableStateOf("release/EzzLauncher.exe") }
+        var isLatest by remember { mutableStateOf(true) }
+        var isDraft by remember { mutableStateOf(false) }
+        var isRequired by remember { mutableStateOf(false) }
+
+        val cleanVer = version.trim().removePrefix("v")
+        val isSemVerValid = remember(cleanVer) {
+            Regex("""^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$""").matches(cleanVer)
+        }
+        val existsOnGithub = remember(cleanVer, gitHubReleases) {
+            gitHubReleases.any { it.tagName.removePrefix("v").equals(cleanVer, ignoreCase = true) }
+        }
+        val existsOnSupabase = remember(cleanVer, releases) {
+            releases.any { it.version.removePrefix("v").equals(cleanVer, ignoreCase = true) }
+        }
+
+        // Check local files
+        val installerFile = remember(installerPath) { File(installerPath) }
+        val exeFile = remember(exePath) { File(exePath) }
+        val installerExists = remember(installerFile) { installerFile.exists() && installerFile.isFile }
+        val exeExists = remember(exeFile) { exeFile.exists() && exeFile.isFile }
+
+        var installerSha256 by remember { mutableStateOf<String?>(null) }
+        var exeSha256 by remember { mutableStateOf<String?>(null) }
+
+        LaunchedEffect(installerFile) {
+            if (installerExists) {
+                installerSha256 = calculateLocalSha256(installerFile)
+            } else {
+                installerSha256 = null
+            }
+        }
+
+        LaunchedEffect(exeFile) {
+            if (exeExists) {
+                exeSha256 = calculateLocalSha256(exeFile)
+            } else {
+                exeSha256 = null
+            }
+        }
+
+        val isPublishing = publishStep !is ReleasePublishStep.Idle &&
+                           publishStep !is ReleasePublishStep.Success &&
+                           publishStep !is ReleasePublishStep.Failed &&
+                           publishStep !is ReleasePublishStep.PartialSuccess
+
+        EzzModal(
+            onDismiss = {
+                if (!isPublishing) {
+                    isCreatingRelease = false
+                    viewModel.resetReleasePublishState()
+                }
+            },
+            title = "OFFICIAL RELEASE CENTER — CREATE & PUBLISH"
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Header Note
+                Text(
+                    text = "Publish a production release to official GitHub repository (Krysoldev/Ezz-Launcher) and synchronize release metadata with Supabase. All active Ezz Launcher clients will immediately receive this update.",
+                    color = Color(0xFF94A3B8),
+                    fontSize = 12.sp
+                )
+
+                // Pipeline Progress Banner (Active when publishing)
+                when (val step = publishStep) {
+                    ReleasePublishStep.Idle -> {}
+                    is ReleasePublishStep.Validating -> {
+                        ReleasePipelineBanner(
+                            title = "VALIDATING ARTIFACTS & METADATA",
+                            message = step.message,
+                            color = Color(0xFF6366F1),
+                            isLoading = true
+                        )
+                    }
+                    is ReleasePublishStep.Publishing -> {
+                        ReleasePipelineBanner(
+                            title = "CREATING GITHUB RELEASE",
+                            message = step.message,
+                            color = Color(0xFF8B5CF6),
+                            isLoading = true
+                        )
+                    }
+                    is ReleasePublishStep.Uploading -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF161226))
+                                .border(1.dp, Color(0xFF4C2889), RoundedCornerShape(6.dp))
+                                .padding(14.dp)
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "UPLOADING ASSETS TO GITHUB (${step.currentFileIndex}/${step.totalFiles})",
+                                        color = Color(0xFFA855F7),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "${(step.progress * 100).toInt()}%",
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Text(
+                                    text = "Uploading ${step.fileName} directly to GitHub Releases...",
+                                    color = Color(0xFFCBD5E1),
+                                    fontSize = 11.5.sp
+                                )
+                                LinearProgressIndicator(
+                                    progress = { step.progress },
+                                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                                    color = Color(0xFFA855F7),
+                                    trackColor = Color(0xFF261D3B)
+                                )
+                            }
+                        }
+                    }
+                    is ReleasePublishStep.SyncingSupabase -> {
+                        ReleasePipelineBanner(
+                            title = "SYNCHRONIZING SUPABASE CATALOG",
+                            message = "Publishing release metadata and download URLs to Supabase database...",
+                            color = Color(0xFF3B82F6),
+                            isLoading = true
+                        )
+                    }
+                    is ReleasePublishStep.Success -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF0F2618))
+                                .border(1.dp, Color(0xFF1B4D2E), RoundedCornerShape(6.dp))
+                                .padding(14.dp)
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(text = "RELEASE PUBLISHED SUCCESSFULLY!", color = Color(0xFF10B981), fontSize = 12.5.sp, fontWeight = FontWeight.Black)
+                                }
+                                Text(
+                                    text = "Release v${step.version} is now officially published to GitHub and synchronized with Supabase. Client launchers can now detect and download the update.",
+                                    color = Color(0xFFCBD5E1),
+                                    fontSize = 11.5.sp
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    EzzButton(
+                                        text = "View on GitHub",
+                                        icon = Icons.Default.OpenInNew,
+                                        size = EzzButtonSize.SMALL,
+                                        variant = EzzButtonVariant.SECONDARY,
+                                        onClick = { viewModel.platformBridge.openUrl(step.releaseUrl) }
+                                    )
+                                    EzzButton(
+                                        text = "Done",
+                                        size = EzzButtonSize.SMALL,
+                                        variant = EzzButtonVariant.PRIMARY,
+                                        onClick = {
+                                            viewModel.resetReleasePublishState()
+                                            isCreatingRelease = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    is ReleasePublishStep.PartialSuccess -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF2B1F0E))
+                                .border(1.dp, Color(0xFF593F16), RoundedCornerShape(6.dp))
+                                .padding(14.dp)
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(text = "PARTIAL SUCCESS: GITHUB PUBLISHED / SUPABASE SYNC FAILED", color = Color(0xFFF59E0B), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Text(text = step.message, color = Color(0xFFCBD5E1), fontSize = 11.5.sp)
+                                if (step.existingRelease != null) {
+                                    EzzButton(
+                                        text = "Retry Supabase Sync Now",
+                                        icon = Icons.Default.Sync,
+                                        size = EzzButtonSize.SMALL,
+                                        variant = EzzButtonVariant.PRIMARY,
+                                        onClick = { viewModel.syncGitHubReleaseToSupabase(step.existingRelease, isLatest = isLatest, isRequired = isRequired) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    is ReleasePublishStep.Failed -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF260F0F))
+                                .border(1.dp, Color(0xFF592222), RoundedCornerShape(6.dp))
+                                .padding(14.dp)
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Close, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(text = "RELEASE PUBLISHING FAILED", color = Color(0xFFEF4444), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Text(text = step.error, color = Color(0xFFCBD5E1), fontSize = 11.5.sp)
+                            }
+                        }
+                    }
+                    is ReleasePublishStep.Preparing -> {
+                        ReleasePipelineBanner(
+                            title = "PREPARING RELEASE",
+                            message = "Preparing release parameters and security tokens...",
+                            color = Color(0xFF6366F1),
+                            isLoading = true
+                        )
+                    }
+                }
+
+                // Version & Title Fields
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Version (Semantic Versioning)", color = Color(0xFF94A3B8), fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        EzzTextField(
+                            value = version,
+                            onValueChange = {
+                                version = it
+                                releaseTitle = "Ezz Launcher ${it.trim().removePrefix("v")}"
+                                installerPath = "release/EzzLauncher-Setup-${it.trim().removePrefix("v")}.exe"
+                            },
+                            placeholder = "1.0.1",
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (!isSemVerValid && version.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Text("Must be semantic versioning (e.g. 1.0.1)", color = Color(0xFFEF4444), fontSize = 11.sp)
+                        }
+                        if (existsOnGithub || existsOnSupabase) {
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Text("Warning: Version $version already exists on ${if (existsOnGithub) "GitHub" else ""} ${if (existsOnSupabase) "Supabase" else ""}", color = Color(0xFFF59E0B), fontSize = 11.sp)
+                        }
+                    }
+
+                    Column(modifier = Modifier.weight(1.5f)) {
+                        Text("Release Title", color = Color(0xFF94A3B8), fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        EzzTextField(
+                            value = releaseTitle,
+                            onValueChange = { releaseTitle = it },
+                            placeholder = "Ezz Launcher 1.0.1",
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                // Release Notes
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("Release Notes (Markdown supported • Seen by end users)", color = Color(0xFF94A3B8), fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    EzzTextField(
+                        value = releaseNotes,
+                        onValueChange = { releaseNotes = it },
+                        placeholder = "Changelog and release notes...",
+                        modifier = Modifier.fillMaxWidth().height(110.dp)
+                    )
+                }
+
+                // Artifact Validation Card
+                EzzCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = EzzCardVariant.SURFACE,
+                    borderColor = Color(0xFF1E2638)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("PRODUCTION WINDOWS ARTIFACTS", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
+                            Text("Required for live distribution", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                        }
+
+                        // Artifact 1: Windows Setup Installer
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Primary Installer: ", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                if (installerExists) {
+                                    EzzBadge(text = "FOUND • ${formatBytes(installerFile.length())}", variant = EzzBadgeVariant.SUCCESS)
+                                } else {
+                                    EzzBadge(text = "NOT FOUND", variant = EzzBadgeVariant.DANGER)
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            EzzTextField(
+                                value = installerPath,
+                                onValueChange = { installerPath = it },
+                                placeholder = "Path to EzzLauncher-Setup-*.exe",
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            if (installerSha256 != null) {
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text("SHA-256: $installerSha256", color = Color(0xFF64748B), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+
+                        // Artifact 2: Standalone Executable
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Standalone EXE: ", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                if (exeExists) {
+                                    EzzBadge(text = "FOUND • ${formatBytes(exeFile.length())}", variant = EzzBadgeVariant.SUCCESS)
+                                } else {
+                                    EzzBadge(text = "OPTIONAL • NOT FOUND", variant = EzzBadgeVariant.NEUTRAL)
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            EzzTextField(
+                                value = exePath,
+                                onValueChange = { exePath = it },
+                                placeholder = "Path to EzzLauncher.exe",
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            if (exeSha256 != null) {
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text("SHA-256: $exeSha256", color = Color(0xFF64748B), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+                    }
+                }
+
+                // Options / Toggles
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        EzzToggle(checked = isLatest, onCheckedChange = { isLatest = it })
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Mark as Latest Release", color = Color.White, fontSize = 12.sp)
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        EzzToggle(checked = isDraft, onCheckedChange = { isDraft = it })
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Draft on GitHub", color = Color.White, fontSize = 12.sp)
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        EzzToggle(checked = isRequired, onCheckedChange = { isRequired = it })
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Mandatory Update", color = Color.White, fontSize = 12.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Action Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    EzzButton(
+                        text = "Cancel",
+                        variant = EzzButtonVariant.GHOST,
+                        enabled = !isPublishing,
+                        onClick = {
+                            isCreatingRelease = false
+                            viewModel.resetReleasePublishState()
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    val canPublish = isSemVerValid && installerExists && !isPublishing
+                    EzzButton(
+                        text = if (isPublishing) "Publishing Release..." else "Publish Release",
+                        icon = Icons.Default.CloudUpload,
+                        variant = EzzButtonVariant.PRIMARY,
+                        enabled = canPublish,
+                        isLoading = isPublishing,
+                        onClick = {
+                            viewModel.publishAdminRelease(
+                                version = cleanVer,
+                                title = releaseTitle.trim(),
+                                changelog = releaseNotes.trim(),
+                                installerFile = installerFile,
+                                exeFile = if (exeExists) exeFile else null,
+                                isDraft = isDraft,
+                                isRequired = isRequired
+                            )
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // MODAL: RELEASE DETAILS
+    // =========================================================================
+    if (selectedGitHubReleaseForDetails != null) {
+        val gh = selectedGitHubReleaseForDetails!!
+        EzzModal(
+            onDismiss = { selectedGitHubReleaseForDetails = null },
+            title = "RELEASE DETAILS: ${gh.tagName}"
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(text = gh.name ?: gh.tagName, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(text = "Published at: ${gh.publishedAt ?: gh.createdAt ?: "Unknown"}", color = Color(0xFF94A3B8), fontSize = 11.5.sp)
+                    }
+                    if (gh.htmlUrl != null) {
+                        EzzButton(
+                            text = "Open on GitHub",
+                            icon = Icons.Default.OpenInNew,
+                            size = EzzButtonSize.SMALL,
+                            variant = EzzButtonVariant.SECONDARY,
+                            onClick = { viewModel.platformBridge.openUrl(gh.htmlUrl) }
+                        )
+                    }
+                }
+
+                // Release Notes
+                EzzCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    variant = EzzCardVariant.SURFACE,
+                    borderColor = Color(0xFF1E2638)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text("RELEASE NOTES", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = gh.body ?: "No release notes available.",
+                            color = Color.White,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                // Assets Table
+                Text("RELEASE ASSETS (${gh.assets.size})", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                gh.assets.forEach { asset ->
+                    EzzCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        variant = EzzCardVariant.OUTLINED,
+                        borderColor = Color(0xFF1E2638)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(text = asset.name, color = Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(text = "Size: ${formatBytes(asset.size)} • Downloads: ${asset.downloadCount}", color = Color(0xFF94A3B8), fontSize = 11.sp)
+                            }
+                            if (asset.browserDownloadUrl != null) {
+                                EzzButton(
+                                    text = "Download",
+                                    icon = Icons.Default.Download,
+                                    size = EzzButtonSize.SMALL,
+                                    variant = EzzButtonVariant.OUTLINE,
+                                    onClick = { viewModel.platformBridge.openUrl(asset.browserDownloadUrl) }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    EzzButton(
+                        text = "Close",
+                        variant = EzzButtonVariant.GHOST,
+                        onClick = { selectedGitHubReleaseForDetails = null }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReleasePipelineBanner(
+    title: String,
+    message: String,
+    color: Color,
+    isLoading: Boolean = false
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(color.copy(alpha = 0.12f))
+            .border(1.dp, color.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+            .padding(14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (isLoading) {
+                CircularProgressIndicator(
+                    color = color,
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+            }
+            Column {
+                Text(text = title, color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(text = message, color = Color(0xFFCBD5E1), fontSize = 11.5.sp)
+            }
+        }
+    }
+}
+
+private fun calculateLocalSha256(file: File): String? {
+    return try {
+        if (!file.exists() || !file.canRead()) return null
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(8192)
+            var read: Int
+            while (input.read(buffer).also { read = it } != -1) {
+                digest.update(buffer, 0, read)
+            }
+        }
+        digest.digest().joinToString("") { "%02x".format(it) }
+    } catch (e: Throwable) {
+        null
+    }
+}
+
+private fun formatBytes(bytes: Long?): String {
+    if (bytes == null || bytes <= 0) return "Unknown"
+    val mb = bytes / (1024.0 * 1024.0)
+    return String.format("%.1f MB", mb)
 }
 
 // =========================================================================
